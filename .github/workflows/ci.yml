@@ -59,7 +59,7 @@ jobs:
       - name: Build the plugin
         run: go build -o capsulectl-deal ./cmd/capsulectl-deal
       - name: The release build, dry run
-        # release.yml's build and handshake check, on every change, so the
+        # The release workflow's build and handshake check (RELEASING.md), so the
         # first real release is not the first run of either.
         run: |
           scripts/release-build.sh v0.0.0-ci "$GITHUB_SHA" "$RUNNER_TEMP/dist"

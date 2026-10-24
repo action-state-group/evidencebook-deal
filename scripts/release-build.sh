@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # release-build.sh VERSION COMMIT OUTDIR -- the one build command for release
-# assets, used by .github/workflows/release.yml and for local rebuilds.
+# assets, used by the release workflow (to come, RELEASING.md) and for local
+# rebuilds.
 #
 # Reproducible, as capsule-cli's: CGO off, -trimpath, no VCS stamping, empty
 # build id, and only the versions injected. The same Go toolchain (go.mod's
@@ -42,7 +43,7 @@ done
 # The skill: the tree as committed, in a fixed order with fixed metadata.
 git ls-files -z skills/deal | LC_ALL=C sort -z |
   "${TAR:-tar}" --null -T - --format=gnu --owner=0 --group=0 --numeric-owner \
-    --mode='u+rw,go+r,go-w' --mtime='1970-01-01 00:00:00Z' -cf - |
+    --mode='u+rw,go=rX' --mtime='1970-01-01 00:00:00Z' -cf - |
   gzip -n -9 >"$OUT/deal-skill-$VERSION.tar.gz"
 
 cd "$OUT"
