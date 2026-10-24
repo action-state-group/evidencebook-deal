@@ -9,8 +9,8 @@ change.
 A release's sealed records name it as their producer,
 `capsulectl-deal <tag> (<commit>)`, and a shared copy keeps a producer only
 in a fixed shape, so the workflow refuses any other tag: `v<n>.<n>.<n>`, with
-at most four digits each, optionally `-rc<n>`, `-alpha<n>`, `-beta<n>` or
-`-dev<n>` (at most three digits).
+at most four digits each, optionally followed by `-rc`, `-alpha`, `-beta`
+or `-dev` and up to three digits.
 
 The process follows capsule-cli's release process
 ([docs/RELEASING.md](https://github.com/action-state-group/capsule-cli/blob/main/docs/RELEASING.md))

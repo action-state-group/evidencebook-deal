@@ -72,7 +72,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           printf '%s\n' "$VERSION" | grep -Eqx 'v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}(-(rc|alpha|beta|dev)[0-9]{0,3})?' \
-            || { echo "tag $VERSION is not a version a shared copy keeps (vN.N.N, optionally -rcN, -alphaN, -betaN or -devN)"; exit 1; }
+            || { echo "tag $VERSION is not a version a shared copy keeps (vN.N.N, up to four digits each, optionally followed by -rc, -alpha, -beta or -dev and up to three digits)"; exit 1; }
       - name: The core this plugin pairs with is a published capsule-cli release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -139,5 +139,5 @@ jobs:
           else
             gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag "${flags[@]}" \
               --title "capsulectl-deal $VERSION" \
-              --notes "Prebuilt capsulectl-deal plugin binaries (linux/amd64, linux/arm64, darwin/arm64) and the deal skill archive. Verify with: sha256sum -c SHA256SUMS. Check the build attestation with no GitHub account: gh attestation verify FILE --bundle capsulectl-deal-$VERSION.sigstore.json --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml"
+              --notes "Prebuilt capsulectl-deal plugin binaries (linux/amd64, linux/arm64, darwin/arm64) and the deal skill archive. Pairs with capsulectl $CORE_VERSION. Verify with: sha256sum -c SHA256SUMS. Check the build attestation with no GitHub account: gh attestation verify FILE --bundle capsulectl-deal-$VERSION.sigstore.json --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml"
           fi
