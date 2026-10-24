@@ -1,0 +1,9 @@
+.planning/
+.env
+.env.*
+*.test
+coverage.out
+/capsulectl
+/capsulectl-deal
+.DS_Store
+__pycache__/
