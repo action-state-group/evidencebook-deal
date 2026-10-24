@@ -4,11 +4,17 @@
 
 ## v0.1.0-rc1
 
-The first release of capsulectl-deal and the deal skill from this repository, built against capsulectl v0.1.0-rc23 (capsule-cli#326).
+The first release of capsulectl-deal and the deal skill from this repository
+(capsule-cli#326). It requires capsulectl v0.1.0-rc23: an older capsulectl
+reports a version mismatch. capsulectl no longer installs it by name
+(`plugin install deal`); download `capsulectl-deal-v0.1.0-rc1-<os>-<arch>`
+from this release, check it against `SHA256SUMS` and its attestation, then
+run `capsulectl plugin install ./capsulectl-deal-v0.1.0-rc1-<os>-<arch>`.
 
 ### Known issues
 
-Carried over from capsule-cli rc22, where they are still tracked:
+Still open as of capsule-cli v0.1.0-rc23, where they are tracked (first
+listed in its rc22 release notes):
 
 - The deal journey shows only an OK or a no as your row (capsule-cli#415).
   Another answer to a pause, such as asking to verify the contact first, has
@@ -55,4 +61,5 @@ Carried over from capsule-cli rc22, where they are still tracked:
 
 - `capsulectl-deal` and the `deal` skill now live in this repository, imported
   from capsule-cli at commit e0511c4 (capsule-cli#446). Their history before that is
-  capsule-cli's. No command, flag, output or record changes.
+  capsule-cli's. The import itself changed no command, flag, output or
+  record; the entries above came after it.
