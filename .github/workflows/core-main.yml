@@ -1,0 +1,57 @@
+name: Against capsule-cli main
+
+# The deal pages and a shared deal copy, checked with a `capsulectl` built
+# from capsule-cli `main` rather than the release go.mod pins (capsule-cli#326,
+# design note section 3.4). The plugin still builds against its pinned core;
+# this catches a core change that would stop `main` verifying or rendering
+# what the newest deal build produces, before that change ships in a release.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 6 * * *'
+  pull_request:
+    paths:
+      - .github/workflows/core-main.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-main-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-main:
+    name: deal pages and portability against capsule-cli main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out capsule-cli main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: action-state-group/capsule-cli
+          ref: main
+          path: .core/capsule-cli
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build capsulectl from capsule-cli main
+        run: |
+          commit=$(git -C .core/capsule-cli rev-parse HEAD)
+          echo "capsule-cli main at $commit" >> "$GITHUB_STEP_SUMMARY"
+          (cd .core/capsule-cli && go build -o "$RUNNER_TEMP/core/capsulectl" ./cmd/capsulectl)
+      - name: A deal receipt's page
+        env:
+          CAPSULECTL: ${{ runner.temp }}/core/capsulectl
+          CHROME: google-chrome
+        run: bash scripts/check-deal-pages.sh
+      - name: Deal, share, export, delete the session, verify offline
+        env:
+          CAPSULECTL: ${{ runner.temp }}/core/capsulectl
+          CHROME: google-chrome
+        run: bash scripts/check-portability.sh
