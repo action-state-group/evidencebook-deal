@@ -130,6 +130,9 @@ func TestADealPageWhoseCardsDoNotMatchIsNotWritten(t *testing.T) {
 					r := report(b)
 					r["card_openings"] = append(r["card_openings"].([]interface{}), first(b))
 				},
+				"not an opening": func(b map[string]interface{}) {
+					report(b)["card_openings"] = []interface{}{"x"}
+				},
 				"not a list": func(b map[string]interface{}) {
 					report(b)["card_openings"] = first(b)
 				},
