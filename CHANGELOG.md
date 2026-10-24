@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## v0.1.0-rc1
+
+The first release of capsulectl-deal and the deal skill from this repository, built against capsulectl v0.1.0-rc23 (capsule-cli#326).
+
+### Known issues
+
+Carried over from capsule-cli rc22, where they are still tracked:
+
+- The deal journey shows only an OK or a no as your row (capsule-cli#415).
+  Another answer to a pause, such as asking to verify the contact first, has
+  no row of its own.
+- A taken-down listing still counts (capsule-cli#384). There is no way yet to
+  record that a listing came down, so its classes still count in
+  `listing_classes`.
+- The deal profile's checker needs `jsonschema` (capsule-cli#422). Install it
+  before you run `skills/deal/profile/check_profile.py`.
+- The deal page's close date is in UTC (capsule-cli#426) while the page's
+  other times are local.
+
 ### Changed
 
 - A release of `capsulectl-deal` seals its own build as each record's
