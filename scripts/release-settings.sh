@@ -21,8 +21,11 @@
 #
 # Re-running it is safe: environments are replaced, rulesets are updated in
 # place by name, and any deployment branch or tag policy other than the one
-# named here is removed. After applying, it reads the settings back and fails
-# if GitHub holds anything else.
+# named here is removed. After applying, it reads the environments and
+# immutable releases back and fails if GitHub holds anything else; it does
+# not read the rulesets back (check them with --show). The "release tags"
+# ruleset made when this repository was created stays; the two here are added
+# beside it.
 set -euo pipefail
 
 REPO="${REPO:-action-state-group/evidencebook-deal}"

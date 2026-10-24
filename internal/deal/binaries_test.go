@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,10 +16,11 @@ import (
 // resolves it: its files are read, never written.
 var coreDir = sync.OnceValue(func() string {
 	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/action-state-group/capsule-cli").Output()
-	if err != nil {
-		panic("go list -m github.com/action-state-group/capsule-cli: " + err.Error())
+	dir := strings.TrimSpace(string(out))
+	if err != nil || dir == "" {
+		panic(fmt.Sprintf("go list -m github.com/action-state-group/capsule-cli: %q, %v", dir, err))
 	}
-	return strings.TrimSpace(string(out))
+	return dir
 })
 
 // coreAssetsDir holds the core's assets the deal view is built from

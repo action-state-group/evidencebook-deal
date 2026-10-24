@@ -556,7 +556,7 @@ The tests:
   alone must refuse every rewriting, and the scrubber's output of it must
   pass the gate. `DEAL_LEAK_SEED` and `DEAL_LEAK_ROUNDS` widen it.
 - A Go fuzz target, `FuzzDealSharePageGate`, whose found inputs are kept in
-  `cli/testdata/fuzz`.
+  `internal/deal/testdata/fuzz`.
 
 Before the file is written, a last gate reads the **final page bytes** with
 its own detectors. It reads the deal's local steps itself and shares no

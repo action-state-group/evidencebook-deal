@@ -41,7 +41,8 @@ done
 
 # The skill: the tree as committed, in a fixed order with fixed metadata.
 git ls-files -z skills/deal | LC_ALL=C sort -z |
-  "${TAR:-tar}" --null -T - --owner=0 --group=0 --numeric-owner --mtime='1970-01-01 00:00:00Z' -cf - |
+  "${TAR:-tar}" --null -T - --format=gnu --owner=0 --group=0 --numeric-owner \
+    --mode='u+rw,go+r,go-w' --mtime='1970-01-01 00:00:00Z' -cf - |
   gzip -n -9 >"$OUT/deal-skill-$VERSION.tar.gz"
 
 cd "$OUT"

@@ -17,7 +17,10 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-core="$(cd "$root" && go list -m -f '{{.Dir}}' github.com/action-state-group/capsule-cli)"
+# go mod download extracts the module when the cache is cold (go list -m
+# alone would print an empty directory).
+core="$(cd "$root" && go mod download -json github.com/action-state-group/capsule-cli | jq -er .Dir)"
+[[ -d "$core" ]] || { echo "the capsule-cli module this plugin builds against could not be found" >&2; exit 2; }
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 export XDG_CONFIG_HOME="$work/config"

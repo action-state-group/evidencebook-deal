@@ -1,9 +1,21 @@
 # Releasing capsulectl-deal
 
-A release is a pushed `v*` tag, built and published by
-[`release.yml`](.github/workflows/release.yml) through
-[`scripts/release-build.sh`](scripts/release-build.sh), after a release
-reviewer approves the run. It follows capsule-cli's release process
+A release is a pushed `v*` tag, built and published by the release workflow
+through [`scripts/release-build.sh`](scripts/release-build.sh), after a
+release reviewer approves the run.
+
+**Not yet releasable.** The release workflow lands in its own pull request,
+after three things, in this order:
+
+1. a repository admin applies the release settings below, so a pushed tag
+   waits for a reviewer;
+2. sealed records name the plugin's own build as their producer,
+   `capsulectl-deal <tag> (<commit>)`, and capsule-cli's deal page compares
+   producers by name (capsule-cli#326, design note section 4.2);
+3. the workflow refuses a tag outside the producer shape a shared copy keeps
+   (`v<n>.<n>.<n>`, optionally `-rc<n>`, `-alpha<n>`, `-beta<n>` or `-dev<n>`).
+
+Until then `scripts/release-build.sh` runs only as CI's dry run. It follows capsule-cli's release process
 ([docs/RELEASING.md](https://github.com/action-state-group/capsule-cli/blob/main/docs/RELEASING.md))
 and its rules: agents never approve a release run, and a pushed tag or a
 published release never changes.

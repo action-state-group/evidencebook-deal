@@ -11,7 +11,7 @@ viewer to it:
   does and checks the page gate's decision. While the vendored viewer is unchanged,
   the result must equal `page.html` byte for byte. The two pages `book report build`
   writes (`4-monthly-outcome`, `5-monthly-compliance`) are re-emitted by capsulectl-book's
-  `TestReportBuildGoldens` (evidencebook's `capsulectl/internal/book/presentation_golden_test.go`), which
+  `TestReportBuildGoldens` (evidencebook's `capsulectl/internal/book/presentation_golden_test.go`, evidencebook#104), which
   fails unless `page.html` is exactly what it writes now; the browser checks below
   read that page.
 - **With `CAPSULECTL_CHROME` set:** it also opens each page headless, with no network:

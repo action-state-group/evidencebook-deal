@@ -31,10 +31,16 @@ one capsule-cli release: `go.mod` requires capsule-cli at a version, and the
 plugin's handshake reports it as `core_version`.
 
 ```sh
+go build -o capsulectl github.com/action-state-group/capsule-cli/cmd/capsulectl
 go build -o capsulectl-deal ./cmd/capsulectl-deal
-capsulectl plugin install ./capsulectl-deal
+./capsulectl plugin install ./capsulectl-deal
 bash scripts/test.sh
 ```
+
+A plain build is a development build of both: the plugin's `core_version`
+reads `0.1.0-dev`, which a development `capsulectl` does not check, so build
+the core from this module, as above. A released `capsulectl` takes only a
+released plugin built for it.
 
 `scripts/test.sh` runs the race pass, then the plain pass. CI also runs the
 browser checks (`scripts/check-deal-pages.sh`, `scripts/check-portability.sh`

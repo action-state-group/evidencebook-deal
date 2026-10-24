@@ -5,7 +5,7 @@
 # deal_cadence row and its cadence-log tick past the shelf.
 #
 # Usage: make-downgrade.sh CAPSULECTL_RC16 CAPSULECTL_DEAL, where
-# CAPSULECTL_DEAL is plugins/cmd/capsulectl-deal built from this checkout.
+# CAPSULECTL_DEAL is cmd/capsulectl-deal built from this checkout.
 # Both runs are on the wall clock, after the fixture's due time.
 set -euo pipefail
 rc16="$1" deal="$2"
