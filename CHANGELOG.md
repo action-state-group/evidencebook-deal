@@ -5,7 +5,7 @@
 ## v0.1.0-rc1
 
 The first release of capsulectl-deal and the deal skill from this repository
-(capsule-cli#326). It requires capsulectl v0.1.0-rc23: an older capsulectl
+(capsule-cli#326). It requires capsulectl v0.1.0-rc23: any other capsulectl
 reports a version mismatch. capsulectl no longer installs it by name
 (`plugin install deal`); download `capsulectl-deal-v0.1.0-rc1-<os>-<arch>`
 from this release, check it against `SHA256SUMS` and its attestation, then
