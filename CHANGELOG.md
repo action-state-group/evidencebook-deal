@@ -5,9 +5,10 @@
 The first release of capsulectl-deal and the deal skill from this repository
 will carry these entries (capsule-cli#326). A capsulectl-deal release takes
 the version of the capsulectl release it pairs with (RELEASING.md), and
-requires that capsulectl: any other capsulectl reports a version mismatch. capsulectl no longer installs it by name (`plugin install deal`);
-download `capsulectl-deal-<version>-<os>-<arch>` from the release, check it
-against `SHA256SUMS` and its attestation, then run
+requires that capsulectl: any other capsulectl reports a version mismatch.
+capsulectl no longer installs it by name (`plugin install deal`); download
+`capsulectl-deal-<version>-<os>-<arch>` from the release, check it against
+`SHA256SUMS` and its attestation, then run
 `capsulectl plugin install ./capsulectl-deal-<version>-<os>-<arch>`.
 
 ### Known issues

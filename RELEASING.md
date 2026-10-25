@@ -30,19 +30,23 @@ first-party check compares the plugin's `core_version` with its own version
    capsulectl release: a fix to the plugin ships with the next capsulectl
    release.
 2. `go.mod` requires capsule-cli at that published release tag, with no
-   `replace`. The release workflow refuses anything else.
+   `replace`. The release workflow refuses a `replace`, a capsule-cli
+   requirement that is not a published release, and a tag that is not that
+   release's version.
 3. Every capsule-cli release that users install needs a capsulectl-deal
    release built against it: bump the require and merge, then tag once that
-   capsule-cli release is published, not only tagged. The workflow refuses an
-   unpublished one, and a refused tag is spent; since the version is fixed by
-   the core, that core has no capsulectl-deal release until the next one.
+   capsule-cli release is published, not only tagged. A run refused because
+   it was not published yet builds nothing; once it is published, the tag's
+   pusher re-runs it. Only a published capsulectl-deal release is final.
 
 ## The cut
 
 1. On a fresh `main`, tag the merge commit with the version `go.mod` requires
    capsule-cli at (`go list -m -f '{{.Version}}' github.com/action-state-group/capsule-cli`):
    `git tag -a vX.Y.Z <commit> -m "capsulectl-deal vX.Y.Z" && git push origin vX.Y.Z`.
-2. A release reviewer approves the run (Actions, Release, Review deployments).
+2. A release reviewer approves the run (Actions, Release, Review deployments),
+   after checking that the tag is the capsule-cli version `go.mod` requires
+   (the workflow refuses it otherwise, before anything is built).
 3. Verify from the downloaded assets: `sha256sum -c SHA256SUMS`, and
    `gh attestation verify` on each asset with
    `--bundle capsulectl-deal-vX.Y.Z.sigstore.json --repo action-state-group/evidencebook-deal
