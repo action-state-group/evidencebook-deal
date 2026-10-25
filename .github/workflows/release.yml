@@ -53,7 +53,7 @@ jobs:
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           test "$ACTOR" = "$TRIGGERING_ACTOR" \
-            || { echo "$GITHUB_REF_NAME was pushed by $ACTOR but this run was started by $TRIGGERING_ACTOR: cut the next version"; exit 1; }
+            || { echo "$GITHUB_REF_NAME was pushed by $ACTOR but this run was started by $TRIGGERING_ACTOR: have $ACTOR re-run it"; exit 1; }
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,6 +83,10 @@ jobs:
           core=$(go list -m -f '{{.Version}}' github.com/action-state-group/capsule-cli)
           printf '%s\n' "$core" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?' \
             || { echo "go.mod requires capsule-cli at $core, not a release tag"; exit 1; }
+          # A release takes the version of the capsulectl release it pairs
+          # with (RELEASING.md).
+          test "$GITHUB_REF_NAME" = "$core" \
+            || { echo "tag $GITHUB_REF_NAME is not $core, the capsule-cli release go.mod requires: a capsulectl-deal release takes its core's version"; exit 1; }
           draft=$(gh release view "$core" --repo action-state-group/capsule-cli --json isDraft --jq .isDraft) \
             || { echo "capsule-cli has no release $core"; exit 1; }
           test "$draft" = false || { echo "capsule-cli $core is not published"; exit 1; }
@@ -131,7 +135,7 @@ jobs:
           esac
           if draft="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
             if [ "$draft" != true ]; then
-              echo "release $VERSION is already published and cannot change: cut the next version"
+              echo "release $VERSION is already published and final: the capsulectl release it pairs with has its capsulectl-deal release"
               exit 1
             fi
             gh release upload "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --clobber

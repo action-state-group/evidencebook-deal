@@ -28,7 +28,8 @@ contract this plugin implements, stay in capsule-cli
 
 The plugin embeds the `capsulectl` core it builds against, so it pairs with
 one capsule-cli release: `go.mod` requires capsule-cli at a version, and the
-plugin's handshake reports it as `core_version`.
+plugin's handshake reports it as `core_version`. A release takes that same
+version (RELEASING.md).
 
 ```sh
 go build -o capsulectl github.com/action-state-group/capsule-cli/cmd/capsulectl
