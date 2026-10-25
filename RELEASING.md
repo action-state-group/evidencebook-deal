@@ -17,23 +17,30 @@ The process follows capsule-cli's release process
 and its rules: agents never approve a release run, and a pushed tag or a
 published release never changes.
 
-## The core it pairs with
+## The core it pairs with, and the version
 
 The plugin embeds the `capsulectl` core it builds against, and the core's
 first-party check compares the plugin's `core_version` with its own version
 (capsule-cli#326, design note section 4.2). So:
 
-1. `go.mod` requires capsule-cli at a published release tag, with no
+1. **A release takes the version of the capsulectl release it pairs with**
+   (Ethan, 2026-10-24). The plugin built against capsulectl `v0.1.0-rc24` is
+   capsulectl-deal `v0.1.0-rc24`, and its handshake reports that tag as both
+   `version` and `core_version`. There is one capsulectl-deal release per
+   capsulectl release: a fix to the plugin ships with the next capsulectl
+   release.
+2. `go.mod` requires capsule-cli at that published release tag, with no
    `replace`. The release workflow refuses anything else.
-2. Every capsule-cli release that users install needs a capsulectl-deal
+3. Every capsule-cli release that users install needs a capsulectl-deal
    release built against it: bump the require and merge, then tag once that
    capsule-cli release is published, not only tagged. The workflow refuses an
-   unpublished one, and a refused tag is spent: the cut moves to the next
-   version.
+   unpublished one, and a refused tag is spent; since the version is fixed by
+   the core, that core has no capsulectl-deal release until the next one.
 
 ## The cut
 
-1. On a fresh `main`, tag the merge commit:
+1. On a fresh `main`, tag the merge commit with the version `go.mod` requires
+   capsule-cli at (`go list -m -f '{{.Version}}' github.com/action-state-group/capsule-cli`):
    `git tag -a vX.Y.Z <commit> -m "capsulectl-deal vX.Y.Z" && git push origin vX.Y.Z`.
 2. A release reviewer approves the run (Actions, Release, Review deployments).
 3. Verify from the downloaded assets: `sha256sum -c SHA256SUMS`, and
