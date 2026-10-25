@@ -568,10 +568,9 @@ too, though nothing is done at it: see "Cancel-by date".
 
 `capsulectl deal` runs in the `capsulectl-deal` plugin. If a `capsulectl deal`
 command says the plugin is not installed, stop and show the user what it
-prints: download the plugin file built for their capsulectl from the
-plugin's release, check it, then run `capsulectl plugin install
-./capsulectl-deal-<version>-<os>-<arch>`. Installing it is the user's step:
-never run `plugin install` yourself.
+prints: it says to download the plugin file built for their capsulectl from
+the plugin's release and install it with `capsulectl plugin install <file>`.
+Installing it is the user's step: never run `plugin install` yourself.
 
 ```sh
 capsulectl --profile deal deal init --dir ~/.local/share/capsule-deal
