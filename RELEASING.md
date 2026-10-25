@@ -37,10 +37,11 @@ first-party check compares the plugin's `core_version` with its own version
    release built against it: bump the require and merge, then tag once that
    capsule-cli release is published, not only tagged. A run refused because
    it was not published yet builds nothing; once it is published, the tag's
-   pusher re-runs it. A re-run cannot recover anything else: a tag pushed at a
-   commit whose `go.mod` requires another capsule-cli version is refused on
-   every run and cannot be moved, and that core then gets no capsulectl-deal
-   release. So tag only the merge commit that carries the bump.
+   pusher re-runs it. A re-run cannot recover a tag at the wrong commit: a tag
+   pushed at a commit whose `go.mod` requires another capsule-cli version is
+   refused on every run and cannot be moved, and that core then gets no
+   capsulectl-deal release. So tag only the merge commit that carries the
+   bump.
 
 ## The cut
 
