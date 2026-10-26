@@ -2681,7 +2681,7 @@ def main(argv):
     bad = len(fails) + (check_files(files, openings) if files else run_fixtures())
     if bad:
         print(f"{bad} FAILURE(S)")
-    elif _VALIDATOR is None:
+    elif SKIPPED_NEEDS_JSONSCHEMA:
         print(f"{len(SKIPPED_NEEDS_JSONSCHEMA)} vectors need jsonschema, skipped; full schema validation did not run")
         print("OK, reduced coverage (install jsonschema for the full check)")
     else:
