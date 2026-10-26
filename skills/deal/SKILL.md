@@ -261,8 +261,8 @@ explained once where they are defined; this is the order to follow.
     On a sale with no such terms capsule (cash, Venmo or Zelle, a handover in
     person) there is nothing to seal here: tell the user that the payment and
     the handover are not on the record, never describe them as recorded, and
-    note what the user tells you with `deal note --kind evidence`
-    (`verified` false).
+    note what the user tells you with `deal note --kind evidence
+    --input e.json` (`{"about":"the payment and the handover","source":"user_statement","verified":false}`).
 11. **Close the thread** with `deal close --deal THREAD_ID --input FILE`
     (`{"status":"received"}`): `received` when the sale is complete (payment
     and delivery noted as in step 10, or, with no terms capsule, once the user
