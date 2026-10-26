@@ -171,7 +171,7 @@ not at the final review. Keep it for the whole errand: one deal per errand.
    tax, totals or notes in `conditions`: `conditions` hold only choices
    (a size, a colour, a delivery option).
 6. **A sale starts with `deal sale new`.** When the user sells, follow
-   "Sale" above; never open a buy-shaped deal with the marketplace as the
+   "Sale" below; never open a buy-shaped deal with the marketplace as the
    counterparty.
 7. **Called off.** When the user drops the errand before anything is done,
    close it with `{"status": "called_off"}`.
@@ -198,12 +198,12 @@ buyer gets a thread of their own under it. The rules named in the steps
 explained once where they are defined; this is the order to follow.
 
 1. **Open the sale, not a buy-shaped deal.** At the user's first ask, run
-   `deal sale new` with the user's exact words in `intent.verbatim`, their
-   floor in `intent.min_total_minor`, `intent.allowed` for what they asked you
+   `deal sale new --input FILE` with `type` (`purchase`), the user's exact
+   words in `intent.verbatim`, their floor in `intent.min_total_minor`, `intent.allowed` for what they asked you
    to do (`["offer", "commit"]` when you may answer buyers and agree; leave
    out what they did not say), any class they told you to state in
-   `ordered_representations` (see "Note every telling" and the `class` list
-   under Note), `terms` (`item`, asking `price_minor`, `currency`) and
+   `intent.ordered_representations` (see "A class the user told you to state
+   passes" under Note), `terms` (`item`, asking `price_minor`, `currency`) and
    `recourse` (the `rail` and whether it is `refundable`). Name no buyer and
    no claims here. Keep the returned `sale_id`.
 2. **Post the listing only after the user says yes.** Follow "Posting a
@@ -219,11 +219,12 @@ explained once where they are defined; this is the order to follow.
 4. **Note every buyer message as it arrives**, before your next check:
    `deal note --kind message` with `"from": "counterparty"` and `sent_at`
    when the platform shows it. Note a claim of theirs the same way
-   (`--kind claim`, `source_kind` `merchant`), and a change in their details
+   (`--kind claim`, `source_kind` `merchant`, `source` their message or
+   page), and a change in their details
    with `--kind change`.
 5. **State the user's ordered classes in every thread, before anything else.**
-   Until you do, an offer, commit, payment or share in that thread asks with
-   no way to proceed. Before you tell a buyer anything else about the item,
+   Until you do, an offer, commit or share in that thread pauses and cannot
+   go ahead. Before you tell a buyer anything else about the item,
    run `deal check` with `"action": "represent"`, and note the words with
    `deal note --kind claim --check CHECK_ID` only after it passes or the user
    approves. See "When you sell, check before you tell the buyer anything".
@@ -250,23 +251,31 @@ explained once where they are defined; this is the order to follow.
    you send. A platform may get the user's email or a listing's pickup area,
    never their phone, address or exact pickup spot.
 10. **Payment and delivery notes.** The user is the payee, and you move no
-    money. When the buyer pays, note `payment_received` from the buyer's
-    settlement files; when the item is handed over or shipped, note
-    `delivered`, naming the date it resolves. The shapes are under "Where the
-    user sells". The delivery note is the user's own statement of a handoff,
-    never proof the buyer received anything. Read the state with
-    `deal settlement` and report the `readings` as written.
-11. **Close the thread** with `deal close --deal THREAD_ID`: `received` once
-    payment and delivery are noted, `pending` to leave it open,
-    `not_received` with a `reason` when it did not complete, and, only while
-    nothing has been done in it (no offer or commit act), `not_selected` for
-    a buyer the user passed over or `called_off` when the user drops the
-    sale. Send the thread's receipt as "What you say" describes.
+    money. Both notes need the buyer's terms capsule (`--terms`), and
+    `payment_received` reads an x402 settlement. When the buyer paid that way
+    and you hold their terms leg, note `payment_received`; when the item is
+    handed over or shipped, note `delivered`, naming the date it resolves. The
+    shapes are under "Where the user sells". The delivery note is the user's
+    own statement of a handoff, never proof the buyer received anything. Read
+    the state with `deal settlement` and report the `readings` as written.
+    On a sale with no such terms capsule (cash, Venmo or Zelle, a handover in
+    person) there is nothing to seal here: tell the user that the payment and
+    the handover are not on the record, never describe them as recorded, and
+    note what the user tells you with `deal note --kind evidence`
+    (`verified` false).
+11. **Close the thread** with `deal close --deal THREAD_ID --input FILE`
+    (`{"status":"received"}`): `received` when the sale is complete (payment
+    and delivery noted as in step 10, or, with no terms capsule, once the user
+    tells you it is done), `pending` to leave it open, and `not_received` with
+    a `reason` when it did not complete or a buyer backed out after an act.
+    While the thread has no act on record (no offer, commit or cancel),
+    `not_selected` closes a buyer the user passed over and `called_off` a sale
+    the user dropped. Send the thread's receipt as "What you say" describes.
 12. **Close the sale** with `deal sale close --sale SALE_ID` when the item is
     gone or the user stops selling. It takes no new buyer; a thread already
     open goes on, and its result says how many are. `deal sale bundle --sale
     SALE_ID --out FILE` writes the user's own copy of the whole sale;
-    `deal sale export` lists its records.
+    `deal sale export --sale SALE_ID --output FILE` writes its records.
 
 ### Booking
 
