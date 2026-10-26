@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+## v0.1.0-rc23
+
 The first release of capsulectl-deal and the deal skill from this repository
-will carry these entries (capsule-cli#326). A capsulectl-deal release takes
-the version of the capsulectl release it pairs with (RELEASING.md), and
-requires that capsulectl: any other capsulectl reports a version mismatch.
+(capsule-cli#326), built against capsulectl v0.1.0-rc23. A capsulectl-deal
+release takes the version of the capsulectl release it pairs with
+(RELEASING.md), and requires that capsulectl: any other capsulectl reports a
+version mismatch.
 capsulectl no longer installs it by name (`plugin install deal`); download
 `capsulectl-deal-<version>-<os>-<arch>` from the release, check it against
 `SHA256SUMS` and its attestation, then run
@@ -38,6 +41,9 @@ listed in its rc22 release notes):
 
 ### Added
 
+- The deal skill has a Sale procedure (`skills/deal/SKILL.md`, "Sale"): what
+  the agent does, step by step, when the user sells, starting from
+  `deal sale new` (#34).
 - The deal report's page data carries `page_producer` (the build that made the
   page: name, version, commit) and, on a release, `release_notes` (this
   repository's release). With capsule-cli#448 the page compares builds only by
