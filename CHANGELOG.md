@@ -44,6 +44,10 @@ listed in its rc22 release notes):
 - The deal skill has a Sale procedure (`skills/deal/SKILL.md`, "Sale"): what
   the agent does, step by step, when the user sells, starting from
   `deal sale new` (#34).
+- A nightly workflow, `.github/workflows/core-main.yml`, builds capsulectl
+  from capsule-cli main and runs the deal page and portability checks against
+  it, so a core change that breaks deal pages shows before a core release; a
+  failed run comments on one open issue (#4).
 - The deal report's page data carries `page_producer` (the build that made the
   page: name, version, commit) and, on a release, `release_notes` (this
   repository's release). With capsule-cli#448 the page compares builds only by
