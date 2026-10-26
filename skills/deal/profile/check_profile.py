@@ -1435,6 +1435,7 @@ def local_store_values():
 
 
 def run_fixtures() -> int:
+    SKIPPED_NEEDS_JSONSCHEMA.clear()
     bad = 0
     vec = load(FIX / "fingerprint-vectors.json")
     secret = bytes.fromhex(vec["store_secret_hex"])
@@ -2680,8 +2681,8 @@ def main(argv):
     bad = len(fails) + (check_files(files, openings) if files else run_fixtures())
     if bad:
         print(f"{bad} FAILURE(S)")
-    elif SKIPPED_NEEDS_JSONSCHEMA:
-        print(f"{len(SKIPPED_NEEDS_JSONSCHEMA)} vectors need jsonschema, skipped; the schema stage did not run")
+    elif _VALIDATOR is None:
+        print(f"{len(SKIPPED_NEEDS_JSONSCHEMA)} vectors need jsonschema, skipped; full schema validation did not run")
         print("OK, reduced coverage (install jsonschema for the full check)")
     else:
         print("ALL OK")
