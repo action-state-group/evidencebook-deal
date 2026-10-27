@@ -390,7 +390,7 @@ func pinnedWitnessDirectory(p cli.Profile) (witness.Directory, error) {
 			"name":        "profile-pinned witness",
 			"endpoint":    trimEndpoint(p.Checkpoint.Endpoint),
 			"binding":     "cll",
-			"key_ids":     []string{p.Checkpoint.PublicKey},
+			"key_ids":     []string{strings.ToLower(p.Checkpoint.PublicKey)}, // a directory takes lowercase hex; a profile key may not be
 			"public_keys": []string{},
 		}},
 	})

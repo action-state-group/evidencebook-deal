@@ -4,6 +4,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/action-state-group/capsule-cli/cli"
@@ -35,4 +37,21 @@ func TestPinnedWitnessDirectoryOfAnUnpinnedProfileTrustsNoWitness(t *testing.T) 
 	require.NoError(t, err)
 	_, ok := directory.RowFor("https://witness.agentactioncapsule.org")
 	assert.False(t, ok, "an unverified receipt must never read as witnessed (evidencebook#115)")
+}
+
+// A profile's pinned key may be uppercase hex (cli.ParseKeys accepts it);
+// the receipt still verifies and the deal reads as witnessed, while a receipt
+// signed by another key stays pending (TestDealReceiptUnderAnotherKeyStaysPending).
+func TestAnUppercasePinnedKeyStillWitnessesTheCadence(t *testing.T) {
+	public, key, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	endpoint, _ := countingWitness(t)
+	p := cadenceFixture(t, endpoint, public, "1h", "0s", 0)
+	p.Checkpoint.PublicKey = strings.ToUpper(p.Checkpoint.PublicKey)
+	require.NoError(t, cli.SaveProfile(p, true))
+	dealID := retailDeal(t)
+	dealRun(t, "tick")
+	deliver(t, p, cadenceSize(t, p), key)
+	report := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))
+	assert.Equal(t, "witnessed", report["assurance"].(map[string]any)["rung"])
 }
