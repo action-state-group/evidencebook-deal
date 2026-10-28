@@ -5,8 +5,8 @@
 - Builds against an unreleased capsulectl (capsule-cli `3a77251d` and agent-action-capsule `1d1752bf`, both unreleased; capsule-cli#428) and
   names no deal-specific export of its host package where a generic one
   exists: the plugin owns its store through `cli.OpenOwnedTarget` and marks it
-  (`plugin_owned`, written under the writer lock on its write paths, never on
-  a read), `bundle|disclose|permalink --deal` and `cll checkpoint cadence`
+  (`plugin_owned`, written under the writer lock by every write session and by
+  `deal init`, never on a read), `bundle|disclose|permalink --deal` and `cll checkpoint cadence`
   come from `cli.ExtendBundle` and `cli.GraftCommand`, and `deal init` now
   writes `log: deal` into the profile. Deals behave as before; a deal profile
   saved without `log:` is still read as the deal plugin's until the core drops

@@ -103,6 +103,9 @@ func TestADealStoreRecordsItsOwner(t *testing.T) {
 	require.NoError(t, db.Close())
 	assert.Equal(t, Name, owner)
 
+	// Edited to look like a plain profile of the core's, the store is still
+	// refused: by the marker, and by the older shelf table that sits beside it
+	// (TestCoreRefusesWritesOnAShelfStoreWhateverTheProfileSays).
 	p.Namespace, p.Log = "plain", cli.LogCLL
 	require.NoError(t, cli.SaveProfile(p, true))
 	_, err = invoke(t, "", "publish", "--profile", "deal", "--request", sealRequestFile(t, "stray"))

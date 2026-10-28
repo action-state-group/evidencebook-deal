@@ -114,20 +114,11 @@ func (l *dealStoreLock) HoldsPluginStore() bool { return l.held }
 func (l *dealStoreLock) PluginStoreOwner() string { return Name }
 
 // openOwnedTarget opens a log of the deal store through the core's handle for
-// a store a plugin owns. A target opened for writing also marks the store as
-// the deal plugin's (the core's plugin_owned marker), so that no profile can
-// make the core write it; a read leaves the store as it is.
+// a store a plugin owns. A write session has marked the store already (the
+// core's plugin_owned marker, openDealSession); deal init, which holds only the
+// lock, marks it itself.
 func openOwnedTarget(ctx context.Context, p cli.Profile, use cli.TargetUse, w cli.PluginStoreWriter) (*cli.Target, error) {
-	t, err := cli.OpenOwnedTarget(ctx, p, use, w)
-	if err != nil {
-		return nil, err
-	}
-	if use != cli.UseRead && use != cli.UseCLLRead && use != cli.UseArtifacts {
-		if err := t.MarkOwned(ctx, Name, w); err != nil {
-			return nil, errors.Join(err, t.Close())
-		}
-	}
-	return t, nil
+	return cli.OpenOwnedTarget(ctx, p, use, w)
 }
 
 func openDealSession(ctx context.Context, p cli.Profile) (_ *dealSession, err error) {
@@ -1052,6 +1043,9 @@ func dealInitCommand() *cobra.Command {
 		t, err := openOwnedTarget(c.Context(), p, cli.UseInitialization, lock)
 		if err != nil {
 			return err
+		}
+		if err = t.MarkOwned(c.Context(), Name, lock); err != nil {
+			return errors.Join(err, t.Close())
 		}
 		if err = t.Close(); err != nil {
 			return err
