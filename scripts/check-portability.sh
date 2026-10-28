@@ -10,7 +10,7 @@
 #   4. with capsulectl alone (no plugin, no profile, no network), check both
 #      layers:
 #        the page: opened offline in headless Chrome it renders the deal,
-#          says its bundle verified and its text is sealed, and
+#          says none of its bundle's checks failed and its text is sealed, and
 #          `capsulectl verify --bundle` calls it VALID;
 #        the records: each exported typed record is the exact payload a
 #          bundle record commits to, the chain links, and the facts they
@@ -109,7 +109,10 @@ portable_checks() {
   render page.html
   check "the page ran offline with no console.error, uncaught error or unhandled rejection" no_render_errors page.html.dom
   # The pill element itself: the page's stylesheet names data-verify values too.
-  check "the page says its bundle verified" contains page.html.dom 'class="cv-pill" data-verify="verified"'
+  # None of the bundle's checks failed, and the viewer says some were not run
+  # (a deal copy carries no witness receipts of its own to check): its
+  # "incomplete" state, not "verified" (capsule-viewer's presentation contract).
+  check "the page says none of its bundle's checks failed" contains page.html.dom 'class="cv-pill" data-verify="incomplete"'
   check "the page renders the deal" contains page.html.dom '<h1>Deal report</h1>'
   check "the page says its text is sealed and checked" contains page.html.dom 'data-sealed="x-deal-v0"'
   page_bundle page.html >bundle.json
@@ -249,14 +252,14 @@ jq -c --arg last "$(jq -r '.records | max_by(.evidence_record_header.seq) | .cap
 replace_bundle recipient.html broken-bundle.json >broken-bundle.html
 rehash_bundle_csp recipient.html broken-bundle.html
 check "broken-bundle: the copy differs" differs recipient.html broken-bundle.html
-broken broken-bundle broken-bundle.html records.json "verify --bundle: VALID, exit 0" "the page says its bundle verified"
+broken broken-bundle broken-bundle.html records.json "verify --bundle: VALID, exit 0" "the page says none of its bundle's checks failed"
 check "broken-bundle: the page says its bundle failed" refused broken-bundle.html
 
 # dropped-record: the bundle without its last record (the action taken).
 jq -c '.records |= (sort_by(.evidence_record_header.seq) | .[:-1])' bundle.json >dropped-record.json
 replace_bundle recipient.html dropped-record.json >dropped-record.html
 rehash_bundle_csp recipient.html dropped-record.html
-broken dropped-record dropped-record.html records.json "verify --bundle: VALID, exit 0" "the page says its bundle verified"
+broken dropped-record dropped-record.html records.json "verify --bundle: VALID, exit 0" "the page says none of its bundle's checks failed"
 check "dropped-record: the page says its bundle failed" refused dropped-record.html
 
 # broken-records: the exported action record says $62.70 was paid.

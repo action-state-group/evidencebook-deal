@@ -78,12 +78,13 @@ check "deal-receipt: the page renders its sealed summary line" contains receipt.
 # capsulectl's own presentation build, so the page and its runtime are the
 # host's, not the ones this plugin embeds. Against capsule-cli main
 # (core-main.yml) this is main rendering what the newest deal build produces.
-# It renders as a verified evidence page; the deal section itself comes only
+# It renders as an evidence page none of whose checks failed (the viewer's
+# "incomplete" state: some checks, such as a witness's, are not run); the deal section itself comes only
 # from this plugin's `deal report`.
 capsulectl presentation build --bundle receipt.json --out receipt-rebuilt.html >/dev/null
 render receipt-rebuilt.html
 check "deal-receipt-rebuilt: no console.error, uncaught error or unhandled rejection" no_render_errors receipt-rebuilt.html.dom
-check "deal-receipt-rebuilt: the page says the bundle verified" contains receipt-rebuilt.html.dom 'class="cv-pill" data-verify="verified"'
+check "deal-receipt-rebuilt: the page says none of the bundle's checks failed" contains receipt-rebuilt.html.dom 'class="cv-pill" data-verify="incomplete"'
 
 # deal-receipt-edited: one line of the signed report edited. The bundle's own
 # records still verify, so the page's runtime runs the deal view, which
