@@ -79,7 +79,9 @@ check "deal-receipt: the page renders its sealed summary line" contains receipt.
 # host's, not the ones this plugin embeds. Against capsule-cli main
 # (core-main.yml) this is main rendering what the newest deal build produces.
 # It renders as an evidence page none of whose checks failed (the viewer's
-# "incomplete" state: some checks, such as a witness's, are not run); the deal section itself comes only
+# "incomplete" state: the browser has no CLL checkpoint verifier, so under
+# AAC 0.8.0's strict mode the page cannot check the checkpoint signature and
+# reports checkpoint_verifier_unavailable); the deal section itself comes only
 # from this plugin's `deal report`.
 capsulectl presentation build --bundle receipt.json --out receipt-rebuilt.html >/dev/null
 render receipt-rebuilt.html

@@ -109,9 +109,11 @@ portable_checks() {
   render page.html
   check "the page ran offline with no console.error, uncaught error or unhandled rejection" no_render_errors page.html.dom
   # The pill element itself: the page's stylesheet names data-verify values too.
-  # None of the bundle's checks failed, and the viewer says some were not run
-  # (a deal copy carries no witness receipts of its own to check): its
-  # "incomplete" state, not "verified" (capsule-viewer's presentation contract).
+  # None of the bundle's checks failed, and the viewer says one was not run:
+  # the browser has no CLL checkpoint verifier, so under AAC 0.8.0's strict
+  # mode the page cannot check the checkpoint signature
+  # (checkpoint_verifier_unavailable). Its "incomplete" state, not "verified"
+  # (capsule-viewer's presentation contract).
   check "the page says none of its bundle's checks failed" contains page.html.dom 'class="cv-pill" data-verify="incomplete"'
   check "the page renders the deal" contains page.html.dom '<h1>Deal report</h1>'
   check "the page says its text is sealed and checked" contains page.html.dom 'data-sealed="x-deal-v0"'
