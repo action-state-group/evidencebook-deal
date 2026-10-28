@@ -8,7 +8,7 @@
   release ships `deal-view-VERSION.tar.gz` to unpack beside the launcher
   (README). `deal report --html` pages are unchanged; with the files unpacked,
   `capsulectl presentation build` also carries the deal view. Builds against
-  capsule-cli `68221273` (unreleased; capsule-cli#478), whose handshake can
+  capsule-cli `d5f42c06` (unreleased; capsule-cli#478 merged), whose handshake can
   state a plugin's presentations.
 - Builds against capsule-cli `8a856b75` (unreleased; capsule-cli#428 PR B), whose core names no company
   plugin. The deal plugin now says the words the core no longer does: `bundle`,
