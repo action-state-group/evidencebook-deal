@@ -85,6 +85,7 @@ func deliver(t *testing.T, p cli.Profile, size uint64, signer ed25519.PrivateKey
 	// (witnessNativeTicks): the tick's leaves become witnessed.
 	s, err := openDealSession(t.Context(), p)
 	require.NoError(t, err)
+	defer func() { _ = s.close() }()
 	defer func() { require.NoError(t, s.close()) }()
 	c, cp, err := s.cadenceOf(t.Context())
 	require.NoError(t, err)

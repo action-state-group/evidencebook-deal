@@ -50,6 +50,7 @@ func TestDealSessionHoldsTheStoreWhileOpen(t *testing.T) {
 	require.NoError(t, err)
 	s, err := openDealSession(t.Context(), p)
 	require.NoError(t, err)
+	defer func() { _ = s.close() }()
 	assert.True(t, s.HoldsPluginStore())
 	require.NoError(t, s.close())
 	assert.False(t, s.HoldsPluginStore(), "a closed session")
@@ -148,6 +149,7 @@ func TestAWriteSessionMarksAnOlderStore(t *testing.T) {
 
 	s, err := openDealSession(t.Context(), p)
 	require.NoError(t, err)
+	defer func() { _ = s.close() }()
 	require.NoError(t, s.close())
 	owner, present := marker()
 	assert.True(t, present)
