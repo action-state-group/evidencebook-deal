@@ -23,7 +23,7 @@ import (
 type fakeWitness struct {
 	mu     sync.Mutex
 	status int
-	cp     WitnessCheckpoint
+	cp     witnessCheckpoint
 	server *httptest.Server
 }
 
@@ -51,7 +51,7 @@ func (w *fakeWitness) set(size, prevSize uint64, root, prevRoot, key string, at 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.status = http.StatusOK
-	w.cp = WitnessCheckpoint{LogID: "deal-cadence/00aa", MMRSize: size, Root: root, PrevSize: prevSize, PrevRoot: prevRoot,
+	w.cp = witnessCheckpoint{LogID: "deal-cadence/00aa", MMRSize: size, Root: root, PrevSize: prevSize, PrevRoot: prevRoot,
 		KeyID: key, Timestamp: at.UTC().Truncate(time.Minute).Format(time.RFC3339), Equivocations: []json.RawMessage{}}
 }
 
@@ -178,7 +178,7 @@ func TestCanaryWatchNeverWitnessedIsAnAlarmButAnUnreadableWitnessIsNot(t *testin
 	w.status = http.StatusBadGateway
 	w.mu.Unlock()
 	_, err = watch(t, w, state)
-	require.ErrorIs(t, err, ErrWitnessUnread)
+	require.ErrorIs(t, err, errWitnessUnread)
 	assert.NotErrorIs(t, err, cli.ErrAlarm)
 	assert.Equal(t, 1, cli.ExitCode(err))
 	_, statErr := os.Stat(state)
@@ -253,6 +253,26 @@ func assertNoTick(t *testing.T) {
 	assert.Equal(t, float64(1), tick["tick"], "the canary never ticked")
 }
 
+// A capsulectl-deal release is tagged on its own: --expect-version takes that
+// tag, not the capsulectl core it was built against, and the run seals the
+// tag and the core's version side by side.
+func TestCanaryRunNamesThePluginsOwnVersion(t *testing.T) {
+	canaryFixture(t)
+	oldV, oldC, oldCore := cli.PluginVersion, cli.PluginCommit, cli.CLIVersion
+	cli.PluginVersion, cli.PluginCommit, cli.CLIVersion = "v0.1.0-rc99", "deadbeef", "v0.1.0-rc24"
+	t.Cleanup(func() { cli.PluginVersion, cli.PluginCommit, cli.CLIVersion = oldV, oldC, oldCore })
+
+	_, err := canaryRun(t, "--expect-version", "v0.1.0-rc24")
+	require.ErrorIs(t, err, cli.ErrConflict, "the core's tag is not this binary's")
+	assert.Contains(t, cli.SafeError(err), "this binary is v0.1.0-rc99, expected v0.1.0-rc24")
+
+	got, err := canaryRun(t, "--expect-version", "v0.1.0-rc99")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.1.0-rc99", got["binary_version"])
+	assert.Equal(t, "deadbeef", got["binary_commit"])
+	assert.Equal(t, "v0.1.0-rc24", got["core_version"])
+}
+
 func TestCanaryRunStopsBeforeSealingOnDrift(t *testing.T) {
 	canaryFixture(t)
 	_, err := canaryRun(t, "--expect-version", "v9.9.9")
@@ -290,6 +310,7 @@ func TestCanaryRunStopsBeforeTheTickWhenAVerbFails(t *testing.T) {
 	_, err = canaryRun(t)
 	require.Error(t, err)
 	assert.Contains(t, cli.SafeError(err), "canary: `deal open` failed: ")
+	assert.Regexp(t, "failed: [^;]*[a-zA-Z]", cli.SafeError(err), "the verb's own reason follows, not an empty one")
 	assert.Contains(t, cli.SafeError(err), "; stopped before the tick")
 
 	p.Checkpoint.PublicKey = hex.EncodeToString(make([]byte, 32))
@@ -313,14 +334,14 @@ func TestCanaryWatchDoesNotFollowARedirectOffHTTPS(t *testing.T) {
 		http.Redirect(rw, r, "http://witness.example"+r.URL.Path, http.StatusFound)
 	}))
 	t.Cleanup(server.Close)
-	old := CanaryHTTP
-	CanaryHTTP = CanaryClient(server.Client().Transport)
-	t.Cleanup(func() { CanaryHTTP = old })
+	old := canaryHTTP
+	canaryHTTP = canaryClient(server.Client().Transport)
+	t.Cleanup(func() { canaryHTTP = old })
 
 	state := filepath.Join(t.TempDir(), "state.json")
 	_, err := invoke(t, "", "deal", "canary", "watch", "--log-id", "deal-cadence/00aa", "--witness", server.URL,
 		"--expect-every", "26h", "--state", state)
-	require.ErrorIs(t, err, ErrWitnessUnread)
+	require.ErrorIs(t, err, errWitnessUnread)
 	assert.Contains(t, cli.SafeError(err), "redirected to a non-HTTPS URL")
 	assert.NotErrorIs(t, err, cli.ErrAlarm)
 }

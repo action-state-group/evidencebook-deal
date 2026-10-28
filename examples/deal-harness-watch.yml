@@ -1,4 +1,4 @@
-# Template: the outside verdict for test accounts (docs/HARNESS.md).
+# Template: the outside verdict for test accounts (guide: capsule-cli docs/HARNESS.md, https://github.com/action-state-group/capsule-cli/blob/main/docs/HARNESS.md).
 #
 # Not run from this location -- copy it into a repo's .github/workflows/ and
 # list each test account's cadence log id (`cll checkpoint cadence` prints it as
@@ -9,7 +9,7 @@
 #
 # This is liveness only. A test account's install ticks on a timer whether or
 # not its daily deal happened, so whether the deal itself was sealed and held
-# is decided from that deal's emailed receipt (docs/HARNESS.md, "The receipt").
+# is decided from that deal's emailed receipt (capsule-cli docs/HARNESS.md, "The receipt").
 
 name: Deal harness verdict
 
