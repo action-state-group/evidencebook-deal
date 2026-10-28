@@ -124,7 +124,7 @@ func canaryRunCommand() *cobra.Command {
 		}
 		noteBody, _ := json.Marshal(map[string]string{
 			"about":  "canary self-check",
-			"source": "capsulectl canary run",
+			"source": "capsulectl deal canary run",
 			"detail": fmt.Sprintf("binary %s (commit %s, capsulectl core %s); %s", binaryVersion(), binaryCommit(), cli.CLIVersion, skillDetail),
 		})
 		notePath, err := file("note.json", string(noteBody))
