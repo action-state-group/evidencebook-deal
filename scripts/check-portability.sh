@@ -115,6 +115,7 @@ portable_checks() {
   # (checkpoint_verifier_unavailable). Its "incomplete" state, not "verified"
   # (capsule-viewer's presentation contract).
   check "the page says none of its bundle's checks failed" contains page.html.dom 'class="cv-pill" data-verify="incomplete"'
+  check "the only check the page did not run is the checkpoint signature" only_checkpoint_unrun page.html.dom
   check "the page renders the deal" contains page.html.dom '<h1>Deal report</h1>'
   check "the page says its text is sealed and checked" contains page.html.dom 'data-sealed="x-deal-v0"'
   page_bundle page.html >bundle.json
@@ -147,6 +148,13 @@ portable_checks() {
 
 # contains_text TEXT PART: TEXT holds PART.
 contains_text() { [[ -n "$1" && "$1" == *"$2"* ]]; }
+
+# The reasons the page names for the checks it did not run: the parenthesised
+# codes of its banner detail. "incomplete" covers any check that did not run,
+# so the pages must name this one and no other, or a regression that skips
+# more checks (producer signatures, say) would pass as "incomplete".
+unrun_reasons() { grep -o '<p class="cv-banner-detail" data-banner-detail="">[^<]*</p>' "$1" | grep -o '([a-z_][a-z_]*)' | tr '\n' ' '; }
+only_checkpoint_unrun() { [[ "$(unrun_reasons "$1")" == "(checkpoint_verifier_unavailable) " ]]; }
 
 # record_line RECORDS TYPE FILTER: FILTER (jq) on the body of the one record
 # of TYPE, with money its amount as the page writes it ($6.27); a stand-in

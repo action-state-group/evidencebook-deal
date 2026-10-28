@@ -26,6 +26,13 @@ trap 'rm -rf "$work"' EXIT
 export XDG_CONFIG_HOME="$work/config"
 # shellcheck source=/dev/null
 source "$core/scripts/lib/page-checks.sh"
+
+# The reasons the page names for the checks it did not run: the parenthesised
+# codes of its banner detail. "incomplete" covers any check that did not run,
+# so the pages must name this one and no other, or a regression that skips
+# more checks (producer signatures, say) would pass as "incomplete".
+unrun_reasons() { grep -o '<p class="cv-banner-detail" data-banner-detail="">[^<]*</p>' "$1" | grep -o '([a-z_][a-z_]*)' | tr '\n' ' '; }
+only_checkpoint_unrun() { [[ "$(unrun_reasons "$1")" == "(checkpoint_verifier_unavailable) " ]]; }
 find_chrome || { echo "check-deal-pages: no Chrome or Chromium found (set CHROME)" >&2; exit 2; }
 
 mkdir -p "$work/bin"
@@ -87,6 +94,7 @@ capsulectl presentation build --bundle receipt.json --out receipt-rebuilt.html >
 render receipt-rebuilt.html
 check "deal-receipt-rebuilt: no console.error, uncaught error or unhandled rejection" no_render_errors receipt-rebuilt.html.dom
 check "deal-receipt-rebuilt: the page says none of the bundle's checks failed" contains receipt-rebuilt.html.dom 'class="cv-pill" data-verify="incomplete"'
+check "deal-receipt-rebuilt: the only check the page did not run is the checkpoint signature" only_checkpoint_unrun receipt-rebuilt.html.dom
 
 # deal-receipt-edited: one line of the signed report edited. The bundle's own
 # records still verify, so the page's runtime runs the deal view, which
