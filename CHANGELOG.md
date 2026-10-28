@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Builds against an unreleased capsulectl (capsule-cli `45b53806` and agent-action-capsule `1d1752bf`, both unreleased; capsule-cli#428) and
+- Builds against an unreleased capsulectl (capsule-cli `3a77251d` and agent-action-capsule `1d1752bf`, both unreleased; capsule-cli#428) and
   names no deal-specific export of its host package where a generic one
   exists: the plugin owns its store through `cli.OpenOwnedTarget` and marks it
   (`plugin_owned`, written under the writer lock on its write paths, never on

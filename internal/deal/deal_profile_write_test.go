@@ -108,3 +108,45 @@ func TestADealStoreRecordsItsOwner(t *testing.T) {
 	_, err = invoke(t, "", "publish", "--profile", "deal", "--request", sealRequestFile(t, "stray"))
 	assert.ErrorIs(t, err, cli.ErrPluginStoreWrite)
 }
+
+// A store from before the owner marker gets it on the first write session, even
+// one that opens no target of its own (a tick without a witness writes only the
+// shelf); a read session leaves it as it is.
+func TestAWriteSessionMarksAnOlderStore(t *testing.T) {
+	dealFixture(t)
+	retailDeal(t)
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	marker := func() (owner string, present bool) {
+		db, err := sql.Open("sqlite", "file:"+p.Connection.Database+"?mode=ro")
+		require.NoError(t, err)
+		defer db.Close()
+		var n int
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'plugin_owned'`).Scan(&n))
+		if n == 0 {
+			return "", false
+		}
+		require.NoError(t, db.QueryRow(`SELECT owner FROM plugin_owned LIMIT 1`).Scan(&owner))
+		return owner, true
+	}
+	rw, err := sql.Open("sqlite", "file:"+p.Connection.Database)
+	require.NoError(t, err)
+	_, err = rw.Exec(`DROP TABLE plugin_owned`)
+	require.NoError(t, err)
+	require.NoError(t, rw.Close())
+	_, present := marker()
+	require.False(t, present, "an older store has no owner marker")
+
+	r, err := openDealStoreRead(t.Context(), p)
+	require.NoError(t, err)
+	require.NoError(t, r.close())
+	_, present = marker()
+	assert.False(t, present, "a read session writes nothing")
+
+	s, err := openDealSession(t.Context(), p)
+	require.NoError(t, err)
+	require.NoError(t, s.close())
+	owner, present := marker()
+	assert.True(t, present)
+	assert.Equal(t, Name, owner)
+}

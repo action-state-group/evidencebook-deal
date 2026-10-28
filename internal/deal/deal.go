@@ -173,6 +173,12 @@ func openDealSession(ctx context.Context, p cli.Profile) (_ *dealSession, err er
 	if err = s.openShelf(ctx, dbPath, originals); err != nil {
 		return nil, err
 	}
+	// Every write session marks the store as the plugin's under the lock,
+	// whether or not it ever opens a writable target (a tick without a witness
+	// writes only the shelf).
+	if err = cli.MarkStoreOwned(ctx, s.db, Name, s); err != nil {
+		return nil, err
+	}
 	s.originals = originals
 	s.index = sqliteDealIndex{s.db}
 	for _, stmt := range dealIndexSchema {
@@ -266,13 +272,6 @@ func (s *dealSession) useDeal(ctx context.Context, dealID string, create bool) e
 			return err
 		}
 		s.t = t
-		// A write session marks the store as the plugin's even when this deal
-		// opens no writable target of its own.
-		if !s.shared {
-			if err := t.MarkOwned(ctx, Name, s); err != nil {
-				return err
-			}
-		}
 		// A writer finishes a step a crash left without its checkpoint before
 		// anything else reads or extends the deal (deal_books.go coverSteps).
 		if !create && !s.shared {
