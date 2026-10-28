@@ -6,7 +6,7 @@ require (
 	github.com/action-state-group/agent-action-capsule/go v0.14.1-0.20261027225214-1d1752bf3956
 	github.com/action-state-group/capsule-cli v0.1.0-rc9.0.20261028092418-5745be57d4ca
 	github.com/action-state-group/capsule-emit/go v0.3.0
-	github.com/action-state-group/capsule-viewer/go v0.2.1-0.20261028034017-389c1bacb86d
+	github.com/action-state-group/capsule-viewer/go v0.3.0
 	github.com/action-state-group/checkpointed-local-log/go v0.1.0
 	github.com/action-state-group/evidencebook v0.8.0
 	github.com/emersion/go-msgauth v0.7.0
