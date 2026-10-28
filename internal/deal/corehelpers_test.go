@@ -163,11 +163,12 @@ func invoke(t *testing.T, input string, args ...string) (string, error) {
 	return out.String(), e
 }
 
-// testCommand is the capsulectl tree as a user reaches it with the deal
-// plugin installed, in one process: the core commands, and `deal ...` as the
-// core dispatches it.
+// testCommand is the capsulectl tree as the capsulectl-deal binary builds it,
+// in one process: the core commands with the deal commands added, and the
+// process named as the plugin that keeps a deal profile's log, so the core
+// runs `bundle --deal` here instead of forwarding it to an installed plugin.
 func testCommand() *cobra.Command {
-	return cli.NewCommandWith(DealGroup())
+	return cli.NewPluginCommand(DealMetadata, DealGroup())
 }
 
 func writeBundle(t *testing.T, value interface{}) string {
