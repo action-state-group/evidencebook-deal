@@ -18,7 +18,7 @@ contract this plugin implements, stay in capsule-cli
 | Path | What it holds |
 |---|---|
 | `cmd/capsulectl-deal` | the plugin binary: the `capsulectl` command tree plus `capsulectl deal ...` |
-| `internal/deal` | the deal commands, the deal store and its records |
+| `internal/deal` | the deal commands, the deal store and its records, and the deal view (`assets/deal-view.*`), the plugin's presentation module |
 | `skills/deal/` | the `deal` skill: `SKILL.md`, its README, the x-deal-v0 record profile (`profile/`), demos and scripts |
 | `third_party/unicode/` | Unicode's TR39 `confusables.txt`, from which `scripts/genconfusables` builds `internal/deal/confusables_table.go` (a security control: the share check matches a sensitive value written with lookalike letters) |
 | `testdata/presentation/` | the deal and report pages' presentation fixtures and goldens |
@@ -37,6 +37,16 @@ go build -o capsulectl-deal ./cmd/capsulectl-deal
 ./capsulectl plugin install ./capsulectl-deal
 bash scripts/test.sh
 ```
+
+The deal view (`capsulectl.deal-view/v0`) is the plugin's presentation
+module: the deal section of a deal receipt's page. The plugin's own pages
+(`deal report --html`) carry it from the binary. To let `capsulectl
+presentation list` and `presentation build` use it too, put its files beside
+the installed launcher, in a `capsulectl-deal.d/` directory: a release ships
+them as `deal-view-VERSION.tar.gz`, unpacked into the plugin directory
+(`tar -xzf deal-view-VERSION.tar.gz -C ~/.local/lib/capsulectl/plugins`).
+Without them, `capsulectl plugin ls` reports the plugin's presentations
+refused (`missing_file`) and its commands run as before.
 
 A plain build is a development build of both: the plugin's `core_version`
 reads `0.1.0-dev`, which a development `capsulectl` does not check, so build

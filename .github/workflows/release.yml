@@ -105,6 +105,7 @@ jobs:
           meta="$(dist/capsulectl-deal-"$VERSION"-linux-amd64 cli-plugin-metadata)"
           test "$(jq -r .version <<<"$meta")" = "$VERSION" || { echo "unexpected version: $meta"; exit 1; }
           test "$(jq -r .core_version <<<"$meta")" = "$CORE_VERSION" || { echo "unexpected core_version: $meta"; exit 1; }
+          scripts/check-deal-view-archive.sh "dist/capsulectl-deal-$VERSION-linux-amd64" "dist/deal-view-$VERSION.tar.gz"
       - name: Attest build provenance of the assets
         id: attest
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
@@ -112,6 +113,7 @@ jobs:
           subject-path: |
             dist/capsulectl-deal-*
             dist/deal-skill-*
+            dist/deal-view-*
       - name: Attach the attestation bundle
         env:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
@@ -143,5 +145,5 @@ jobs:
           else
             gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag "${flags[@]}" \
               --title "capsulectl-deal $VERSION" \
-              --notes "Prebuilt capsulectl-deal plugin binaries (linux/amd64, linux/arm64, darwin/arm64) and the deal skill archive. Pairs with capsulectl $CORE_VERSION. Verify with: sha256sum -c SHA256SUMS. Check the build attestation with no GitHub account: gh attestation verify FILE --bundle capsulectl-deal-$VERSION.sigstore.json --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml"
+              --notes "Prebuilt capsulectl-deal plugin binaries (linux/amd64, linux/arm64, darwin/arm64), the deal skill archive, and the deal view archive (unpack it into the plugin directory beside capsulectl-deal). Pairs with capsulectl $CORE_VERSION. Verify with: sha256sum -c SHA256SUMS. Check the build attestation with no GitHub account: gh attestation verify FILE --bundle capsulectl-deal-$VERSION.sigstore.json --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml"
           fi

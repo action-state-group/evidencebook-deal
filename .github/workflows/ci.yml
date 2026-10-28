@@ -68,6 +68,7 @@ jobs:
           test "$(jq -r .version <<<"$meta")" = v0.0.0-ci || { echo "unexpected version: $meta"; exit 1; }
           test "$(jq -r .core_version <<<"$meta")" = "$core" || { echo "unexpected core_version: $meta"; exit 1; }
           (cd "$RUNNER_TEMP/dist" && sha256sum -c SHA256SUMS)
+          scripts/check-deal-view-archive.sh "$RUNNER_TEMP/dist/capsulectl-deal-v0.0.0-ci-linux-amd64" "$RUNNER_TEMP/dist/deal-view-v0.0.0-ci.tar.gz"
 
   tests:
     # The race detector split by test name across six jobs, and every case
