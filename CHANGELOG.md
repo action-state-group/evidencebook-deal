@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Builds against capsule-cli `cbdbb6a0` (unreleased; capsule-cli#479), whose core
+- Builds against capsule-cli `ed9c4db4` (unreleased; capsule-cli#479 merged), whose core
   has no deal view of its own: `capsulectl presentation list` and `build` use the
   deal view only from this plugin, with its files unpacked beside the launcher,
   and otherwise resolve a deal receipt to the fallback page.
