@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -943,13 +944,16 @@ func (s *dealSession) compose(c *cobra.Command, dealID string, members []compose
 	// written: a refused join leaves no bundle behind.
 	var page string
 	if htmlPath != "" {
+		if _, statErr := os.Stat(htmlPath); statErr == nil || htmlPath == path {
+			return cli.InputError("--html " + htmlPath + " already exists or is the --output file; nothing was written")
+		}
 		var half *dealPrivateHalf
 		if keepPath != "" {
 			if half, err = privateHalfOf(keepPath, dealID, container, cli.BuiltinWording()); err != nil {
 				return err
 			}
 		}
-		if page, err = composedPageHTML(container, half, dealVerifyCommand(htmlPath)); err != nil {
+		if page, err = composedPageHTML(container, half, dealVerifyCommand(htmlPath), cli.BuiltinWording()); err != nil {
 			return err
 		}
 	}

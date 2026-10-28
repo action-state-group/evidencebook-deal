@@ -24,6 +24,7 @@ import (
 // the agent did. Nothing here is a bundle member.
 type dealPrivateHalf struct {
 	Label  string   `json:"label"`
+	Note   string   `json:"note"`
 	DealID string   `json:"deal_id"`
 	Asked  string   `json:"asked,omitempty"`
 	Did    []string `json:"did"`
@@ -68,11 +69,17 @@ func privateHalfOf(path, dealID string, composition map[string]interface{}, w cl
 	if keepKey, composer := bundleRootKey(keep), bundleRootKey(composition); keepKey == "" || keepKey != composer {
 		return nil, cli.InputError("--keep was not sealed by the composer of this composition; the page is not written")
 	}
+	return privateHalfFrom(keep, dealID, w)
+}
+
+// privateHalfFrom is the half a verified keep bundle makes on the page.
+func privateHalfFrom(keep map[string]interface{}, dealID string, w cli.Wording) (*dealPrivateHalf, error) {
+	report, _, _ := cli.DealSealedReport(keep)
 	openings, err := dealPageOpenings(keep)
 	if err != nil {
 		return nil, err
 	}
-	half := &dealPrivateHalf{Label: w.Line("report.private_half", nil), DealID: dealID, Did: []string{}}
+	half := &dealPrivateHalf{Label: w.Line("report.private_half", nil), Note: w.Line("report.private_half_note", nil), DealID: dealID, Did: []string{}}
 	if openings["asked"] == true {
 		opening, _ := report["asked_opening"].(map[string]interface{})
 		half.Asked, _ = opening["text"].(string)
@@ -91,7 +98,7 @@ func privateHalfOf(path, dealID string, composition map[string]interface{}, w cl
 // composedPageHTML renders the composed bundle as one local page, with the
 // private half beside it when there is one. The page gate is the same as
 // every page's: the composition must verify VALID.
-func composedPageHTML(composition map[string]interface{}, half *dealPrivateHalf, verifyCommand string) (string, error) {
+func composedPageHTML(composition map[string]interface{}, half *dealPrivateHalf, verifyCommand string, w cli.Wording) (string, error) {
 	if err := cli.PageGate(composition); err != nil {
 		return "", err
 	}
@@ -115,6 +122,7 @@ renderEvidenceGraph(window.__BUNDLE__, document.getElementById("app"), undefined
   section.style.maxWidth = "60rem";
   section.style.padding = "0 1rem";
   section.appendChild(el("h2", half.label));
+  section.appendChild(el("p", half.note));
   if (half.asked) { section.appendChild(el("p", half.asked)); }
   var list = el("ul");
   half.did.forEach(function (line) { list.appendChild(el("li", line)); });
@@ -122,7 +130,7 @@ renderEvidenceGraph(window.__BUNDLE__, document.getElementById("app"), undefined
   document.getElementById("app").after(section);
 })();`
 	return emitter.EmitEvidenceGraphHTMLWithOptions(composition, pageruntime.IIFE, emitter.Options{
-		Title:             "Deal: both halves",
+		Title:             w.Line("report.both_halves_title", nil),
 		ThemeCSS:          dealThemeCSS,
 		CoreRuntimeSHA256: pageruntime.SHA256,
 		Bootstrap:         bootstrap,

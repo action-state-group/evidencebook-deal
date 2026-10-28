@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-V909rV5im1F/VU1mlVHYLN97+9O/1pQ5VcDS2CxQaHg=' 'sha256-B1jym+x7rfbzpFXVHEdkZnUwSmBRH7UBS1kqAE2xuAk=' 'sha256-Cxqq/+ybPjZ5VGn+jEwGBamgSK/wUYg9d8AtRHeGpA0='; style-src 'sha256-S6W6G0Am3tx7eMxzGS4Em7l0IRxw912GSEcck2M3Njo=' 'sha256-OvFajC9liMWF/BSOZHNxvh2l1sQ2aAZql11wyZX6bms=' 'sha256-Qtt0nF5xi7DsTlshlgdCDrmEIcpvtwg86TccfbHY42w=' 'sha256-LdBUVrCOSscjac9XDVUhhC8BVUCeRTVxPIHho3x2C6I=' 'sha256-cncT4OYMoss7phrDXOY4dpINPZZ9vGmepBpESuOrcC8=' 'sha256-RuO4TmjSxyTX5mOP1pm1P82iXcTuhv9kumWRUpFDekY='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-V909rV5im1F/VU1mlVHYLN97+9O/1pQ5VcDS2CxQaHg=' 'sha256-B1jym+x7rfbzpFXVHEdkZnUwSmBRH7UBS1kqAE2xuAk=' 'sha256-HSMjFofHGKBkMfhi7KHMgNMSXAZlccfZSOYtpRzGB1c='; style-src 'sha256-S6W6G0Am3tx7eMxzGS4Em7l0IRxw912GSEcck2M3Njo=' 'sha256-OvFajC9liMWF/BSOZHNxvh2l1sQ2aAZql11wyZX6bms=' 'sha256-Qtt0nF5xi7DsTlshlgdCDrmEIcpvtwg86TccfbHY42w=' 'sha256-LdBUVrCOSscjac9XDVUhhC8BVUCeRTVxPIHho3x2C6I=' 'sha256-cncT4OYMoss7phrDXOY4dpINPZZ9vGmepBpESuOrcC8=' 'sha256-RuO4TmjSxyTX5mOP1pm1P82iXcTuhv9kumWRUpFDekY='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Deal: both halves</title>
     <style>
@@ -18467,7 +18467,7 @@ globalThis.renderEvidenceGraph = EvidenceGraph.renderEvidenceGraph;
     <!-- prettier-ignore -->
     
     <!-- prettier-ignore -->
-    <script>globalThis.capsulectlDealPage = Object.freeze({"private_half":{"label":"Your half (private)","deal_id":"deal-52d64b8948a8b4cc","asked":"buy me the example bicycle for at most 1900","did":[]},"verify_command":"capsulectl verify --bundle page.html"});
+    <script>globalThis.capsulectlDealPage = Object.freeze({"private_half":{"label":"Your half (private)","note":"This page is only for you. To share, send the composed bundle, not this page.","deal_id":"deal-52d64b8948a8b4cc","asked":"buy me the example bicycle for at most 1900","did":[]},"verify_command":"capsulectl verify --bundle page.html"});
 renderEvidenceGraph(window.__BUNDLE__, document.getElementById("app"), undefined, { verifyCommand: capsulectlDealPage.verify_command });
 (function () {
   var half = capsulectlDealPage.private_half;
@@ -18479,6 +18479,7 @@ renderEvidenceGraph(window.__BUNDLE__, document.getElementById("app"), undefined
   section.style.maxWidth = "60rem";
   section.style.padding = "0 1rem";
   section.appendChild(el("h2", half.label));
+  section.appendChild(el("p", half.note));
   if (half.asked) { section.appendChild(el("p", half.asked)); }
   var list = el("ul");
   half.did.forEach(function (line) { list.appendChild(el("li", line)); });

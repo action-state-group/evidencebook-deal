@@ -785,10 +785,44 @@ func checkPrivateHalfPage(t *testing.T, id string, composer, other dealParty, me
 	dealRun(t, "report", "--deal", id, "--bundle", other0)
 	party(t, composer.config)
 	refuse("not sealed by the composer", "--keep", other0)
+	// A keep copy that does not verify, and a shared copy the composer cut
+	// (same deal, same key, audience counterparty), are not the private half.
+	tampered := filepath.Join(dir, "tampered.json")
+	broken := exactBundle(t, string(mustRead(t, keepPath)))
+	broken["root"] = strings.Repeat("0", 64)
+	brokenRaw, err := json.Marshal(broken)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tampered, brokenRaw, 0o600))
+	refuse("not VALID", "--keep", tampered)
+	sharedPage := filepath.Join(dir, "shared.html")
+	dealRun(t, "report", "--deal", id, "--share", "counterparty", "--to", "the shop's support desk", "--html", sharedPage)
+	_, embedded, ok := strings.Cut(string(mustRead(t, sharedPage)), "__BUNDLE__ = ")
+	require.True(t, ok)
+	sharedBundle := filepath.Join(dir, "shared-bundle.json")
+	var one json.RawMessage
+	require.NoError(t, json.NewDecoder(strings.NewReader(embedded)).Decode(&one))
+	require.NoError(t, os.WriteFile(sharedBundle, one, 0o600))
+	refuse("must be your own copy", "--keep", sharedBundle)
+	// An --html that already exists fails before the bundle is written.
+	text, err = compose("--output", filepath.Join(dir, "late.json"), "--html", pagePath)
+	require.Error(t, err)
+	assert.Contains(t, text+err.Error(), "nothing was written")
+	assert.NoFileExists(t, filepath.Join(dir, "late.json"))
 	otherDeal := filepath.Join(dir, "otherdeal.json")
 	dealFixture(t)
 	foreign := dealRun(t, "open", "--input", writeJSON(t, crossPartyBuyerOpen))["deal_id"].(string)
 	dealRun(t, "report", "--deal", foreign, "--bundle", otherDeal)
 	party(t, composer.config)
 	refuse("not of the composed deal", "--keep", otherDeal)
+}
+
+// The private half lists what the agent did, not only what was asked.
+func TestPrivateHalfListsWhatTheAgentDid(t *testing.T) {
+	raw := mustRead(t, "../../testdata/presentation/2-unilateral-receipt/bundle.json")
+	keep := exactBundle(t, string(raw))
+	half, err := privateHalfFrom(keep, "deal-x", cli.BuiltinWording())
+	require.NoError(t, err)
+	assert.Equal(t, "Your half (private)", half.Label)
+	assert.Equal(t, "Order the cat sticker in my cart at Example Stickers", half.Asked)
+	assert.Contains(t, half.Did, "Did: pay $6.27 to Example Stickers by card")
 }

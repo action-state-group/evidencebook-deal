@@ -244,17 +244,20 @@ func rerenderPresentationPage(t *testing.T, dir string, meta presentationMeta, b
 	case "compose-page":
 		// The composer's both-halves page: the composed bundle with the
 		// keep copy beside it (evidencebook-deal#31).
-		keep, err := os.ReadFile(filepath.Join(dir, "keep.json"))
-		require.NoError(t, err)
-		keepBundle, err := cli.DecodeBundleJSON(keep)
-		require.NoError(t, err)
-		keepReport, _, _ := cli.DealSealedReport(keepBundle)
-		dealID, _ := keepReport[dealIDMember].(string)
+		// The deal id is the composition's own, from its served members.
+		dealID := ""
+		block, _ := bundle["extensions"].(map[string]interface{})["composed/v1"].(map[string]interface{})
+		for _, raw := range block["members"].([]interface{}) {
+			if dealID == "" {
+				dealID = rootDealID(raw.(map[string]interface{}))
+			}
+		}
+		require.NotEmpty(t, dealID)
 		half, err := privateHalfOf(filepath.Join(dir, "keep.json"), dealID, bundle, cli.BuiltinWording())
 		if err != nil {
 			return "", err
 		}
-		return composedPageHTML(bundle, half, dealVerifyCommand("page.html"))
+		return composedPageHTML(bundle, half, dealVerifyCommand("page.html"), cli.BuiltinWording())
 	case "report-build":
 		// `book report build` is capsulectl-book's: its tests re-emit this
 		// page and hold it to the committed one (TestReportBuildGoldens).
