@@ -622,9 +622,9 @@ dates read from it: never a header, the body or a name. The raw `.eml` stays
 in the local deal store, where `deal verify-email` re-checks it; no bundle
 carries it.
 
-Most of the self-contained `deal report --html` page is the embedded
-verifier, not evidence: capsule-viewer's page runtime is 753,028 B
-(capsule-viewer/go v0.3.0) and `deal-view.js` is 42,069 B.
+The self-contained `deal report --html` page embeds its verifier:
+capsule-viewer's page runtime, 753,028 B (capsule-viewer/go v0.3.0), and
+`deal-view.js`, 42,069 B.
 
 ## Which build made a record, and what is never collected
 
