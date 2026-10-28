@@ -96,16 +96,39 @@ type dealSession struct {
 	migrated bool
 }
 
-// HoldsDealStore is the session's proof, to cli.OpenDealTarget, that it
+// HoldsPluginStore is the session's proof, to cli.OpenOwnedTarget, that it
 // holds the deal store's writer lock: from openDealSession until close. A
 // read session holds only the shared lock, and is no writer.
-func (s *dealSession) HoldsDealStore() bool { return s.shelf != nil && !s.shared && !s.closed }
+func (s *dealSession) HoldsPluginStore() bool { return s.shelf != nil && !s.shared && !s.closed }
+
+// PluginStoreOwner names the plugin to the core's owner check.
+func (s *dealSession) PluginStoreOwner() string { return Name }
 
 // dealStoreLock is the writer lock held outside a session: deal init's,
 // while it creates the store.
 type dealStoreLock struct{ held bool }
 
-func (l *dealStoreLock) HoldsDealStore() bool { return l.held }
+func (l *dealStoreLock) HoldsPluginStore() bool { return l.held }
+
+// PluginStoreOwner names the plugin to the core's owner check.
+func (l *dealStoreLock) PluginStoreOwner() string { return Name }
+
+// openOwnedTarget opens a log of the deal store through the core's handle for
+// a store a plugin owns. A target opened for writing also marks the store as
+// the deal plugin's (the core's plugin_owned marker), so that no profile can
+// make the core write it; a read leaves the store as it is.
+func openOwnedTarget(ctx context.Context, p cli.Profile, use cli.TargetUse, w cli.PluginStoreWriter) (*cli.Target, error) {
+	t, err := cli.OpenOwnedTarget(ctx, p, use, w)
+	if err != nil {
+		return nil, err
+	}
+	if use != cli.UseRead && use != cli.UseCLLRead && use != cli.UseArtifacts {
+		if err := t.MarkOwned(ctx, Name, w); err != nil {
+			return nil, errors.Join(err, t.Close())
+		}
+	}
+	return t, nil
+}
 
 func openDealSession(ctx context.Context, p cli.Profile) (_ *dealSession, err error) {
 	if p.Type != "sqlite" {
@@ -238,11 +261,18 @@ func (s *dealSession) useDeal(ctx context.Context, dealID string, create bool) e
 			return err
 		}
 		s.book = book
-		t, err := cli.OpenDealTarget(ctx, s.dp, cli.UseRead, s)
+		t, err := openOwnedTarget(ctx, s.dp, cli.UseRead, s)
 		if err != nil {
 			return err
 		}
 		s.t = t
+		// A write session marks the store as the plugin's even when this deal
+		// opens no writable target of its own.
+		if !s.shared {
+			if err := t.MarkOwned(ctx, Name, s); err != nil {
+				return err
+			}
+		}
 		// A writer finishes a step a crash left without its checkpoint before
 		// anything else reads or extends the deal (deal_books.go coverSteps).
 		if !create && !s.shared {
@@ -254,7 +284,7 @@ func (s *dealSession) useDeal(ctx context.Context, dealID string, create bool) e
 	if create {
 		use = cli.UseInitialization
 	}
-	t, err := cli.OpenDealTarget(ctx, s.dp, use, s)
+	t, err := openOwnedTarget(ctx, s.dp, use, s)
 	if err != nil {
 		return err
 	}
@@ -986,7 +1016,7 @@ func dealInitCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		p := cli.Profile{Name: name, Type: "sqlite", Namespace: "deal", LogID: "deal-cadence/" + suffix}
+		p := cli.Profile{Name: name, Type: "sqlite", Namespace: "deal", LogID: "deal-cadence/" + suffix, Log: Name}
 		p.Connection.Database = filepath.Join(dir, "deal.db")
 		p.Signing.File = filepath.Join(dir, "signing.seed")
 		p.TrustedKeys = []string{public}
@@ -1020,7 +1050,7 @@ func dealInitCommand() *cobra.Command {
 				err = errors.Join(err, unlock())
 			}
 		}()
-		t, err := cli.OpenDealTarget(c.Context(), p, cli.UseInitialization, lock)
+		t, err := openOwnedTarget(c.Context(), p, cli.UseInitialization, lock)
 		if err != nil {
 			return err
 		}

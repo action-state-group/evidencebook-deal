@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Builds against an unreleased capsulectl (capsule-cli `45b53806` and agent-action-capsule `1d1752bf`, both unreleased; capsule-cli#428) and
+  names no deal-specific export of its host package where a generic one
+  exists: the plugin owns its store through `cli.OpenOwnedTarget` and marks it
+  (`plugin_owned`, written under the writer lock on its write paths, never on
+  a read), `bundle|disclose|permalink --deal` and `cll checkpoint cadence`
+  come from `cli.ExtendBundle` and `cli.GraftCommand`, and `deal init` now
+  writes `log: deal` into the profile. Deals behave as before; a deal profile
+  saved without `log:` is still read as the deal plugin's until the core drops
+  that default.
 - Builds against evidencebook v0.8.0. The deal cadence verifies witness receipts under a directory built from the profile's pinned witness (endpoint and key), so an unpinned profile trusts no witness and no receipt reads as witnessed; a receipt that cannot be checked leaves its tick unwitnessed and pending (evidencebook-deal#32).
 
 ## v0.1.0-rc23

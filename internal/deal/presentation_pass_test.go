@@ -46,10 +46,15 @@ func TestPresentationPass(t *testing.T) {
 					assert.Equal(t, wantID, id, "presentation list --audience %s --format %s", audience, format)
 					assert.NoError(t, err)
 				}
-				// Packagings this tool does not build are refusals, for every bundle.
+				// The core builds the fragment and embedded packagings now
+				// (capsule-cli#254): a bundle either gets one or is refused as
+				// unavailable with a reason (a fragment over its size budget,
+				// say), never truncated.
 				for _, format := range []string{"fragment", "embedded"} {
 					_, _, err := passBuild(t, bundlePath, "--audience", audience, "--format", format)
-					assert.ErrorContains(t, err, "--format "+format+" is not built by this tool yet")
+					if err != nil {
+						assert.ErrorContains(t, err, "--format "+format+" is unavailable (", "presentation build --audience %s --format %s", audience, format)
+					}
 				}
 				_, _, err := passBuild(t, bundlePath, "--audience", audience, "--format", "static")
 				assert.ErrorContains(t, err, "--format static is unavailable (no-document)")

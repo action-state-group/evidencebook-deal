@@ -217,7 +217,7 @@ func TestDealProfileHasNoBook(t *testing.T) {
 	defer func() { require.NoError(t, target.Close()) }()
 	assert.Nil(t, target.Book)
 	_, err = cli.OpenTarget(t.Context(), p, cli.UsePublication)
-	assert.ErrorIs(t, err, cli.ErrDealProfileWrite, "core never opens it for writing")
+	assert.ErrorIs(t, err, cli.ErrPluginStoreWrite, "core never opens it for writing")
 }
 
 // A deal with a merchant's own email (addressed To a display name) shares as
