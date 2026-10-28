@@ -194,6 +194,7 @@
     "journey.user.switched.item": "Switched to {item}",
     "report.attach_failed": "I couldn't make the receipt page this time; the record itself is saved.",
     "report.private": "PRIVATE: your own copy.",
+    "report.private_half": "Your half (private)",
     "report.title": "Deal report",
     "report.view_details": "View details",
     "say.approval.confirm_limits": "Got it: your limit is now {limit}.",

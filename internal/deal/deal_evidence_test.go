@@ -202,11 +202,12 @@ func dealCopiesRoundTrip(t *testing.T) {
 
 	for name, set := range map[string]struct {
 		composer dealParty
+		other    dealParty
 		members  []askedCopy
 		seller   askedCopy
 	}{
-		"the buyer composes":  {buyer, []askedCopy{buyerOwn, sellerCopyForBuyer}, sellerCopyForBuyer},
-		"the seller composes": {seller, []askedCopy{buyerCopyForSeller, sellerOwn}, sellerOwn},
+		"the buyer composes":  {buyer, seller, []askedCopy{buyerOwn, sellerCopyForBuyer}, sellerCopyForBuyer},
+		"the seller composes": {seller, buyer, []askedCopy{buyerCopyForSeller, sellerOwn}, sellerOwn},
 	} {
 		t.Run(name, func(t *testing.T) {
 			party(t, set.composer.config)
@@ -251,6 +252,7 @@ func dealCopiesRoundTrip(t *testing.T) {
 				assert.Equal(t, member["observer"], response["key_id"])
 				assert.NotContains(t, response, "artifact", "the envelope without its artifact bytes")
 			}
+			checkPrivateHalfPage(t, id, set.composer, set.other, set.members)
 		})
 	}
 
@@ -715,4 +717,78 @@ func TestAReplyCapsulesIDDoesNotDependOnTheKey(t *testing.T) {
 	b, err := (&dealSession{key: k2}).replyCapsule(strings.Repeat("b", 64), record, []byte(`{"x":1}`))
 	require.NoError(t, err)
 	assert.Equal(t, a.CapsuleID, b.CapsuleID)
+}
+
+// The composer's both-halves page (evidencebook-deal#31): `compose --html
+// --keep` shows the composer's keep copy as "your half (private)" by joining
+// it at the page. The composed bundle is the one `compose` writes without
+// --keep, and the keep copy is in no bundle; a keep copy of another deal or
+// another composer, or one that is not the composer's own, refuses the page.
+func checkPrivateHalfPage(t *testing.T, id string, composer, other dealParty, members []askedCopy) {
+	t.Helper()
+	dir := t.TempDir()
+	keepPath := filepath.Join(dir, "keep.json")
+	dealRun(t, "report", "--deal", id, "--bundle", keepPath)
+	keep := exactBundle(t, string(mustRead(t, keepPath)))
+	report, _, _ := cli.DealSealedReport(keep)
+	asked := report["asked_opening"].(map[string]any)["text"].(string)
+	require.NotEmpty(t, asked)
+
+	compose := func(extra ...string) (string, error) {
+		args := []string{"--profile", "deal", "deal", "compose", "--deal", id}
+		for _, m := range members {
+			args = append(args, "--member", m.recordID)
+		}
+		return dealInvoke(t, "", append(args, extra...)...)
+	}
+	bundlePath, pagePath := filepath.Join(dir, "composed.json"), filepath.Join(dir, "page.html")
+	out, err := compose("--output", bundlePath, "--html", pagePath, "--keep", keepPath)
+	require.NoError(t, err, out)
+	page := string(mustRead(t, pagePath))
+	assert.Contains(t, page, "Your half (private)")
+	assert.Contains(t, page, asked, "the page shows the composer's own half")
+
+	// Negative: the keep copy is in no bundle. The composed bundle, the
+	// only thing share and export carry, holds none of it, and it is a
+	// composed/v1 bundle exactly as without --keep.
+	composed := string(mustRead(t, bundlePath))
+	assert.NotContains(t, composed, asked)
+	assert.NotContains(t, composed, "Your half (private)")
+	assert.NotContains(t, composed, `"audience":"keep"`, "no keep-audience report is a member")
+	assert.Equal(t, 2, len(composedBlock(t, bundlePath)["members"].([]any)), "the members are the served and recorded outcomes only")
+	result, err := verifyWithDirectory(t, bundlePath, "")
+	require.NoError(t, err)
+	assert.Equal(t, "VALID", result["verdict"])
+	assert.Equal(t, "agree", composedEntry(t, result)["joins"].([]any)[0].(map[string]any)["derived"], "the join comes from the served members alone")
+
+	// The page without --keep has no private half.
+	bare := filepath.Join(dir, "bare.html")
+	out, err = compose("--output", filepath.Join(dir, "composed2.json"), "--html", bare)
+	require.NoError(t, err, out)
+	assert.NotContains(t, string(mustRead(t, bare)), "Your half (private)")
+
+	refuse := func(why string, extra ...string) {
+		t.Helper()
+		out := filepath.Join(dir, strings.ReplaceAll(why, " ", "-"))
+		text, err := compose(append([]string{"--output", out + ".json", "--html", out + ".html"}, extra...)...)
+		require.Error(t, err, why)
+		assert.Contains(t, text+err.Error(), why)
+		assert.NoFileExists(t, out+".json", "a refused join leaves no bundle behind")
+		assert.NoFileExists(t, out+".html")
+	}
+	text, err := compose("--output", filepath.Join(dir, "nohtml.json"), "--keep", keepPath)
+	require.Error(t, err)
+	assert.Contains(t, text+err.Error(), "needs --html")
+	assert.NoFileExists(t, filepath.Join(dir, "nohtml.json"))
+	other0 := filepath.Join(dir, "other.json")
+	party(t, other.config)
+	dealRun(t, "report", "--deal", id, "--bundle", other0)
+	party(t, composer.config)
+	refuse("not sealed by the composer", "--keep", other0)
+	otherDeal := filepath.Join(dir, "otherdeal.json")
+	dealFixture(t)
+	foreign := dealRun(t, "open", "--input", writeJSON(t, crossPartyBuyerOpen))["deal_id"].(string)
+	dealRun(t, "report", "--deal", foreign, "--bundle", otherDeal)
+	party(t, composer.config)
+	refuse("not of the composed deal", "--keep", otherDeal)
 }
