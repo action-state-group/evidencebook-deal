@@ -51,10 +51,13 @@ func TestPresentationPass(t *testing.T) {
 				// unavailable with a reason (a fragment over its size budget,
 				// say), never truncated.
 				for _, format := range []string{"fragment", "embedded"} {
-					_, _, err := passBuild(t, bundlePath, "--audience", audience, "--format", format)
+					b, written, err := passBuild(t, bundlePath, "--audience", audience, "--format", format)
 					if err != nil {
 						assert.ErrorContains(t, err, "--format "+format+" is unavailable (", "presentation build --audience %s --format %s", audience, format)
+						continue
 					}
+					assert.Equal(t, "written", b.Page, "presentation build --audience %s --format %s", audience, format)
+					assert.NotEmpty(t, written, "presentation build --audience %s --format %s writes the packaging", audience, format)
 				}
 				_, _, err := passBuild(t, bundlePath, "--audience", audience, "--format", "static")
 				assert.ErrorContains(t, err, "--format static is unavailable (no-document)")
