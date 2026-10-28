@@ -3,16 +3,17 @@ module github.com/action-state-group/evidencebook-deal
 go 1.27.0
 
 require (
-	github.com/action-state-group/agent-action-capsule/go v0.13.1
-	github.com/action-state-group/capsule-cli v0.1.0-rc23
+	github.com/action-state-group/agent-action-capsule/go v0.14.1-0.20261027225214-1d1752bf3956
+	github.com/action-state-group/capsule-cli v0.1.0-rc9.0.20261028034757-005e7e97c351
 	github.com/action-state-group/capsule-emit/go v0.3.0
-	github.com/action-state-group/capsule-viewer/go v0.1.2-0.20261023134630-4b08aad14182
+	github.com/action-state-group/capsule-viewer/go v0.2.1-0.20261028034017-389c1bacb86d
 	github.com/action-state-group/checkpointed-local-log/go v0.1.0
 	github.com/action-state-group/evidencebook v0.8.0
 	github.com/emersion/go-msgauth v0.7.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	github.com/veraison/go-cose v1.3.0
 	golang.org/x/net v0.59.0
@@ -36,7 +37,6 @@ require (
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
