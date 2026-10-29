@@ -645,9 +645,13 @@ capsulectl. Follow them; never make up your own narration of a step.
 | `rental` | `pay`, `commit`, `sign`, `cancel`, `share_contact`, `share_credentials` |
 | `booking` | `pay`, `commit`, `cancel`, `share_contact`, `share_credentials` |
 | `service` | `pay`, `commit`, `sign`, `cancel`, `share_contact`, `share_credentials` |
+| any deal where the user sells | `offer`, `represent` |
 
-On a sale, the sale itself (`deal check --deal SALE_ID`) takes only `post`,
-a listing, which always asks.
+The last row adds to the row for the deal's type. `offer` is a seller's offer
+or counteroffer, and `represent` is the check before the seller's agent tells
+the buyer something about the sale. Both are refused on a deal where the user
+buys. `represent` is only ever checked, never acted. On a sale, the sale itself
+(`deal check --deal SALE_ID`) takes only `post`, a listing, which always asks.
 
 `commit` means sending a commitment (confirming a booking, accepting an
 offer, agreeing to buy). `cancel` means cancelling with the merchant. `deal
