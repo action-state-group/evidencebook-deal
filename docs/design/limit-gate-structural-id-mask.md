@@ -55,7 +55,7 @@ whole hex token of 16 or more (`removeHexTokens`), and only then masks (`deal_sh
 repeatedly (`deal_share_fold.go:40-63`). A literal `"` in user text is written `\"` by
 `json.Marshal` and is not decoded, which is why `{"note":"My \"limit\": \"8USD…\"."}` is refused
 today. What folding turns into a quote is user text that holds an escaped quote: `&#34;` or
-`&quot;`, `%22`, or the six characters `"`. Text like that, inside any string field, reaches
+`&quot;`, `%22`, or the six characters `\u0022`. Text like that, inside any string field, reaches
 the mask looking like JSON.
 
 ## Design
@@ -69,15 +69,21 @@ regions, and only when it is still a whole id after the steps that run before th
    vendored scripts) is valid JSON (`json.Valid`). Markup, a data script that does not decode, and
    a non-JSON copy are returned as now. `dealPageGate` passes `nil` and reads exactly what it reads
    today.
-2. **Field.** The hook masks the string value of every `cose` key, at any depth:
-   `"cose":\s*"([0-9A-Za-z_-]{16,})"` on the region's raw bytes. On valid JSON this pattern is a
-   structural match: every unescaped `"` delimits a string token and every quote inside a string
-   is `\"`, so `"cose":` followed by `"` can only be the key `cose` and the start of its value. A
-   quote escaped inside a string is preceded by `\`, which no key or id character is, and after a
-   string's closing quote valid JSON allows only whitespace, `,`, `:`, `]` or `}`. `cose` is the
-   one base64url field in a counterparty copy today: the checkpoint (`evidencebook`
-   `substrate_cll.go:332`) and a cadence chain's checkpoint (`cadence_chain.go:79`); every other
-   string value in the copy dumped for this note is hex, a date, a word or prose.
+2. **Field.** The hook walks each region with `json.Decoder.Token` and masks the string value
+   of every object member whose key, as decoded, is exactly `cose`, at any depth. A key is known by
+   its position (the first string after `{` or after a member), not by its bytes, so a key such as
+   `"\"cose"` or `"prefix\"cose"` is not `cose`, and a `cose` value that is an object or an array
+   is not masked. The value is masked only when its raw bytes are the decoded value between two
+   quotes (no escapes); `Decoder.InputOffset` gives its end. Two regex drafts of this rule each
+   missed a case in review (prose imitating JSON, then a key holding an escaped quote), so the
+   rule is a token walk, not a pattern.
+   `cose` is the one base64url field in the counterparty copy dumped for this note: the checkpoint
+   (`evidencebook` `substrate_cll.go:332`); a cadence chain's checkpoint (`cadence_chain.go:79`)
+   has the same key. Every other string value in that copy is hex, a date, a word or prose, and
+   its extensions are `x-cadence-witness/v0`, `x-deal-report/v0` and `x-deal-v0` only.
+   `evidencebook` also writes selected payloads as base64url (`bundle.go:300`, under
+   `extensions["evidencebook/payloads"]`, `bundle.go:317-318`); that extension is absent from the
+   dumped copy, and the guard test below settles whether any other copy kind carries it.
 3. **Eligibility, in today's order.** A `cose` value is masked only if it is entirely
    `[0-9A-Za-z_-]` with an upper-case and a lower-case letter, and it is unchanged when the deal's
    own ids and the whole hex tokens are taken out of it. That keeps the order main applies today
@@ -96,8 +102,12 @@ A base64url field the list misses brings back #26's random refusals for that fie
 positive, never a missed bound). The code PR adds a guard test that builds every copy kind the
 suite can produce (counterparty and adjudicator bundles, the history copy, the terms Result bundle,
 the evidence-request copy and the counterparty page, with a cadence witness configured), walks
-each JSON region, and fails on any mixed-case id-shaped string value under a key other than
-`cose`. If it finds one, that field joins the list in the same PR, with its source cited.
+each JSON region, and lists every mixed-case id-shaped string value under a key other than `cose`.
+That list is a signal to investigate, not a rule to extend the mask. A field joins the mask only
+when the producer code shows it holds machine-encoded bytes only (a base64url encoding of a
+statement or payload, cited in the PR), never text a person or an agent wrote. The seller-claim
+case (`text`) stays a refusal test, so a free-text field can't join by mistake. If the guard meets
+`evidencebook/payloads`, its values qualify (`bundle.go:300`).
 
 ### Considered and not chosen
 
@@ -105,8 +115,8 @@ each JSON region, and fails on any mixed-case id-shaped string value under a key
   reachable seller-claim case above, since a claim's whole text can be id-shaped.
 - **Moving the mask before folding with no JSON check** (one reviewer's simpler variant). It closes
   the escape cases but stays a pattern on text whose structure is unknown, which is the class #62
-  exists to end; the JSON check is about ten lines.
-- **A `json.Decoder` token walk.** Equivalent on valid JSON (see 2), more code.
+  exists to end.
+- **A regex for the field on the raw JSON.** See step 2: it matched a key holding an escaped quote.
 
 ## Prose regions
 
@@ -119,7 +129,7 @@ reading the whole text, keys included.
 Closed (missed on main, refused with this design):
 
 - `My "limit": "8USD-Per-Month-Plan-2026".` as a non-JSON copy (the #62 repro), and in page markup.
-- The same prose inside a JSON string written with `&#34;`, `&quot;`, `%22` or `"`, in a
+- The same prose inside a JSON string written with `&#34;`, `&quot;`, `%22` or `\u0022`, in a
   bundle or in a page's bundle.
 - A whole field value shaped like an id that starts with the bound (`{"note":"8USD-Per-Month-Plan-
   2026"}`, the seller claim `{"text":"8USD-Per-Month-Plan-ok"}`).
@@ -132,14 +142,15 @@ Left open, declared:
   JSON, in an undecodable data script, or followed by prose in a non-JSON copy, is no longer
   masked and may be read as money, as before #60. No caller writes such a copy: the four bundle
   callers write JSON and the emitter writes valid JSON data scripts. The same holds for an id
-  written with escapes (`8…`) or non-ASCII digits, and for a base64url field the guard test
+  written with escapes (`\u0038krSil…`) or non-ASCII digits, and for a base64url field the guard test
   has not met.
 
 ## Test vectors
 
 Limit is in minor units, USD, buyer, counterparty audience unless noted. "main" is
 `dealCeilingGate(dealGateText(x))` on d60c732; "design" is a scratch prototype of this note on
-d60c732 (`protoGateText` with the `cose` hook, and the gate without the post-fold mask). R =
+d60c732 (`protoGateText` with the `cose` token-walk hook, and the gate without the post-fold
+mask). R =
 refused, P = passes.
 
 Random ids (must pass), from `TestARandomIdIsNotTheLimit` and #60's rounds:
@@ -153,6 +164,7 @@ Random ids (must pass), from `TestARandomIdIsNotTheLimit` and #60's rounds:
 | 800 | `{"cose":"8gbp-Qlhh6xzsywqlv3kuyf8b1xtzkQ"}` | P | P |
 | 800 | `{"cose":"8usd_K3j2h1xxxxxxxxxxxxxxxxxx"}`, `{"cose":"8eur-Ab3xxxxxxxxxxxxxxxxxxxxxxx"}`, `{"cose":"8chf-Xz9xxxxxxxxxxxxxxxxxxxxxxxx"}` | P | P |
 | 800 | page whose bundle is `{"checkpoint":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"}}` | P | P |
+| 800 | `{"a":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}`, `{"cose" : "8krSiljccsfh-Gc4lpkxi8m4j8wl"}` | P | P |
 | 800 | `{"k":"8A3Cad8E9f0a1b2c3d4"}` and `{"cose":"8A3Cad8E9f0a1b2c3d4"}` (mixed-case hex: blanked by `removeHexTokens`) | P | P |
 
 Bound stated (must refuse), from `TestTheLimitInOrBesideALongRunIsStillRefused` and the rounds:
@@ -197,6 +209,10 @@ The #62 residual and the cases this note adds:
 | 800 | `{"note":"8USD-Per-Month-Plan-2026"}`, and as a page's bundle | P | R |
 | 800 | `{"text":"8USD-Per-Month-Plan-ok"}` | P | R |
 | 800 | `{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"} trailing prose` (not JSON: declared false positive) | P | R |
+| 800 | `{"\"cose":"8USD-Per-Month-Plan-2026"}`, `{"prefix\"cose":"8USD-Per-Month-Plan-ok"}` (keys that are not `cose`) | P | R |
+| 800 | `{"cose":{"note":"8USD-Per-Month-Plan-2026"}}` (a `cose` object is not masked) | P | R |
+| 800 | `{"cose":["8USD-Per-Month-Plan-2026"]}` | R | R |
+| 800 | `{"cose":"\u0038krSiljccsfh-Gc4lpkxi8m4j8wl"}` (escaped id: declared false positive) | P | R |
 
 End to end (the code PR adds it): a seller deal opened with no floor, an agent claim
 `8USD-Per-Month-Plan-ok`, then an intent note setting `min_total_minor` 800; `disclose --share
@@ -223,8 +239,8 @@ fixture, `checkpoint.cose` replaced by a random 400-character base64url value st
 
 ## Prototype
 
-Scratch files on d60c732, not committed: `zz_proto62_test.go` (the hook, the `cose` mask and the
-gate without the post-fold mask), `zz_fuzz62_test.go`, and the probes. Real-copy fuzz, fixed seed
+Scratch files on d60c732, not committed: `zz_proto62_test.go` (the hook, the `cose` token walk and
+the gate without the post-fold mask), `zz_fuzz62_test.go`, and the probes. Real-copy fuzz, fixed seed
 62, limit 8.00:
 
 | Copy | Rounds | d60c732 | design | no mask at all |
@@ -237,5 +253,5 @@ The "no mask" column shows the harness exercises the #26 failure (half the round
 ## Worth doing
 
 Yes. The whole-value case is reachable through a seller's agent claim and states the floor to the
-buyer; this design closes it and the escape cases with about 40 lines (the hook, the `cose` mask
-and its eligibility check) plus tests.
+buyer; this design closes it and the escape cases with a hook on `dealGateText`, a token walk of
+about 50 lines and its eligibility check, plus tests.
