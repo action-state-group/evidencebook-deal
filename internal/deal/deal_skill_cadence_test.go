@@ -28,7 +28,7 @@ func TestSkillCadenceWordsMatchTheProfileDefault(t *testing.T) {
 	consent, _, _ := strings.Cut(tail, "\n\n")
 	consent = strings.Join(strings.Fields(consent), " ")
 
-	assert.Contains(t, consent, fmt.Sprintf("every %d minutes, whether or not anything happened, one checkpoint of hashes goes to the witness", minutes))
+	assert.Contains(t, consent, fmt.Sprintf("about every %d minutes, whether or not anything happened, one checkpoint of hashes goes to the witness", minutes))
 	assert.NotContains(t, consent, "an hour")
 	assert.Contains(t, skill, fmt.Sprintf("cll checkpoint cadence --wait-up-to %dm", minutes))
 }
