@@ -542,7 +542,7 @@ func TestPresentationPassFailingBundleShowsTheRefusalOnly(t *testing.T) {
 // calls the bundle INVALID (producer_signature_invalid), so build writes no
 // page. list's gate (agent-action-capsule's Go resolver) checks each record's
 // identity, not its producer signature, and resolves the bundle; the page's
-// own runtime (the vendored viewer) checks the signature now, so a page that
+// own runtime (capsule-viewer's pageruntime) checks the signature now, so a page that
 // carries the bundle anyway says it failed.
 func TestPresentationPassWrongSigner(t *testing.T) {
 	passIsolate(t)
