@@ -164,7 +164,8 @@ Random ids (must pass), from `TestARandomIdIsNotTheLimit` and #60's rounds:
 | 800 | `{"cose":"8gbp-Qlhh6xzsywqlv3kuyf8b1xtzkQ"}` | P | P |
 | 800 | `{"cose":"8usd_K3j2h1xxxxxxxxxxxxxxxxxx"}`, `{"cose":"8eur-Ab3xxxxxxxxxxxxxxxxxxxxxxx"}`, `{"cose":"8chf-Xz9xxxxxxxxxxxxxxxxxxxxxxxx"}` | P | P |
 | 800 | page whose bundle is `{"checkpoint":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"}}` | P | P |
-| 800 | `{"a":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}`, `{"cose" : "8krSiljccsfh-Gc4lpkxi8m4j8wl"}` | P | P |
+| 800 | `{"a":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}` | P | P |
+| 800 | `{"cose" : "8krSiljccsfh-Gc4lpkxi8m4j8wl"}` (whitespace before the colon: main's pattern misses it; no producer writes it) | R | P |
 | 800 | `{"k":"8A3Cad8E9f0a1b2c3d4"}` and `{"cose":"8A3Cad8E9f0a1b2c3d4"}` (mixed-case hex: blanked by `removeHexTokens`) | P | P |
 
 Bound stated (must refuse), from `TestTheLimitInOrBesideALongRunIsStillRefused` and the rounds:
