@@ -8,8 +8,8 @@
   and the snapshots under `testdata/presentation` are refreshed in Chrome; their
   summary line reads "checkpoint signature not checked here". The Node check
   that ran a deal page with no `crypto` global (`TestADealPageWithoutWebCrypto`,
-  a script capsule-cli deleted with its vendored runtime) is gone; capsule-viewer
-  owns that behavior (`ts/test/no-webcrypto.test.ts`) (#51).
+  a script capsule-cli deleted with its vendored runtime) is gone, and no
+  test now runs a built deal page without `crypto` (#54) (#51).
 
 - `deal compose --html FILE --keep KEEP_BUNDLE` writes the composer's
   both-halves page: the composed bundle with the composer's own keep copy
