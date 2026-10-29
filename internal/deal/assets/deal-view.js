@@ -158,7 +158,7 @@ const dealStandaloneReport = async (context, bundle, x, sealedId) => {
 };
 
 // lifecycleText is the lifecycle's sentence with the close date in the
-// viewer's zone, as the page's times are (capsule-cli#426): capsulectl wrote
+// viewer's zone, as the page's times are (evidencebook-deal#57): capsulectl wrote
 // the sentence with the close's UTC day (closed_date); the day closed_at falls
 // on here replaces it. A report without those fields keeps its sentence.
 const lifecycleText = (life) => {

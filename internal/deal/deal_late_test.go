@@ -383,7 +383,7 @@ func TestDealReceiptNeverSaysTheUserWasReminded(t *testing.T) {
 
 // The close sentence names the close's UTC day and the report carries that
 // day beside the sealed time, so the page can say the viewer's day instead
-// (capsule-cli#426). A close just after midnight UTC is the previous evening
+// (evidencebook-deal#57). A close just after midnight UTC is the previous evening
 // in the Americas.
 func TestLifecycleCarriesTheCloseDayItNames(t *testing.T) {
 	events := []sealedEvent{
@@ -400,7 +400,7 @@ func TestLifecycleCarriesTheCloseDayItNames(t *testing.T) {
 }
 
 // The page shows the close on the viewer's day, as it shows the times
-// (capsule-cli#426): 02:19 UTC on Oct 23 is Oct 22 in US Central and Oct 23
+// (evidencebook-deal#57): 02:19 UTC on Oct 23 is Oct 22 in US Central and Oct 23
 // elsewhere east of it; a report without the fields keeps its sentence.
 func TestDealViewShowsTheCloseOnTheViewersDay(t *testing.T) {
 	node, err := exec.LookPath("node")
@@ -426,7 +426,7 @@ process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(0, "utf8")).map((
 	require.NoError(t, err)
 	run := func(zone string) []string {
 		cmd := exec.Command(node, driver, script)
-		cmd.Env = append(os.Environ(), "TZ="+zone, "LANG=en_US.UTF-8")
+		cmd.Env = append(os.Environ(), "TZ="+zone, "LANG=en_US.UTF-8", "LC_ALL=en_US.UTF-8")
 		cmd.Stdin = bytes.NewReader(in)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
