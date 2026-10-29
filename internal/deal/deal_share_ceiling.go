@@ -180,6 +180,12 @@ var idString = regexp.MustCompile(`":\s*"([0-9A-Za-z_-]{16,})"`)
 // A number written inside any longer text, and the text around the string,
 // are read as before; the bound names are looked for in the whole text, not
 // in this one.
+//
+// Known residual (evidencebook-deal#62): the shape cannot tell a JSON value
+// from prose that imitates one, so JSON-looking prose with a quoted slug of
+// 16 or more mixed-case characters that starts with the exact limit
+// (My "limit": "8USD-Per-Month-Plan-2026".) is missed. Closing it takes
+// masking by parsed JSON structure, which #62 designs.
 func maskOpaqueIDs(text []byte) []byte {
 	out := append([]byte(nil), text...)
 	for _, loc := range idString.FindAllSubmatchIndex(text, -1) {
