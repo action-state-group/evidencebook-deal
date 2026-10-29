@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The presentation goldens' tests run on capsule-viewer/go v0.3.0
+  (`pageruntime`, `presentation`) in place of the names capsule-cli removed in
+  capsule-cli#486, and `sameViewer` accepts that one runtime only. `page.html`
+  and the snapshots under `testdata/presentation` are refreshed in Chrome; their
+  summary line reads "checkpoint signature not checked here" (#51). The Node check that ran a deal page with no `crypto` global (`TestADealPageWithoutWebCrypto`, a script capsule-cli deleted with its vendored runtime) is gone; capsule-viewer owns that behavior (`ts/test/no-webcrypto.test.ts`).
+
 - The `deal report --html` page runs capsule-viewer's own page runtime
   (`go/pageruntime` in capsule-viewer/go v0.3.0), pinned by its digest, in
   place of capsule-cli's vendored build. Its bootstrap renders through the

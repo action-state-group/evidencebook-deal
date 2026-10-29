@@ -1,11 +1,9 @@
 # Presentation goldens
 
 Nine synthetic bundles and what capsulectl's pages show a reader for them, taken with
-the viewer first vendored at agent-action-capsule `5d80d40`. The `deal report --html`
-fixtures (2, 7, 8, 9) run capsule-viewer's page runtime (`go/pageruntime`) at the
-capsule-viewer/go version `go.mod` requires, so their snapshots move with that version;
-the other fixtures and every `build-snapshot.json` stay on the runtime capsule-cli vendors
-until capsule-cli#472. This copy was taken
+the viewer first vendored at agent-action-capsule `5d80d40`. Every page runs capsule-viewer's page runtime (`go/pageruntime`) at the
+capsule-viewer/go version `go.mod` requires (v0.3.0), so the snapshots move with that
+version. This copy was taken
 from capsule-cli's `cli/testdata/presentation` when the plugin moved here (capsule-cli#326);
 `TestPresentationGoldens` (`internal/deal/presentation_golden_test.go`) holds every later
 viewer to it:
