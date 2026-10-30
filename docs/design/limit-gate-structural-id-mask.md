@@ -2,7 +2,7 @@
 
 Issue: https://github.com/action-state-group/evidencebook-deal/issues/62.
 Follows https://github.com/action-state-group/evidencebook-deal/pull/60 (5a19f35, fix for #26).
-Status: in review (Codex, Kimi's Claude stand-in, Sherlock2). No code until it converges.
+Status: converged (#63); implemented in the code PR for #62.
 
 ## Problem
 
