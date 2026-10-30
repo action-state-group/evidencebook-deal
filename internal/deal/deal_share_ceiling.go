@@ -168,12 +168,15 @@ func removeHexTokens(text []byte) []byte {
 
 // maskCoseIDs returns the hook dealGateText applies to a shared copy's JSON
 // regions for the money checks. It turns the leading digits of the string
-// value of every object member whose key is exactly "cose" (a COSE
-// checkpoint, base64url bytes) into a letter, so the money reader does not
+// value of every object member whose key is exactly "cose" and whose object
+// is a "checkpoint" member's value (or the document root), as the producers
+// write it (a COSE checkpoint, base64url bytes), into a letter, so the money reader does not
 // read an amount at the start of a random id ("8krSil…" as 8 kr, "8gbp-…" as
 // 8 GBP: issue #26). The member is found by walking the region with
 // json.Decoder.Token, so its key is known by position, not by bytes: prose
-// that imitates JSON, or a key such as "\"cose", is never one (issue #62).
+// that imitates JSON, or a key such as "\"cose", is never one (issue #62). A
+// "cose" key elsewhere (terms.conditions takes any lowercase name) is free
+// text and is read as money.
 // A value is masked only when its raw bytes are the decoded value between two
 // quotes and it is still a whole mixed-case id of 16 or more [0-9A-Za-z_-]
 // after the deal's own ids and the whole hex tokens are taken out, as the
@@ -190,6 +193,9 @@ func maskCoseIDs(events []sealedEvent) func([]byte) []byte {
 		type frame struct {
 			object, expectKey bool
 			key               string
+			// checkpoint: the object is a "checkpoint" member's value or the
+			// document root, the only places a producer writes "cose".
+			checkpoint bool
 		}
 		var stack []frame
 		for {
@@ -201,7 +207,9 @@ func maskCoseIDs(events []sealedEvent) func([]byte) []byte {
 			switch v := tok.(type) {
 			case json.Delim:
 				if v == '{' || v == '[' {
-					stack = append(stack, frame{object: v == '{', expectKey: v == '{'})
+					n := len(stack)
+					at := n == 0 || stack[n-1].object && stack[n-1].key == "checkpoint"
+					stack = append(stack, frame{object: v == '{', expectKey: v == '{', checkpoint: at})
 					continue
 				}
 				stack = stack[:len(stack)-1]
@@ -211,7 +219,7 @@ func maskCoseIDs(events []sealedEvent) func([]byte) []byte {
 					stack[n-1].key, stack[n-1].expectKey = v, false
 					continue
 				}
-				if n > 0 && stack[n-1].object && stack[n-1].key == "cose" {
+				if n > 0 && stack[n-1].object && stack[n-1].key == "cose" && stack[n-1].checkpoint {
 					if start := end - len(v) - 1; start >= 1 && string(text[start-1:end]) == `"`+v+`"` && isWholeID(events, v) {
 						for i := start; i < end-1 && text[i] >= '0' && text[i] <= '9'; i++ {
 							out[i] = 'x'

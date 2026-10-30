@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"encoding/json"
 	"math/rand"
 	"path/filepath"
 	"regexp"
@@ -36,7 +37,8 @@ func TestTheGateMasksOnlyACoseValueInRealJSON(t *testing.T) {
 		{800, `{"cose":"8eur-Ab3xxxxxxxxxxxxxxxxxxxxxxx"}`, false, ""},
 		{800, `{"cose":"8chf-Xz9xxxxxxxxxxxxxxxxxxxxxxxx"}`, false, ""},
 		{800, page("Deal report", `{"checkpoint":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"}}`), false, ""},
-		{800, `{"a":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}`, false, ""},
+		{800, `{"checkpoint":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}`, false, ""},
+		{800, `{"a":{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"},"b":"x"}`, true, "a cose outside a checkpoint is not masked"},
 		{800, `{"cose" : "8krSiljccsfh-Gc4lpkxi8m4j8wl"}`, false, "whitespace before the colon: no producer writes it"},
 		{800, `{"k":"8A3Cad8E9f0a1b2c3d4"}`, false, "mixed-case hex is blanked first"},
 		{800, `{"cose":"8A3Cad8E9f0a1b2c3d4"}`, false, ""},
@@ -97,6 +99,8 @@ func TestTheGateMasksOnlyACoseValueInRealJSON(t *testing.T) {
 		{800, `{"prefix\"cose":"8USD-Per-Month-Plan-ok"}`, true, "a key that is not cose"},
 		{800, `{"cose":{"note":"8USD-Per-Month-Plan-2026"}}`, true, "a cose object is not masked"},
 		{800, `{"cose":["8USD-Per-Month-Plan-2026"]}`, true, ""},
+		{800, `{"terms":{"conditions":{"cose":"8USD-Per-Month-Plan-ok"}}}`, true, "terms.conditions takes any lowercase name: a cose key outside a checkpoint is text"},
+		{800, `{"checkpoint":{"x":{"cose":"8USD-Per-Month-Plan-ok"}}}`, true, "the checkpoint is the cose object's parent, not an ancestor"},
 
 		// Declared residuals: false positives, asserted so a change is deliberate.
 		{800, `{"cose":"8krSiljccsfh-Gc4lpkxi8m4j8wl"} trailing prose`, true, "not valid JSON: read as money"},
@@ -131,7 +135,7 @@ func TestASellersIDShapedClaimDoesNotHideTheFloor(t *testing.T) {
 		dealRun(t, "note", "--deal", id, "--kind", "intent", "--input", writeJSON(t, `{"verbatim": "Not under 8", "min_total_minor": 800, "allowed": ["commit"]}`))
 		out, err := invoke(t, "", "--profile", "deal", "disclose", "--deal", id, "--share", cli.DealAudienceCounterparty, "--to", "x", "--out", filepath.Join(t.TempDir(), "shared.json"))
 		if refused {
-			assert.Error(t, err, "%q: %s", claim, out)
+			assert.ErrorContains(t, err, "the lowest price you will take", "%q: %s", claim, out)
 		} else {
 			assert.NoError(t, err, "%q: %s", claim, out)
 		}
@@ -179,6 +183,10 @@ func TestARandomCoseInARealCopyIsNeverTheLimit(t *testing.T) {
 // base64url field the mask does not know brings back #26's random refusals
 // for it. A hit is a signal to investigate; a field joins the mask only when
 // its producer shows it holds machine-encoded bytes (see maskCoseIDs).
+// Covered: the counterparty and adjudicator bundles and the counterparty
+// page of a short merchant deal. Not built here: the history copy, the terms
+// Result bundle, the evidence-request copy and a cadence witness's chain
+// (whose checkpoint is a "cose" under "checkpoint" as well).
 func TestNoOtherFieldHoldsAnID(t *testing.T) {
 	dealFixture(t)
 	stubDNS(t, map[string]string{merchantSelector + "._domainkey.shop.example": merchantKeyTXT(t), dmarcName: merchantDMARC(t)})
@@ -206,4 +214,18 @@ func TestNoOtherFieldHoldsAnID(t *testing.T) {
 		walk("", b, &found)
 		assert.Empty(t, found, audience)
 	}
+	// The counterparty page: every data script's JSON value.
+	pagePath := filepath.Join(t.TempDir(), "page.html")
+	dealRun(t, "report", "--deal", id, "--share", cli.DealAudienceCounterparty, "--to", "x", "--html", pagePath)
+	var regions int
+	dealGateText(mustRead(t, pagePath), func(raw []byte) []byte {
+		var v any
+		require.NoError(t, json.Unmarshal(raw, &v))
+		var found []string
+		walk("", v, &found)
+		assert.Empty(t, found, "page")
+		regions++
+		return raw
+	})
+	assert.NotZero(t, regions, "the page has data scripts")
 }
