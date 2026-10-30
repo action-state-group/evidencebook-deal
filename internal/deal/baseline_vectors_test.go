@@ -497,7 +497,7 @@ func TestSealRefusalsKeepTheirWording(t *testing.T) {
 		"agent 555 010 2044":     "refusing to seal: the record would carry a raw phone number; keep it out of claims and tokens",
 		"agent bob@shop.example": "refusing to seal: the record would carry a raw email address",
 		"agent_scam":             "refusing to seal: a record may not label or grade anyone (scam)",
-		"Agent":                  "refusing to seal: the step does not fit the x-deal-v0 profile: /body/source: ",
+		"Agent":                  "refusing to seal: the step does not fit the x-deal-v0 profile: /body/source: value \"Agent\" does not match pattern",
 	} {
 		ev := evidence
 		e := *ev.Evidence
