@@ -19,7 +19,7 @@ contract this plugin implements, stay in capsule-cli
 |---|---|
 | `cmd/capsulectl-deal` | the plugin binary: the `capsulectl` command tree plus `capsulectl deal ...` |
 | `internal/deal` | the deal commands, the deal store and its records, and the deal view (`assets/deal-view.*`), the plugin's presentation module |
-| `skills/deal/` | the `deal` skill: `SKILL.md`, its README, the x-deal-v0 record profile (`profile/`), demos and scripts |
+| `skills/deal/` | the `deal` skill: `SKILL.md`, its README, demos and scripts. The x-deal-v0 record profile it seals is EvidenceBook's [`dealprofile/x-deal-v0/`](https://github.com/action-state-group/evidencebook/tree/v0.10.0/dealprofile/x-deal-v0) |
 | `third_party/unicode/` | Unicode's TR39 `confusables.txt`, from which `scripts/genconfusables` builds `internal/deal/confusables_table.go` (a security control: the share check matches a sensitive value written with lookalike letters) |
 | `testdata/presentation/` | the deal and report pages' presentation fixtures and goldens |
 | `scripts/` | `test.sh`, the page and portability checks, the interop round trip, and the confusables tools |
