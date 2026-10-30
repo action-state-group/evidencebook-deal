@@ -622,6 +622,9 @@ func (s *dealSession) sealBookStep(ctx context.Context, dealID string, events []
 	if err != nil {
 		return sealedEvent{}, err
 	}
+	if err = checkSealable(request.Payload, events, ev); err != nil {
+		return sealedEvent{}, err
+	}
 	at, entry, err := s.bookStepEntry(events, ev, request.Payload)
 	if err != nil {
 		return sealedEvent{}, err

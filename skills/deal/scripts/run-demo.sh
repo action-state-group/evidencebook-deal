@@ -34,7 +34,10 @@ deal() { "$bin" --profile demo deal "$@"; }
 # built-in predicate, whose attributes are the same, and skips the checker.
 profile_dir="${DEAL_PROFILE_DIR:-}"
 if [[ -z "$profile_dir" && -f "$skill_dir/../../go.mod" ]] && command -v go >/dev/null; then
-  profile_dir="$(cd "$skill_dir/../.." && go mod download -json github.com/action-state-group/evidencebook | jq -er .Dir)/dealprofile/x-deal-v0"
+  # Offline or with no module cache, this finds nothing and the demo falls back.
+  if dir="$(cd "$skill_dir/../.." && go mod download -json github.com/action-state-group/evidencebook 2>/dev/null | jq -er .Dir)"; then
+    profile_dir="$dir/dealprofile/x-deal-v0"
+  fi
 fi
 materiality=builtin:neutral
 if [[ -n "$profile_dir" ]]; then

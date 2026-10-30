@@ -437,3 +437,79 @@ func findCapsule(v interface{}, id string) map[string]interface{} {
 	}
 	return nil
 }
+
+// A sealed step is re-derived without the seal checks: a value an earlier
+// release's checks admitted (here a run of fullwidth digits, which its ASCII
+// scan let through) re-derives to bytes and a digest, so the deal stays
+// readable, while a new step that carries it is refused before it is sealed.
+func TestRederivingAStepRunsNoSealCheck(t *testing.T) {
+	raw, err := os.ReadFile(baselineVectorsPath)
+	require.NoError(t, err)
+	var v baselineVectors
+	require.NoError(t, json.Unmarshal(raw, &v))
+	d := v.Deals[0]
+	dkey, err := hex.DecodeString(d.DealKey)
+	require.NoError(t, err)
+	var events []sealedEvent
+	for _, e := range d.Events {
+		var ev dealEvent
+		require.NoError(t, cli.DecodeJSON(e.Event, &ev))
+		if ev.Evidence == nil {
+			events = append(events, sealedEvent{CapsuleID: e.CapsuleID, Digest: e.Digest, Sequence: e.Sequence, Event: ev})
+			continue
+		}
+		ev.Evidence.Source = "agent_１２３４５６７８"
+		payload, digest, err := encodeDealRecord(ev, events, dkey)
+		require.NoError(t, err)
+		assert.Contains(t, string(payload), "１２３４５６７８")
+		assert.Len(t, digest, 64)
+		err = checkSealable(payload, events, ev)
+		require.ErrorIs(t, err, cli.ErrInput)
+		assert.Contains(t, err.Error(), "raw phone number")
+		return
+	}
+	t.Fatal("the first baseline deal has no evidence step")
+}
+
+// A refused step says why in capsulectl's words, whatever dealprofile's own
+// detail reads: each check's refusal is pinned here.
+func TestSealRefusalsKeepTheirWording(t *testing.T) {
+	raw, err := os.ReadFile(baselineVectorsPath)
+	require.NoError(t, err)
+	var v baselineVectors
+	require.NoError(t, json.Unmarshal(raw, &v))
+	d := v.Deals[0]
+	dkey, err := hex.DecodeString(d.DealKey)
+	require.NoError(t, err)
+	var events []sealedEvent
+	var evidence dealEvent
+	for _, e := range d.Events {
+		var ev dealEvent
+		require.NoError(t, cli.DecodeJSON(e.Event, &ev))
+		if ev.Evidence != nil {
+			evidence = ev
+			break
+		}
+		events = append(events, sealedEvent{CapsuleID: e.CapsuleID, Digest: e.Digest, Sequence: e.Sequence, Event: ev})
+	}
+	require.NotNil(t, evidence.Evidence)
+	for source, want := range map[string]string{
+		"agent 555 010 2044":     "refusing to seal: the record would carry a raw phone number; keep it out of claims and tokens",
+		"agent bob@shop.example": "refusing to seal: the record would carry a raw email address",
+		"agent_scam":             "refusing to seal: a record may not label or grade anyone (scam)",
+		"Agent":                  "refusing to seal: the step does not fit the x-deal-v0 profile: /body/source: ",
+	} {
+		ev := evidence
+		e := *ev.Evidence
+		e.Source = source
+		ev.Evidence = &e
+		payload, _, err := encodeDealRecord(ev, events, dkey)
+		require.NoError(t, err, source)
+		err = checkSealable(payload, events, ev)
+		require.ErrorIs(t, err, cli.ErrInput, source)
+		assert.Contains(t, cli.SafeError(err), want, source)
+	}
+	err = scanRecord(map[string]interface{}{"body": map[string]interface{}{"text": "ask for m. torres"}}, []string{"M. Torres"})
+	require.ErrorIs(t, err, cli.ErrInput)
+	assert.Contains(t, cli.SafeError(err), "refusing to seal: the record would carry a raw counterparty identifier")
+}

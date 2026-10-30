@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/action-state-group/agent-action-capsule/go/canonical"
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook/dealprofile"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // boundsText adds an intent's commercial-bounds/v0 document to the texts its
@@ -1316,24 +1318,61 @@ func buildDealRecord(ev dealEvent, events []sealedEvent, key []byte) (map[string
 	return record, nil
 }
 
-// encodeDealRecord returns the sealed payload (the record's JCS bytes) and its
-// record digest, once the record passes the profile's record-level checks
-// (dealprofile.Encode: canonicalization, the privacy and wording scans, the
-// schema). A record that fails any of them is not sealed.
+// encodeDealRecord returns a step's record payload (its JCS bytes) and its
+// record digest (dealprofile.Digest), re-derived from the local step. It
+// runs no seal check: a sealed step is re-derived to compare with the bytes
+// it was sealed with, which an earlier release's checks admitted, so a later
+// check must not make it unreadable. A new step passes checkSealable first.
 func encodeDealRecord(ev dealEvent, events []sealedEvent, key []byte) ([]byte, string, error) {
 	record, err := buildDealRecord(ev, events, key)
 	if err != nil {
 		return nil, "", err
 	}
-	payload, digest, err := dealprofile.Encode(record, dealLocalValues(events, ev))
+	raw, err := json.Marshal(record)
 	if err != nil {
-		profile := "the x-deal-v0 profile"
-		if typeName, ok := record["type"].(string); ok {
-			profile = "the " + typeName + " record schema"
-		}
-		return nil, "", sealError(err, profile)
+		return nil, "", err
 	}
-	return payload, digest, nil
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return nil, "", err
+	}
+	payload, err := canonical.JCS(doc)
+	if err != nil {
+		return nil, "", err
+	}
+	digest, err := dealprofile.Digest(json.RawMessage(payload))
+	return payload, digest, err
+}
+
+// checkSealable refuses a new step whose record payload fails the profile's
+// record-level checks (dealprofile.Check: canonicalization, the privacy and
+// wording scans, the schema). Such a step is not sealed.
+func checkSealable(payload []byte, events []sealedEvent, ev dealEvent) error {
+	err := dealprofile.Check(json.RawMessage(payload), dealLocalValues(events, ev))
+	if err == nil {
+		return nil
+	}
+	var se *dealprofile.StageError
+	if !errors.As(err, &se) || se.Stage != dealprofile.StageSchema {
+		return sealError(err)
+	}
+	// A schema refusal is worded as capsulectl words one (cli.FirstSchemaError).
+	profile := "the x-deal-v0 profile"
+	schema, serr := dealprofile.ProfileSchemaAt("")
+	var typed struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(payload, &typed) == nil && typed.Type != "" {
+		profile = "the " + typed.Type + " record schema"
+		schema, serr = dealprofile.RecordSchema(typed.Type)
+	}
+	why := se.Detail
+	if doc, derr := jsonschema.UnmarshalJSON(bytes.NewReader(payload)); serr == nil && derr == nil {
+		if verr := schema.Validate(doc); verr != nil {
+			why = cli.FirstSchemaError(verr)
+		}
+	}
+	return cli.InputError("refusing to seal: the step does not fit " + profile + ": " + why)
 }
 
 // Inputs are normalized to the profile's tokens before anything is sealed, so

@@ -46,16 +46,16 @@ func scanRecord(record map[string]interface{}, localValues []string) error {
 	if errors.As(err, &se) && se.Stage == dealprofile.StageSchema {
 		return nil
 	}
-	return sealError(err, "")
+	return sealError(err)
 }
 
 var prohibitedWord = regexp.MustCompile(`^prohibited word "([^"]*)"`)
 
 // sealError is a record's refusal by the profile's checks (a
-// *dealprofile.StageError) in the words a user reads: a hit is a bug in the
-// producer, so the step is not sealed. profile names the schema a schema
-// refusal is against.
-func sealError(err error, profile string) error {
+// *dealprofile.StageError) at a stage before the schema, in the words a user
+// reads: a hit is a bug in the producer, so the step is not sealed.
+// checkSealable words a schema refusal.
+func sealError(err error) error {
 	var se *dealprofile.StageError
 	if !errors.As(err, &se) {
 		return err
@@ -76,8 +76,6 @@ func sealError(err error, profile string) error {
 			word = m[1]
 		}
 		return cli.InputError("refusing to seal: a record may not label or grade anyone (" + word + ")")
-	case dealprofile.StageSchema:
-		return cli.InputError("refusing to seal: the step does not fit " + profile + ": " + se.Detail)
 	default:
 		return cli.InputError("refusing to seal: " + se.Detail)
 	}

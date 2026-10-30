@@ -775,6 +775,9 @@ func (s *dealSession) prepareStep(ctx context.Context, dealID string, events []s
 	if err != nil {
 		return cli.Request{}, sealedEvent{}, err
 	}
+	if err = checkSealable(request.Payload, events, ev); err != nil {
+		return cli.Request{}, sealedEvent{}, err
+	}
 	record, err := cli.Seal(request, s.key)
 	if err != nil {
 		return cli.Request{}, sealedEvent{}, err
