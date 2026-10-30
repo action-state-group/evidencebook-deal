@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/action-state-group/agent-action-capsule/go/canonical"
 	"github.com/action-state-group/capsule-cli/cli"
 	emit "github.com/action-state-group/capsule-emit/go"
+	"github.com/action-state-group/evidencebook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,11 +63,17 @@ type baselineStep struct {
 	Header    baselineHeader `json:"header"`
 }
 
+// baselineHeader is the evidence record header a step's book entry gives
+// the book: everything but what the book itself assigns (its id, seq and the
+// commitments it computes from the fields).
 type baselineHeader struct {
-	RecordType string            `json:"record_type"`
-	SubjectRef string            `json:"subject_ref"`
-	Links      []string          `json:"cites,omitempty"`
-	Fields     map[string]string `json:"fields"`
+	RecordType    string                   `json:"record_type"`
+	EpistemicType string                   `json:"epistemic_type"`
+	CommittedAt   string                   `json:"committed_at"`
+	SubjectRef    string                   `json:"subject_ref"`
+	Correlation   evidencebook.Correlation `json:"correlation"`
+	Links         []evidencebook.Link      `json:"links"`
+	Fields        map[string]string        `json:"fields"`
 }
 
 type baselineReport struct {
@@ -142,13 +150,18 @@ func baselineStepOf(s *dealSession, events []sealedEvent, ev dealEvent) (baselin
 	if err != nil {
 		return baselineStep{}, err
 	}
-	recordType, _ := dealStepHeader(ev.DealID, ev)
+	at, err := time.Parse("2006-01-02T15:04:05Z", ev.At)
+	if err != nil {
+		return baselineStep{}, err
+	}
+	recordType, correlation := dealStepHeader(ev.DealID, ev)
 	header := baselineHeader{
-		RecordType: recordType, SubjectRef: request.Capsule.ActionID,
+		RecordType: recordType, EpistemicType: string(evidencebook.ProducerClaim), CommittedAt: at.UTC().Format(time.RFC3339Nano),
+		SubjectRef: request.Capsule.ActionID, Correlation: correlation, Links: []evidencebook.Link{},
 		Fields: map[string]string{dealLocalField: string(local), dealAmountField: amount, dealCurrencyField: currency},
 	}
 	if parent := request.Capsule.Chain; parent != nil {
-		header.Links = []string{parent.ParentCapsuleID}
+		header.Links = []evidencebook.Link{{Type: evidencebook.Cites, Target: parent.ParentCapsuleID}}
 	}
 	return baselineStep{
 		N: ev.N, Payload: string(request.Payload), Digest: digest,
@@ -184,38 +197,63 @@ func baselineReportOf(s *dealSession, form string, at time.Time, input string) (
 	}, nil
 }
 
-// baselineFlows are the deals the vectors are made from: most record types,
-// x-deal-v0 and typed records, a buyer and a seller, and a report off the
-// deal's log and one in it.
+// baselineFlows are the deals the vectors are made from: x-deal-v0 and
+// typed records, a buyer, a seller and a sale with its threads, fyi and
+// decide steps (policy and human approvals, recoverable, consequential and
+// two-way acts), a record that confirms a close, settlement legs, and a
+// report off the deal's log and one in it. Each returns the deals and sales
+// to freeze; the first is the one a report is made of, when report is set.
 var baselineFlows = []struct {
-	name  string
-	inLog bool
-	run   func(t *testing.T) string
+	name          string
+	inLog, report bool
+	run           func(t *testing.T) []string
 }{
-	{"retail-closed", false, func(t *testing.T) string {
+	{"retail-closed", false, true, func(t *testing.T) []string {
 		dealFixture(t)
 		id := retailDeal(t)
+		dealRun(t, "note", "--deal", id, "--kind", "message", "--input", writeJSON(t, `{"from":"user","text":"thanks, it arrived"}`))
 		dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"received"}`))
 		dealRun(t, "note", "--deal", id, "--kind", "evidence", "--input", writeJSON(t, `{"about":"the delivery","source":"agent"}`))
-		return id
+		return []string{id}
 	}},
-	{"retail-report-in-log", true, func(t *testing.T) string {
+	{"retail-report-in-log", true, true, func(t *testing.T) []string {
 		dealFixture(t)
-		return retailDeal(t)
+		return []string{retailDeal(t)}
 	}},
-	{"claims", false, claimDeal},
-	{"typed-buyer", false, func(t *testing.T) string {
+	{"claims", false, true, func(t *testing.T) []string { return []string{claimDeal(t)} }},
+	{"disclosure", false, true, func(t *testing.T) []string {
+		dealFixture(t)
+		id, _, _ := openDisclosureDeal(t)
+		return []string{id}
+	}},
+	{"typed-buyer", false, true, func(t *testing.T) []string {
 		id := stickerDeal(t, "card", true)
 		dealRun(t, "check", "--deal", id, "--input", writeJSON(t, payCheck("card", 454, 500)))
-		return id
+		return []string{id}
 	}},
-	{"typed-seller-settled", false, func(t *testing.T) string {
+	{"typed-human-approval", false, true, func(t *testing.T) []string {
+		dealFixture(t)
+		id := openTypedFlight(t)
+		c := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, merchantCheck))
+		platformApproval(t, id, c["check_id"].(string), "Approve $558.80 purchase", "55880")
+		dealRun(t, "note", "--deal", id, "--kind", "act", "--input", writeJSON(t, merchantPay)) // unchecked: an outcome
+		_, err := answerCheck(t, id, c["check_id"].(string), "yes, the new site is fine", c["card"].(string))
+		require.NoError(t, err)
+		dealRun(t, "note", "--deal", id, "--kind", "act", "--input", writeJSON(t, merchantPay))
+		dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"received"}`))
+		return []string{id}
+	}},
+	{"typed-seller-settled", false, true, func(t *testing.T) []string {
 		id, dueStep := sellerDealWithDueDelivery(t)
 		terms, _ := newBuyerSide(t).terms()
 		notePaymentReceived(t, id, terms, x402Settle(true))
 		dealRun(t, "note", "--deal", id, "--kind", "delivered", "--terms", terms,
 			"--content", writeFile(t, "content.bin", deliveredContent), "--resolves", dueStep)
-		return id
+		return []string{id}
+	}},
+	{"sale-two-threads", false, false, func(t *testing.T) []string {
+		saleID, a, b := twoThreadSale(t)
+		return []string{saleID, a, b}
 	}},
 }
 
@@ -226,10 +264,23 @@ func writeBaselineVectors(t *testing.T) {
 			old := dealReportsOffLog
 			dealReportsOffLog = !f.inLog
 			t.Cleanup(func() { dealReportsOffLog = old })
-			id := f.run(t)
-			bundle := filepath.Join(t.TempDir(), "bundle.json")
-			dealRun(t, "report", "--deal", id, "--bundle", bundle)
-			v.Deals = append(v.Deals, baselineDealOf(t, f.name, id, f.inLog, bundle))
+			ids := f.run(t)
+			bundle := ""
+			if f.report {
+				bundle = filepath.Join(t.TempDir(), "bundle.json")
+				dealRun(t, "report", "--deal", ids[0], "--bundle", bundle)
+			}
+			for i, id := range ids {
+				name := f.name
+				if len(ids) > 1 {
+					name = fmt.Sprintf("%s-%d", f.name, i)
+				}
+				d := baselineDealOf(t, name, id)
+				if i == 0 && f.report {
+					d.Reports = []baselineReport{baselineReportOfCopy(t, id, f.inLog, bundle)}
+				}
+				v.Deals = append(v.Deals, d)
+			}
 		})
 	}
 	out, err := json.MarshalIndent(v, "", "  ")
@@ -237,16 +288,36 @@ func writeBaselineVectors(t *testing.T) {
 	require.NoError(t, os.WriteFile(baselineVectorsPath, append(out, '\n'), 0o644))
 }
 
-func baselineDealOf(t *testing.T, flow, id string, inLog bool, bundlePath string) baselineDeal {
+// baselineSessionOf opens the deal store and selects the deal.
+func baselineSessionOf(t *testing.T, id string) *dealSession {
 	t.Helper()
 	p, err := cli.LoadProfile("deal")
 	require.NoError(t, err)
 	s, err := openDealSession(t.Context(), p)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, s.close()) }()
+	t.Cleanup(func() { _ = s.close() })
 	require.NoError(t, s.useDeal(t.Context(), id, false))
+	return s
+}
+
+// baselineDealOf freezes one deal's steps, and requires each to be what the
+// deal store holds: the step's digest, and its book record's header and
+// field openings exactly as the vector states them.
+func baselineDealOf(t *testing.T, flow, id string) baselineDeal {
+	t.Helper()
+	s := baselineSessionOf(t, id)
+	defer func() { require.NoError(t, s.close()) }()
 	events, err := s.load(t.Context(), id)
 	require.NoError(t, err)
+	require.True(t, s.onBook, "a deal opened today is on a book")
+	x, ok := s.index.(shelfDealIndex)
+	require.True(t, ok)
+	records, err := x.records(t.Context(), id)
+	require.NoError(t, err)
+	byID := map[string]evidencebook.ShelfRecord{}
+	for _, r := range records {
+		byID[r.RecordID] = r
+	}
 	d := baselineDeal{
 		Flow: flow, DealID: id, DealKey: hex.EncodeToString(s.dkey),
 		SigningSeed: hex.EncodeToString(s.key.Seed()), Operator: s.p.Name,
@@ -258,8 +329,40 @@ func baselineDealOf(t *testing.T, flow, id string, inLog bool, bundlePath string
 		step, err := baselineStepOf(s, events[:i], se.Event)
 		require.NoError(t, err)
 		require.Equal(t, se.Digest, step.Digest, "the stored digest re-derives")
+		r, ok := byID[se.CapsuleID]
+		require.True(t, ok, "step %d is a record of the deal's book", step.N)
+		h := r.Header
+		correlation := evidencebook.Correlation{}
+		if h.Correlation != nil {
+			correlation = *h.Correlation
+		}
+		committed, err := time.Parse(time.RFC3339Nano, h.CommittedAt)
+		require.NoError(t, err)
+		links := h.Links
+		if links == nil {
+			links = []evidencebook.Link{}
+		}
+		stored := baselineHeader{
+			RecordType: h.RecordType, EpistemicType: string(h.EpistemicType), CommittedAt: committed.UTC().Format(time.RFC3339Nano),
+			SubjectRef: h.SubjectRef, Correlation: correlation, Links: links, Fields: map[string]string{},
+		}
+		for _, field := range []string{dealLocalField, dealAmountField, dealCurrencyField} {
+			o, err := x.opening(t.Context(), r, field)
+			require.NoError(t, err, "step %d %s", step.N, field)
+			stored.Fields[field] = o
+		}
+		require.Equal(t, step.Header, stored, "step %d: the vector's header is the book's", step.N)
+		require.Equal(t, []string{step.Digest}, h.PayloadCommitments, "step %d commits its record", step.N)
 		d.Steps = append(d.Steps, step)
 	}
+	return d
+}
+
+// baselineReportOfCopy freezes the report a copy carries, and requires it to
+// be what was sealed: off the log, the Capsule rebuilt is the copy's own; in
+// it, the payload is the report record's on the book.
+func baselineReportOfCopy(t *testing.T, id string, inLog bool, bundlePath string) baselineReport {
+	t.Helper()
 	raw, err := os.ReadFile(bundlePath)
 	require.NoError(t, err)
 	b, err := cli.DecodeBundleJSON(raw)
@@ -272,15 +375,18 @@ func baselineDealOf(t *testing.T, flow, id string, inLog bool, bundlePath string
 	}
 	require.Equal(t, want, form)
 	input, at := baselineReportInput(t, b, capsuleID)
+	s := baselineSessionOf(t, id)
+	defer func() { require.NoError(t, s.close()) }()
 	r, err := baselineReportOf(s, form, at, input)
 	require.NoError(t, err)
-	if !inLog {
-		// Off the log, the copy's report is exactly the Capsule rebuilt here;
-		// in it, the book adds its header, so only the payload is shared.
-		require.Equal(t, capsuleID, r.CapsuleID)
+	if inLog {
+		stored, err := s.verifiedPayload(t.Context(), capsuleID)
+		require.NoError(t, err)
+		require.Equal(t, string(stored), r.Payload, "the report record's payload")
+	} else {
+		require.Equal(t, capsuleID, r.CapsuleID, "the copy's own report Capsule")
 	}
-	d.Reports = append(d.Reports, r)
-	return d
+	return r
 }
 
 // baselineReportInput is the sealed report's disclosed input and its
