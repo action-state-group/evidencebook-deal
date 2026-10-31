@@ -272,6 +272,17 @@ replace_bundle recipient.html dropped-record.json >dropped-record.html
 broken dropped-record dropped-record.html records.json "verify --bundle: VALID, exit 0" "the page says its bundle verified"
 check "dropped-record: the page says its bundle failed" refused dropped-record.html
 
+# forged-checkpoint: a byte of the log checkpoint's signature changed. The
+# records still verify, so only the checkpoint check can catch it: the page,
+# which verifies the checkpoint signature itself (capsule-viewer 0.4.0), and
+# verify --bundle must both call the bundle failed.
+jq -c '.checkpoint.cose |= (.[:-8] + (if .[-8:-7] == "A" then "B" else "A" end) + .[-7:])' bundle.json >forged-checkpoint.json
+replace_bundle recipient.html forged-checkpoint.json >forged-checkpoint.html
+check "forged-checkpoint: the copy differs" differs recipient.html forged-checkpoint.html
+check "forged-checkpoint: the page says its bundle failed" refused forged-checkpoint.html
+capsulectl verify --bundle forged-checkpoint.html >/dev/null 2>&1 && verdict=0 || verdict=$?
+check "forged-checkpoint: verify --bundle is not VALID" test "$verdict" -ne 0
+
 # broken-records: the exported action record says $62.70 was paid.
 jq -c '(.[] | select(.type == "action-record/v0") | .body.amount_minor) |= 6270' records.json | tr -d '\n' >broken-records.json
 check "broken-records: the records differ" differs records.json broken-records.json
