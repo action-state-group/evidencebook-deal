@@ -280,8 +280,10 @@ jq -c '.checkpoint.cose |= (.[:-8] + (if .[-8:-7] == "A" then "B" else "A" end) 
 replace_bundle recipient.html forged-checkpoint.json >forged-checkpoint.html
 check "forged-checkpoint: the copy differs" differs recipient.html forged-checkpoint.html
 check "forged-checkpoint: the page says its bundle failed" refused forged-checkpoint.html
+check "forged-checkpoint: and names the checkpoint as the invalid part" contains forged-checkpoint.html.dom ' data-checkpoint="invalid"'
+check "the unforged page's checkpoint is not invalid" lacks page.html.dom ' data-checkpoint="invalid"'
 capsulectl verify --bundle forged-checkpoint.html >/dev/null 2>&1 && verdict=0 || verdict=$?
-check "forged-checkpoint: verify --bundle is not VALID" test "$verdict" -ne 0
+check "forged-checkpoint: verify --bundle: INVALID, exit 1" test "$verdict" -eq 1
 
 # broken-records: the exported action record says $62.70 was paid.
 jq -c '(.[] | select(.type == "action-record/v0") | .body.amount_minor) |= 6270' records.json | tr -d '\n' >broken-records.json
