@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OrFPBglJHMf3+HTCWoszaU8noRQjBdFZlACsMHzi6gY=' 'sha256-7SkXjUsJ8OsiAWJrfWOetMhpXSeu/pzlLfTrH0+JCak=' 'sha256-PDQ+EPSumkle5X1t5gVW/2raxLNJQv3AK6EWAJ8sLpQ=' 'sha256-37V16JdjPf0C55CAT0zDWpxci3aqzETvr8dGpigWiuQ='; style-src 'sha256-NYy5Us2EFHKB0p0fTYQ7d4JBKIeRiLiCt9pjzj4xSI4=' 'sha256-OvFajC9liMWF/BSOZHNxvh2l1sQ2aAZql11wyZX6bms=' 'sha256-4pxLeekFtb8nO9SQ1Ya4sqgqcglkT0xR8oYg1lVXm+I=' 'sha256-4xhKuAyLl2fCAw2p6cKToBpvm5OtC4pGfWlem3z6XRU=' 'sha256-cncT4OYMoss7phrDXOY4dpINPZZ9vGmepBpESuOrcC8=' 'sha256-RuO4TmjSxyTX5mOP1pm1P82iXcTuhv9kumWRUpFDekY=' 'sha256-nRJWvY3MTkcv7A1bvOFQ+cy4zVL5ULKF6hmud3yBlrk=' 'sha256-B8kBz9IG7zuPEOiQ8IZFJQxxuCE+NeUiztDLhgSUwoY=' 'sha256-BHWcE+xl3QJkUUnLfQCRU3Erj4wxAn/XOSPfNelfgnk='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OrFPBglJHMf3+HTCWoszaU8noRQjBdFZlACsMHzi6gY=' 'sha256-7SkXjUsJ8OsiAWJrfWOetMhpXSeu/pzlLfTrH0+JCak=' 'sha256-e467fJNugl9lx2jAQMMDYruCJScMmwPT/krcHxs5U5s=' 'sha256-37V16JdjPf0C55CAT0zDWpxci3aqzETvr8dGpigWiuQ='; style-src 'sha256-NYy5Us2EFHKB0p0fTYQ7d4JBKIeRiLiCt9pjzj4xSI4=' 'sha256-OvFajC9liMWF/BSOZHNxvh2l1sQ2aAZql11wyZX6bms=' 'sha256-4pxLeekFtb8nO9SQ1Ya4sqgqcglkT0xR8oYg1lVXm+I=' 'sha256-4xhKuAyLl2fCAw2p6cKToBpvm5OtC4pGfWlem3z6XRU=' 'sha256-cncT4OYMoss7phrDXOY4dpINPZZ9vGmepBpESuOrcC8=' 'sha256-RuO4TmjSxyTX5mOP1pm1P82iXcTuhv9kumWRUpFDekY=' 'sha256-nRJWvY3MTkcv7A1bvOFQ+cy4zVL5ULKF6hmud3yBlrk=' 'sha256-B8kBz9IG7zuPEOiQ8IZFJQxxuCE+NeUiztDLhgSUwoY=' 'sha256-BHWcE+xl3QJkUUnLfQCRU3Erj4wxAn/XOSPfNelfgnk='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Deal report: a shared copy for the other party</title>
     <style>
@@ -23740,7 +23740,9 @@ const dealViewRender = (model, regions) => {
     if (tail) line.append(el("span", ` · ${tail}`, "deal-small"));
     return line;
   };
-  const verified = (id) => matched.has(id);
+  const verified = (id) => matched.has(id) || (shared && byId.get(id) && byId.get(id).withheld && recordOk(id));
+  // A withheld step on a shared copy is verified present; what it says is not in the copy.
+  const rowTail = (id) => (matched.has(id) ? "" : verified(id) ? "contents withheld" : "step not verified in this report");
   if (!shared && journey.length === 0 && askedChecked && askedStep) ours.append(row(short(askedStep.at), "you asked for it", "your words, sealed"));
   const movers = { user: "You", agent: "Your agent", other: "The other side" };
   if (!shared && journey.length > 0) {
@@ -23748,14 +23750,15 @@ const dealViewRender = (model, regions) => {
       const step = byId.get(m.step);
       const label = dealJourneyLabel(words, m);
       const who = Object.hasOwn(movers, m.by) ? movers[m.by] : "Someone";
-      const r = row(step && matched.has(m.step) && typeof step.at === "string" ? short(step.at) : "", `${who}${label ? ` · ${label}` : ""}`, verified(m.step) ? "" : "step not verified in this report");
+      const r = row(step && matched.has(m.step) && typeof step.at === "string" ? short(step.at) : "", `${who}${label ? ` · ${label}` : ""}`, rowTail(m.step));
       r.dataset.journey = label;
       ours.append(r);
     });
   } else {
     did.forEach((i) => {
-      const ok = typeof i.self !== "string" || i.self === "" || verified(i.self);
-      ours.append(row(ok && typeof i.at === "string" && i.at ? short(i.at) : "", i.text, ok ? "" : "step not verified in this report"));
+      const hasSelf = typeof i.self === "string" && i.self !== "";
+      const ok = !hasSelf || verified(i.self);
+      ours.append(row(ok && typeof i.at === "string" && i.at ? short(i.at) : "", i.text, hasSelf ? rowTail(i.self) : ""));
     });
   }
   const life = report.lifecycle;

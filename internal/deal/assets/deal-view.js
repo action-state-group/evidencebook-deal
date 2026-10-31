@@ -546,7 +546,9 @@ const dealViewRender = (model, regions) => {
     if (tail) line.append(el("span", ` · ${tail}`, "deal-small"));
     return line;
   };
-  const verified = (id) => matched.has(id);
+  const verified = (id) => matched.has(id) || (shared && byId.get(id) && byId.get(id).withheld && recordOk(id));
+  // A withheld step on a shared copy is verified present; what it says is not in the copy.
+  const rowTail = (id) => (matched.has(id) ? "" : verified(id) ? "contents withheld" : "step not verified in this report");
   if (!shared && journey.length === 0 && askedChecked && askedStep) ours.append(row(short(askedStep.at), "you asked for it", "your words, sealed"));
   const movers = { user: "You", agent: "Your agent", other: "The other side" };
   if (!shared && journey.length > 0) {
@@ -554,14 +556,15 @@ const dealViewRender = (model, regions) => {
       const step = byId.get(m.step);
       const label = dealJourneyLabel(words, m);
       const who = Object.hasOwn(movers, m.by) ? movers[m.by] : "Someone";
-      const r = row(step && matched.has(m.step) && typeof step.at === "string" ? short(step.at) : "", `${who}${label ? ` · ${label}` : ""}`, verified(m.step) ? "" : "step not verified in this report");
+      const r = row(step && matched.has(m.step) && typeof step.at === "string" ? short(step.at) : "", `${who}${label ? ` · ${label}` : ""}`, rowTail(m.step));
       r.dataset.journey = label;
       ours.append(r);
     });
   } else {
     did.forEach((i) => {
-      const ok = typeof i.self !== "string" || i.self === "" || verified(i.self);
-      ours.append(row(ok && typeof i.at === "string" && i.at ? short(i.at) : "", i.text, ok ? "" : "step not verified in this report"));
+      const hasSelf = typeof i.self === "string" && i.self !== "";
+      const ok = !hasSelf || verified(i.self);
+      ours.append(row(ok && typeof i.at === "string" && i.at ? short(i.at) : "", i.text, hasSelf ? rowTail(i.self) : ""));
     });
   }
   const life = report.lifecycle;
