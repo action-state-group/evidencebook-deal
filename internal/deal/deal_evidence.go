@@ -627,12 +627,13 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 	// A request that names the History card is answered in evidence-interop's
 	// own reply, whatever else is wrong with it: a malformed one is the request
 	// reader's request_malformed there, never a deal-local refusal.
-	var peek struct {
-		Derivation string `json:"derivation"`
-	}
-	if json.Unmarshal(raw, &peek) == nil && peek.Derivation == evidencebook.DerivationStandardHistory {
+	// The member is looked up exactly, as the request reader does: a case
+	// variant is an unknown member, not the derivation.
+	var members map[string]json.RawMessage
+	var derivation string
+	if json.Unmarshal(raw, &members) == nil && json.Unmarshal(members["derivation"], &derivation) == nil && derivation == evidencebook.DerivationStandardHistory {
 		check := evidencerequest.ParseRequest(evidencerequest.Message{Octets: raw, MediaType: evidencerequest.MediaTypeJSON})
-		check.Request.Derivation = peek.Derivation
+		check.Request.Derivation = derivation
 		return s.respondStandardHistory(c, check, raw, requester, path, signer)
 	}
 	req, e := parseDealRequest(raw)

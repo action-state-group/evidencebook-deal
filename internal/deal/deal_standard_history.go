@@ -208,7 +208,11 @@ func shDeclareCommand() *cobra.Command {
 			// Declaring again confirms; it never turns answering back on.
 			s = old
 		}
-		s.ChangedAt = cli.DealClock().UTC().Format(time.RFC3339Nano)
+		// Only the first declaration changes what a card says (its holder kind);
+		// whether `deal respond` answers is not in the card.
+		if s.ChangedAt == "" {
+			s.ChangedAt = cli.DealClock().UTC().Format(time.RFC3339Nano)
+		}
 		switch {
 		case answer:
 			s.Answer = new(bool)
@@ -245,11 +249,10 @@ func shPolicyCommand() *cobra.Command {
 		case months < 0:
 			return cli.InputError("--months is a positive whole number")
 		case months > 0 || all:
-			if err = writeSHPolicy(p, months, all); err != nil {
-				return err
-			}
-			// The policy's change time is the declaration's file's, so a
-			// policy set before declaring is stamped when declared.
+			// The change time is written before the policy: a failure between
+			// the two leaves an anchor refused as stale, never a card that
+			// carries a policy newer than its anchor. A policy set before
+			// declaring is stamped by the declaration.
 			if old, declared, err := readSHSettings(p); err != nil {
 				return err
 			} else if declared {
@@ -257,6 +260,9 @@ func shPolicyCommand() *cobra.Command {
 				if err = writeSHSettings(p, old); err != nil {
 					return err
 				}
+			}
+			if err = writeSHPolicy(p, months, all); err != nil {
+				return err
 			}
 		}
 		policy, err := readSHPolicy(p)

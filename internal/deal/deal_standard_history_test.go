@@ -223,10 +223,7 @@ func TestAPersonWhoTurnedAnsweringOnIsAnswered(t *testing.T) {
 	request := cardRequest(t, fullHistory)
 	assert.Equal(t, evidencebook.ReasonPolicyDeclined, refusedWith(t, respondCard(t, request)))
 	dealRun(t, "standard-history", "declare", "--holder-kind", "person", "--answer")
-	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, request)), "the change is after that checkpoint")
-	*now = now.Add(3 * time.Hour)
-	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
-	require.NotNil(t, respondCard(t, request).Envelope)
+	require.NotNil(t, respondCard(t, request).Envelope, "answering is not in the card, so no new tick is needed")
 }
 
 // The card is as of its anchor: a deal agreed after the tick is not on it, a
@@ -402,4 +399,39 @@ func TestTheStandardHistoryGoldens(t *testing.T) {
 		}
 		assert.ElementsMatch(t, []string{"anchor", "anchor_time", "first_checkpoint_time"}, keysOf(block["as_of"].(map[string]any)), name+": no checkpoint or receipts member")
 	}
+}
+
+// The policy's change time is written before the policy: a settings file the
+// command refuses leaves the policy as it was, and the card is still built.
+func TestAFailedPolicyChangeLeavesThePolicyAlone(t *testing.T) {
+	dir := dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	settings := filepath.Join(dir, shSettingsFile)
+	require.NoError(t, os.Chmod(settings, 0o644))
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "policy", "--all")
+	require.Error(t, err)
+	require.NoError(t, os.Chmod(settings, 0o600))
+	assert.Equal(t, map[string]any{"months": float64(12)}, dealRun(t, "standard-history", "policy")["window"])
+	dealRun(t, "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
+}
+
+// A request whose member is a case variant of derivation asks for no derivation.
+func TestADerivationMemberIsMatchedExactly(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	path := filepath.Join(t.TempDir(), "req.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"subject":{"full_history":null},"coverage":{"min_freshness":1},"Derivation":"standard_history/1","profile":"evidence-interop/0"}`), 0o600))
+	out := filepath.Join(t.TempDir(), "reply.json")
+	dealRun(t, "respond", "--request", path, "--requester", "x", "--output", out)
+	raw, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "artifact_digest", "no card is signed for a request that names no derivation")
 }
