@@ -38,9 +38,12 @@ go build -o capsulectl-deal ./cmd/capsulectl-deal
 bash scripts/test.sh
 ```
 
-The deal view (`capsulectl.deal-view/v0`) is the plugin's presentation
-module: the deal section of a deal receipt's page. The plugin's own pages
-(`deal report --html`) carry it from the binary. To let `capsulectl
+The deal view is the plugin's presentation module, registered under two
+manifests from one script: `capsulectl.deal-view/v0`, the deal section of a
+deal receipt's page, and `capsulectl.deal-view-composed/v0`, the receipt with
+the other party's half, read from a deal composition
+([design note](docs/design/two-sided-receipt.md)). The plugin's own pages
+(`deal report --html`, `deal compose --html`) carry it from the binary. To let `capsulectl
 presentation list` and `presentation build` use it too, put its files beside
 the installed launcher, in a `capsulectl-deal.d/` directory: a release ships
 them as `deal-view-VERSION.tar.gz`, unpacked into the plugin directory
