@@ -18,7 +18,8 @@
   does not (`--answer`). A holder that does not answer is `policy_declined`,
   an undeclared one `derivation_unsupported`, and no finished tick, or a deal
   with no amount, `coverage_unsatisfiable`. `happened` reads `receipt_only` or
-  `no_record` until the other side's half is verified (evidencebook-deal#86).
+  `no_record`: the card does not yet read the other side's half from the shelf
+  (the composed page of evidencebook-deal#86 checks it, the card does not).
   A card is as of a tick cut after the last change of declaration or policy:
   run `deal tick` after a change. The settings files must be owner-protected
   regular files. Requires evidencebook `v0.11.0`.
