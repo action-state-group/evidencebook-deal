@@ -53,8 +53,9 @@ func TestARolePinChangesOnlyThatRolesCheck(t *testing.T) {
 	assert.NotContains(t, differenceTexts(got), "the ruleset changed")
 }
 
-// A profile without roles reads and checks as before: the flat digests, and no
-// rules_pin the old checkers would not know.
+// A profile without roles is checked against its flat digests as before; the
+// pin it names, if any, is sent as rules_pin, and none is sent when it names
+// nothing.
 func TestAProfileWithoutRolesSendsNoRolePin(t *testing.T) {
 	id := stickerDeal(t, "card", false)
 	checker := stubChecker(t, "rules", checkerPrints("allow", passFinding))
@@ -65,4 +66,15 @@ func TestAProfileWithoutRolesSendsNoRolePin(t *testing.T) {
 	got, sent := roleCheck(t, id, payCheck("card", 454, 454), checker)
 	assert.Contains(t, differenceTexts(got), "the ruleset changed since it was pinned")
 	assert.Equal(t, map[string]any{"definition_digests": []any{secondRulesDigest}}, sent, "the flat pin applies to a role with no entry")
+}
+
+// A role that names a pack but no digest, with no flat digest either, sends
+// the pack alone: no null definition_digests for a checker to trip over.
+func TestARolePackWithoutADigestSendsNoDigestList(t *testing.T) {
+	id := stickerDeal(t, "card", false)
+	checker := stubChecker(t, "rules", checkerPrints("allow", passFinding))
+	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": exampleRulesDigest,
+		"roles": map[string]any{"buyer": map[string]any{"pack": "asg/everyday/buyer"}}})
+	_, sent := roleCheck(t, id, payCheck("card", 454, 454), checker)
+	assert.Equal(t, map[string]any{"pack": "asg/everyday/buyer", "definition_digests": []any{exampleRulesDigest}}, sent, "the flat digest still pins a role that names a pack alone")
 }

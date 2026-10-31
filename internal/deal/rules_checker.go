@@ -562,12 +562,16 @@ func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events [
 	input := map[string]interface{}{"schema": cli.ExternalCheckInput, "party_role": dealRole(events), "record": record, "history": history,
 		"history_scope": map[string]interface{}{"days": scope.Days, "max_records": rulesHistoryMax, "complete": scope.Complete}}
 	// rules_pin: the pin this check runs under, the acting role's alone, so a
-	// checker is not told the other role's pack. Absent when the role's pin
-	// names neither a pack nor a digest.
+	// checker is not told the other role's pack. Each member is left out when
+	// empty, and the whole is absent when the pin (the role's, or the flat one
+	// it falls back to) names neither a pack nor a digest.
 	if rp := s.p.RulesChecker.ForRole(dealRole(events)); rp.Pack != "" || len(rp.PinnedDigests()) > 0 {
-		pinNote := map[string]interface{}{"definition_digests": rp.PinnedDigests()}
+		pinNote := map[string]interface{}{}
 		if rp.Pack != "" {
 			pinNote["pack"] = rp.Pack
+		}
+		if digests := rp.PinnedDigests(); len(digests) > 0 {
+			pinNote["definition_digests"] = digests
 		}
 		input["rules_pin"] = pinNote
 	}

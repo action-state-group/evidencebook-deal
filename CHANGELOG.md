@@ -6,9 +6,10 @@
   checker's answer against that role's definition digests
   (`rules_checker.roles`, capsule-cli#492) and sends the checker only that
   role's pack and digests as an additive `rules_pin` member of
-  `external-check-input/v0`. Swapping one role's pin by `profile update`
-  changes only that role's check; a profile without roles checks as before and
-  sends no `rules_pin` (#66). The capsule-cli pin moves to main (c3acf35e),
+  `external-check-input/v0`, sent when that pin (or the flat pin a role
+  without an entry falls back to) names a pack or a digest. Swapping one
+  role's pin by `profile update` changes only that role's check; a profile
+  without roles is checked against its flat digests as before (#66). The capsule-cli pin moves to main (c3acf35e),
   and the two witness-delivery wording assertions follow capsule-cli#489 (#68).
 
 - `deal terms-leg` writes the buyer's signed terms leg, the file
