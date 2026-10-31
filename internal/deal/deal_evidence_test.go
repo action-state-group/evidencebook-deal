@@ -826,3 +826,47 @@ func TestPrivateHalfListsWhatTheAgentDid(t *testing.T) {
 	assert.Equal(t, "Order the cat sticker in my cart at Example Stickers", half.Asked)
 	assert.Contains(t, half.Did, "Did: pay $6.27 to Example Stickers by card")
 }
+
+// A copy recorded as failing verification is never composed: the composed
+// block cannot carry why it failed on record, and a page would draw it as
+// checked. Nothing is written.
+func TestComposeRefusesACopyRecordedAsFailed(t *testing.T) {
+	pair := closedPair(t, received, received)
+	wrong := pair.seller
+	wrong.checkpoint = pair.buyer.checkpoint
+	failed := askFor(t, pair.buyer, wrong, pair.id, map[string]any{"min_freshness": map[string]any{"size": 1}})
+	require.Equal(t, dealOutcomeArtifactFailed, failed.outcome)
+	good := askFor(t, pair.buyer, pair.seller, pair.id, map[string]any{"min_freshness": map[string]any{"size": 1}})
+	require.Equal(t, "artifact", good.outcome)
+	party(t, pair.buyer.config)
+	out, err := composeMembers(t, pair.id, good, failed)
+	require.Error(t, err)
+	assert.Contains(t, out+err.Error(), "member "+failed.recordID+" was recorded as a copy that does not hold up")
+}
+
+// The receipt with the other party's half composes their one answer with
+// the composer's keep copy; one answer without --keep is not a composition.
+func TestComposeTakesOneMemberWithAKeepCopy(t *testing.T) {
+	pair := closedPair(t, received, received)
+	theirs := askFor(t, pair.buyer, pair.seller, pair.id, map[string]any{"min_freshness": map[string]any{"size": 1}})
+	require.Equal(t, "artifact", theirs.outcome)
+	party(t, pair.buyer.config)
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "keep.json")
+	dealRun(t, "report", "--deal", pair.id, "--bundle", keep)
+
+	_, err := composeMembers(t, pair.id, theirs)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least two --member answers, or one with --keep")
+
+	bundle := filepath.Join(dir, "composed.json")
+	out, err := dealInvoke(t, "", "--profile", "deal", "deal", "compose", "--deal", pair.id, "--member", theirs.recordID,
+		"--output", bundle, "--html", filepath.Join(dir, "page.html"), "--keep", keep)
+	require.NoError(t, err, out)
+	members := composedBlock(t, bundle)["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, pair.seller.signer, members[0].(map[string]any)["observer"])
+	result, err := verifyWithDirectory(t, bundle, "")
+	require.NoError(t, err)
+	assert.Equal(t, "VALID", result["verdict"])
+}

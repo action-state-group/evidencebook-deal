@@ -223,17 +223,18 @@ Their `artifact` member verifies when:
   equal to the member's declared observer. Its checkpoint's key is that observer's
   `custody_domain`. This is C2's "its signature verifies": the half's own signature, as sealed in
   their book. For an `x-deal-v0` copy the observer is the key the response was signed with
-  (`deal_evidence.go` 1039), and nothing checks today that the copy's root was sealed under that
-  same key. `deal request --response` gains that check in `verifyDealCopy`: a copy whose root
-  `key_id` is not the response's signer is recorded as `artifact_failed_verification`.
+  (`deal_evidence.go` 1039), and `deal request --response` does not require the copy's root to
+  be sealed under that same key: a responder that rotated its key, keeping the old one trusted,
+  answers under the new key for steps sealed under the old (`TestTermsResultRefusesACloseUnderAnotherKey`).
+  Such a copy is recorded as an artifact, as today, and V2 fails it on the page: the failed box,
+  since the page cannot tie the two keys.
 - **What `deal request` recorded.** `verifyDealCopy` records a genuinely signed copy as
   `artifact_failed_verification` for reasons the composed block does not carry: a wrong anchor,
-  not the pinned checkpoint, too little coverage or freshness, and now another root key. The page
+  not the pinned checkpoint, too little coverage or freshness. The page
   cannot see that judgment, and it cannot recheck coverage, since the request is not carried.
   So `deal compose` refuses a member whose recorded outcome is `artifact_failed_verification`,
   naming it and the recorded reason: no file is written, as for an INVALID file (V0), rather than
   a composition that draws as verified or one that leaves the half out and reads as no record.
-  A responder that rotated its key between sealing its deal and answering is refused this way.
 - **V3.** The member carries its `response`, and the core reports it bound: digest `reproduced`,
   no `response_request_digest_mismatch` or `response_artifact_digest_mismatch` finding, and
   `responseSignature` not `invalid`. Beyond the core, the page checks that the response's
@@ -362,6 +363,9 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
   - `deal compose --html` builds its page through deal-view's composed manifest. It keeps the
     core's composed section below the page.
   - `--keep` carries the keep bundle in the bootstrap, instead of its lines.
+  - `deal compose` takes one `--member` when `--keep` is given: the receipt with their half needs
+    only their answer, since your half is the keep copy. Without `--keep` it still needs two.
+  - `deal compose` refuses a member recorded as `artifact_failed_verification` (D3).
   - The composed bundle, its digest and every shared file stay byte-for-byte unchanged.
 - **Mesh** (new task, Mesh-LLM/capsules-plugin): the composition in D4, sealed under the payer
   node's key, with the node's disclosure policy toward the provider applied before anything goes
@@ -406,8 +410,8 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
     failed box;
   - a member the core fails (its bundle, its response binding, an `invalid` refusal signature):
     the page is refused, and `deal compose --html` refuses it;
-  - `deal request --response` with a copy whose root key is not the response's signer: recorded
-    as failed;
+  - a copy whose root key is not the response's signer (a rotated responder): the failed box
+    on V2;
   - a failed artifact and an absence, asserting that the two boxes differ (S4);
   - a refusal with its signature verified and unverified, an absence, and no member;
   - several members of theirs: a failing and a passing artifact; a verified artifact beside a
