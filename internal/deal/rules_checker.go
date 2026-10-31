@@ -370,6 +370,27 @@ func declaredRules(r *dealRules) []string {
 	return ids
 }
 
+// ruleCauses are the failing rules of an evaluated check, each in the words
+// the checker gave (its reason, else its id), in the order it reported them.
+// Declared rules are never among them: they take no part in the verdict.
+func ruleCauses(r *dealRules) []string {
+	if r == nil || r.Status != "evaluated" {
+		return nil
+	}
+	var causes []string
+	for _, f := range r.Findings {
+		if isDeclaredRule(f) || f.Verdict != "fail" {
+			continue
+		}
+		cause := strings.TrimSpace(f.Reason)
+		if cause == "" {
+			cause = f.ID
+		}
+		causes = append(causes, cause)
+	}
+	return causes
+}
+
 // declaredRulesLine says them, by each id's short form (its first part, when
 // the id is a numbered rule such as r14-...).
 func declaredRulesLine(ids []string) string {
