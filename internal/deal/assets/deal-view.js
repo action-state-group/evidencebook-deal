@@ -532,7 +532,7 @@ const dealViewRender = (model, regions) => {
     card.append(el("div", "Nothing done yet.", "deal-small"));
   }
   if (report.money && typeof report.money.text === "string") card.append(el("div", report.money.text));
-  card.append(el("div", shared ? (report.audience === "counterparty" ? "This is a shared copy. It shows only what the other party may see." : "This is a shared copy. It shows only what an adjudicator may see.") : "This is your copy. It shows what your agent recorded.", "deal-small"));
+  card.append(el("div", shared ? (report.audience === "counterparty" ? "This is a shared copy. It shows only what the other party may see." : "This is a shared copy. It shows only what an adjudicator may see.") : "This is your copy. It shows everything in your book.", "deal-small"));
   col.append(card);
 
   // Your side, in your book: the errand's moves in order, a time on every row
@@ -596,7 +596,7 @@ const dealViewRender = (model, regions) => {
   const passed = stamps.filter((s) => s[0] === "passed").length;
   const stampBox = el("details", undefined, "deal-box deal-stamps");
   const sum = el("summary", "The stamps");
-  const pill = el("span", `${passed} of ${stamps.length} passed`, "deal-pill");
+  const pill = el("span", `${passed} of ${stamps.length} checked here`, "deal-pill");
   sum.append(pill);
   stampBox.append(sum, el("div", "What is under it:", "deal-small"));
   stamps.forEach(([word, text, detail]) => {
