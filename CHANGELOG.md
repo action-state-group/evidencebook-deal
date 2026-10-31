@@ -4,13 +4,13 @@
 
 - The rules checker is held to the acting role's pin: `deal check` checks the
   checker's answer against that role's definition digests
-  (`rules_checker.roles`, capsule-cli#492) and sends the checker only that
-  role's pack and digests as an additive `rules_pin` member of
-  `external-check-input/v0`, sent when that pin (or the flat pin a role
-  without an entry falls back to) names a pack or a digest. Swapping one
-  role's pin by `profile update` changes only that role's check; a profile
-  without roles is checked against its flat digests as before (#66). The capsule-cli pin moves to main (c3acf35e),
-  and the two witness-delivery wording assertions follow capsule-cli#489 (#68).
+  (`rules_checker.roles`, capsule-cli#492), so swapping one role's pin by
+  `profile update` changes only that role's check; a role with no entry, or
+  one that names a pack alone, is held to the flat digests, and a profile
+  without roles checks as before. Sending the checker the role's pack is a
+  separate change that needs the `external-check-input/v0` schema to carry it
+  (#66). The capsule-cli pin moves to main (c3acf35e), and the two
+  witness-delivery wording assertions follow capsule-cli#489 (#68).
 
 - `deal terms-leg` writes the buyer's signed terms leg, the file
   `deal note --kind payment_received|delivered --terms` answers, so scripts

@@ -1,30 +1,13 @@
 package deal
 
 import (
-	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// roleCheck runs one check on a deal under the profile's current pin and
-// returns the check and the rules_pin its checker was sent ("" when none).
-func roleCheck(t *testing.T, dealID, check, checker string) (map[string]any, any) {
-	t.Helper()
-	_ = os.Remove(checker + ".input")
-	out := dealRun(t, "check", "--deal", dealID, "--input", writeJSON(t, check))
-	raw, err := os.ReadFile(checker + ".input")
-	require.NoError(t, err, "the checker ran")
-	var input map[string]any
-	require.NoError(t, json.Unmarshal(raw, &input))
-	return out, input["rules_pin"]
-}
-
 // The rules checker is held to the acting role's pin alone (capsule-cli#323):
-// swapping one role's pin by a profile update changes only that role's check,
-// and the checker is sent only that role's pack and digests.
+// swapping one role's pin by a profile update changes only that role's check.
 func TestARolePinChangesOnlyThatRolesCheck(t *testing.T) {
 	buyer := stickerDeal(t, "card", false)
 	seller := openTyped(t, sellerTyped)
@@ -35,46 +18,35 @@ func TestARolePinChangesOnlyThatRolesCheck(t *testing.T) {
 			"roles": map[string]any{"buyer": map[string]any{"pack": "asg/everyday/buyer", "definition_digest": exampleRulesDigest},
 				"seller": map[string]any{"pack": "asg/everyday/seller", "definition_digest": sellerDigest}}})
 	}
+	changed := "the ruleset changed since it was pinned"
 
 	// The seller's pin names another ruleset than the checker reports: only
 	// the seller's check stops.
 	pin(secondRulesDigest)
-	got, sent := roleCheck(t, buyer, payCheck("card", 454, 454), checker)
-	assert.NotContains(t, differenceTexts(got), "the ruleset changed", "the buyer's pin is untouched")
-	assert.Equal(t, map[string]any{"pack": "asg/everyday/buyer", "definition_digests": []any{exampleRulesDigest}}, sent, "the buyer's checker is sent the buyer's pin alone")
-	got, sent = roleCheck(t, seller, sellerCheck, checker)
+	assert.NotContains(t, differenceTexts(dealRun(t, "check", "--deal", buyer, "--input", writeJSON(t, payCheck("card", 454, 454)))), changed, "the buyer's pin is untouched")
+	got := dealRun(t, "check", "--deal", seller, "--input", writeJSON(t, sellerCheck))
 	assert.Equal(t, "pause", got["verdict"])
-	assert.Contains(t, differenceTexts(got), "the ruleset changed since it was pinned")
-	assert.Equal(t, map[string]any{"pack": "asg/everyday/seller", "definition_digests": []any{secondRulesDigest}}, sent)
+	assert.Contains(t, differenceTexts(got), changed)
 
 	// Swapping the seller's pin back, and nothing else, lets its check run.
 	pin(exampleRulesDigest)
-	got, _ = roleCheck(t, seller, sellerCheck, checker)
-	assert.NotContains(t, differenceTexts(got), "the ruleset changed")
+	assert.NotContains(t, differenceTexts(dealRun(t, "check", "--deal", seller, "--input", writeJSON(t, sellerCheck))), changed)
 }
 
-// A profile without roles is checked against its flat digests as before; the
-// pin it names, if any, is sent as rules_pin, and none is sent when it names
-// nothing.
-func TestAProfileWithoutRolesSendsNoRolePin(t *testing.T) {
+// A role with no entry, and a role entry that names a pack alone, are held to
+// the flat digests, as a profile without roles always was.
+func TestARoleWithoutADigestIsHeldToTheFlatPin(t *testing.T) {
 	id := stickerDeal(t, "card", false)
 	checker := stubChecker(t, "rules", checkerPrints("allow", passFinding))
-	pinChecker(t, map[string]any{"command": []string{checker}})
-	_, sent := roleCheck(t, id, payCheck("card", 454, 454), checker)
-	assert.Nil(t, sent)
+	check := func() map[string]any {
+		return dealRun(t, "check", "--deal", id, "--input", writeJSON(t, payCheck("card", 454, 454)))
+	}
 	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": secondRulesDigest})
-	got, sent := roleCheck(t, id, payCheck("card", 454, 454), checker)
-	assert.Contains(t, differenceTexts(got), "the ruleset changed since it was pinned")
-	assert.Equal(t, map[string]any{"definition_digests": []any{secondRulesDigest}}, sent, "the flat pin applies to a role with no entry")
-}
-
-// A role that names a pack but no digest, with no flat digest either, sends
-// the pack alone: no null definition_digests for a checker to trip over.
-func TestARolePackWithoutADigestSendsNoDigestList(t *testing.T) {
-	id := stickerDeal(t, "card", false)
-	checker := stubChecker(t, "rules", checkerPrints("allow", passFinding))
-	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": exampleRulesDigest,
+	assert.Contains(t, differenceTexts(check()), "the ruleset changed since it was pinned")
+	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": secondRulesDigest,
 		"roles": map[string]any{"buyer": map[string]any{"pack": "asg/everyday/buyer"}}})
-	_, sent := roleCheck(t, id, payCheck("card", 454, 454), checker)
-	assert.Equal(t, map[string]any{"pack": "asg/everyday/buyer", "definition_digests": []any{exampleRulesDigest}}, sent, "the flat digest still pins a role that names a pack alone")
+	assert.Contains(t, differenceTexts(check()), "the ruleset changed since it was pinned", "naming a pack never loosens the digest check")
+	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": secondRulesDigest,
+		"roles": map[string]any{"buyer": map[string]any{"pack": "asg/everyday/buyer", "definition_digest": exampleRulesDigest}}})
+	assert.NotContains(t, differenceTexts(check()), "the ruleset changed since it was pinned")
 }
