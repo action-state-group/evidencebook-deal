@@ -227,6 +227,9 @@ const dealViewModel = async (context) => {
   // under the "not checked" label.
   const reportRecords = context.records.filter((r) => r && r.action_id === "capsulectl-deal-report");
   let report = dealExt;
+  // The deal a sealed report names: on a deal's own log the log says it; on
+  // a node's one ledger (a Mesh payer's receipt) the report's payload does.
+  let reportDealId = "";
   const standalone = (bundle.extensions || {})["x-deal-report/v0"];
   // A copy of a deal on a book whose log holds no report record names a
   // standalone one: inline text there is a stripped copy, refused.
@@ -245,6 +248,7 @@ const dealViewModel = async (context) => {
       return { refusal: "⚠️ The deal's text could not be checked against its sealed record. Do not rely on it." };
     }
     report = input.report;
+    if (typeof input.deal_id === "string") reportDealId = input.deal_id;
   } else if (bookSteps) {
     return { refusal: "⚠️ The deal's text could not be checked against its sealed report. Do not rely on it." };
   }
@@ -293,7 +297,7 @@ const dealViewModel = async (context) => {
     releaseNotes,
     buildNote,
     claimClasses,
-    dealId: logId.startsWith("deal/") ? logId.slice(5) : "",
+    dealId: logId.startsWith("deal/") ? logId.slice(5) : reportDealId,
     witnessed: (bundle.extensions || {})["x-cadence-witness/v0"] !== undefined,
   };
 };
@@ -336,13 +340,20 @@ const dealRequestDigest = (record) => (record && record.effect && typeof record.
 
 // One of their artifact members, checked V1 to V4. It returns the member's
 // state and, for the box, what its sealed record says.
-const dealTheirArtifact = async (member, dealID, mine, meshOwn) => {
+// The payer's citing record for a received half (a Mesh half that was also
+// pushed): compute_attestation.received_half, naming the half it cites.
+const dealCitingRecord = (records, cited) =>
+  records
+    .map((r) => (((r || {}).model_attestation || {}).compute_attestation || {}).received_half)
+    .find((h) => h && typeof h === "object" && h.cited_capsule_id === cited);
+const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) => {
   const witnessed = ((member.bundle || {}).extensions || {})["x-cadence-witness/v0"] !== undefined;
-  const failed = (check) => ({ state: "failed", check, witnessed });
   const ctx = await EvidenceGraph.buildVerifiedBundleContext(member.bundle);
+  const root = dealRootRecord(ctx.bundle, ctx.records);
+  const mesh = dealMeshHalf(root) !== undefined;
+  const failed = (check) => ({ state: "failed", check, witnessed, mesh });
   // V1: as strict as a single-book page.
   if (!dealViewVerified(ctx)) return failed("V1");
-  const root = dealRootRecord(ctx.bundle, ctx.records);
   const cp = ctx.bundle.checkpoint || {};
   // V2: their half's own signature, under the observer it is declared as,
   // anchored under that observer's custody domain.
@@ -350,10 +361,15 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn) => {
   // V3 beyond the core: the response answered with this very checkpoint.
   if (!member.response || member.response.anchor !== `${cp.root}:${cp.mmr_size}`) return failed("V3");
   const at = cp.timestamp;
-  if (dealMeshHalf(root)) {
+  if (mesh) {
     // V4 for Mesh: the same exchange as the payer's own half.
     const nonce = dealExchangeNonce(root);
     if (!meshOwn || nonce === undefined || nonce !== dealExchangeNonce(meshOwn) || dealRequestDigest(root) === undefined || dealRequestDigest(root) !== dealRequestDigest(meshOwn)) return failed("V4");
+    // A half that was also pushed has the payer's citing record: the key it
+    // accepted the half under is their observer, and not one operator on
+    // both sides (D4). An ask-only half has none, which proves nothing.
+    const citing = dealCitingRecord(payerRecords, root.capsule_id);
+    if (citing && (citing.sender_key_id !== member.observer || citing.same_controller_as_receiver === true)) return failed("V2");
     return { state: "verified", mesh: true, at: root.timestamp, stamped: at, key: member.observer, witnessed };
   }
   // V4 for a deal copy: their copy of this deal, its text checked as a
@@ -436,7 +452,7 @@ const dealComposedModel = async (context) => {
     }
     const mRoot = dealRootRecord(m.bundle || {}, (m.bundle || {}).records || []);
     if (mRoot && mRoot.key_id === composer) return refused("A record shown as theirs is yours under another label.");
-    theirs.push({ outcome: "artifact", ...(await dealTheirArtifact({ ...m, custody: obs.custody_domain }, dealID, mine, meshOwn)) });
+    theirs.push({ outcome: "artifact", ...(await dealTheirArtifact({ ...m, custody: obs.custody_domain }, dealID, mine, meshOwn, context.records)) });
   }
   if (others.size > 1) return refused("This file holds records from more than one other party.");
 

@@ -402,6 +402,19 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
 - **C4 lines ("as agreed", "paid" from a Mesh record):** not drawn. If they are wanted later,
   they go to Steven.
 
+## Found while building
+
+- **A refusal member reads INCOMPLETE.** `capsulectl verify` reads a composition with a refusal
+  member as INCOMPLETE ("what was asked for was not served"), so `PageGate` refuses it and
+  `deal compose --html` writes no page for it. The refusal rows of D3 are drawn when a viewer
+  opens the file itself; the tests emit that page ungated.
+- **A viewer-opened page has no openings.** Without the bootstrap, the words the payer asked
+  are not checked on the page, so a Mesh payer's half reads "not fully checked" and the banner
+  is "Stamped by both sides · not fully checked" at best.
+- **The core page builder repeats a shared script.** `capsulectl presentation build` puts one
+  module slot per declared presentation, so this plugin's two manifests would inline the one
+  script twice. The fix is the coordinator's call: a core change, or one manifest.
+
 ## Tests
 
 - **Golden pages** from synthetic compositions, each at 390 px and compared with frames 6 and 7:
