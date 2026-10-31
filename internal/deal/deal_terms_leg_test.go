@@ -1,11 +1,14 @@
 package deal
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +64,9 @@ func TestATermsLegIsSignedWithTheProfileKeyUnlessEphemeral(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(out), &m))
 		return m
 	}
+	profileKey := dealRunInitKey(t)
 	first, second := profile("a.json"), profile("b.json")
+	assert.Equal(t, profileKey, first["key_id"], "the leg is signed by the profile's own key")
 	assert.Equal(t, first["key_id"], second["key_id"], "the profile's key signs every leg")
 	assert.Equal(t, false, first["ephemeral"])
 
@@ -73,8 +78,10 @@ func TestATermsLegIsSignedWithTheProfileKeyUnlessEphemeral(t *testing.T) {
 	assert.NotEqual(t, one["key_id"], two["key_id"], "an ephemeral key is made for each run")
 
 	// Both verify as terms legs.
-	_, err = termsLegID(filepath.Join(dir, "a.json"))
-	assert.NoError(t, err)
+	for _, name := range []string{"a.json", "c.json"} {
+		_, err = termsLegID(filepath.Join(dir, name))
+		assert.NoError(t, err, name)
+	}
 }
 
 func TestATermsLegNamesItsAsset(t *testing.T) {
@@ -108,7 +115,13 @@ func TestATermsLegRefusesWhatItCannotStand(t *testing.T) {
 	assert.ErrorContains(t, run("--amount", "1", "--asset-scale", "18", "--content-digest", digest, "--out", out), "goes with --asset")
 	assert.ErrorContains(t, run("--amount", "1", "--asset", "not an asset", "--asset-scale", "6", "--content-digest", digest, "--out", out), "CAIP-19")
 	_, err := os.Stat(out)
-	assert.True(t, os.IsNotExist(err), "a leg the verifier refuses is not left behind")
+	assert.True(t, os.IsNotExist(err), "no file is written on an input error")
+
+	// A leg the verifier refuses (a scale it cannot read as exact) is not left behind.
+	err = run("--amount", "1", "--asset", "eip155:1/slip44:60", "--asset-scale", "99999999999", "--content-digest", digest, "--out", out)
+	assert.ErrorContains(t, err, "not a valid settlement leg")
+	_, statErr := os.Stat(out)
+	assert.True(t, os.IsNotExist(statErr), "the refused leg is removed")
 
 	// Neither --ephemeral nor a profile: no key to sign with.
 	_, err = invoke(t, "", "deal", "terms-leg", "--amount", "1", "--content-digest", digest, "--out", out)
@@ -124,4 +137,14 @@ func TestATermsLegDoesNotOverwrite(t *testing.T) {
 	assert.ErrorContains(t, err, "exists")
 	got, _ := os.ReadFile(path)
 	assert.Equal(t, "mine", string(got))
+}
+
+// dealRunInitKey is the public key of the profile dealFixture made.
+func dealRunInitKey(t *testing.T) string {
+	t.Helper()
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	key, err := cli.PrivateKey(p.Signing)
+	require.NoError(t, err)
+	return hex.EncodeToString(key.Public().(ed25519.PublicKey))
 }

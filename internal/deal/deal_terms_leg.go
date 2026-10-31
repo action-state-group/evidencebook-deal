@@ -35,7 +35,7 @@ var (
 // writes the terms leg (draft-mih-agent-settlement-records-00) as a bare,
 // signed Capsule file, the file `deal note --kind payment_received|delivered
 // --terms` answers. It reads and writes no deal store: the leg is the buyer's
-// own statement of what she agrees to pay and expects to receive.
+// own statement of what the buyer agrees to pay and expects to receive.
 func dealTermsLegCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "terms-leg", Short: "Write the buyer's signed terms leg: the price and what the buyer expects, as the file a seller's payment_received and delivered notes answer", Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		flag := func(name string) string { v, _ := c.Flags().GetString(name); return strings.TrimSpace(v) }
@@ -83,7 +83,7 @@ func dealTermsLegCommand() *cobra.Command {
 			if errors.Is(err, os.ErrExist) {
 				return cli.InputError("--out " + out + " exists: terms-leg does not overwrite a file")
 			}
-			return cli.InputError("cannot write --out " + out)
+			return cli.InputError("cannot write --out " + out + ": " + errors.Unwrap(err).Error())
 		}
 		if _, err := f.Write(capsule); err != nil {
 			return errors.Join(err, f.Close(), os.Remove(out))
@@ -104,7 +104,7 @@ func dealTermsLegCommand() *cobra.Command {
 	f.String("amount", "", "the price in the asset's atomic units, digits only (170000000 is 170 USDC)")
 	f.String("asset", "", "the asset as a CAIP-19 id, such as "+baseUSDC+" (default: Base USDC)")
 	f.Int("asset-scale", 0, "the asset's decimals: required with --asset, taken as 6 for the default Base USDC (no table of other known assets is read)")
-	f.String("content-digest", "", "the SHA-256 of what you expect to receive, in hex")
+	f.String("content-digest", "", "the SHA-256 of what you expect to receive, 64 lowercase hex characters")
 	f.String("out", "", "New file for the terms leg; an existing file is refused")
 	f.Bool("ephemeral", false, "sign with a key made for this run and thrown away, instead of the profile's key; the leg then names no lasting signer, so use it for tests and demonstrations, not real sales")
 	return cmd
