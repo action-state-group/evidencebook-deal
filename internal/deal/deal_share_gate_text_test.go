@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/action-state-group/capsule-cli/cli"
@@ -33,7 +34,10 @@ func TestTheShareGateReadsTextNotCode(t *testing.T) {
 	require.False(t, bytes.Contains(refreshed, pageruntime.IIFE) && bytes.Contains(refreshed, []byte(DealViewJS+"</script>")), "the vendored bytes no longer match byte for byte")
 	assert.NoError(t, dealShareGate(refreshed, events, cli.DealAudienceCounterparty), "code and style are not read")
 
-	inData := bytes.Replace(refreshed, []byte("window.__BUNDLE__ = {"), []byte(`window.__BUNDLE__ = {"note":"my limit is $8.00",`), 1)
+	// The bundle is the JSON element's text (capsule-viewer#109).
+	jsonStart := regexp.MustCompile(`(?is)(<script\b[^>]*\btype\s*=\s*["']?application/json["']?[^>]*>\s*\{)`)
+	require.True(t, jsonStart.Match(refreshed), "the page carries its bundle in a JSON element")
+	inData := jsonStart.ReplaceAll(refreshed, []byte(`${1}"note":"my limit is $$8.00",`))
 	require.NotEqual(t, refreshed, inData)
 	assert.ErrorContains(t, dealShareGate(inData, events, cli.DealAudienceCounterparty), "your spending limit", "the bundle is data")
 	inPageData := bytes.Replace(refreshed, []byte("globalThis.capsulectlDealPage = Object.freeze({"), []byte(`globalThis.capsulectlDealPage = Object.freeze({"note":"my limit is $8.00",`), 1)

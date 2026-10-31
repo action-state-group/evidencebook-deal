@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.1.0-rc25
+
+Built against capsulectl v0.1.0-rc25 and capsule-viewer v0.5.0 (RELEASING.md).
+
+- Pages carry their bundle in a JSON data element (capsule-viewer#109, #167):
+  the share gate reads that element as the bundle, and still reads a page
+  built before it by the `window.__BUNDLE__ =` prefix (#41, #48).
+
 - The user's own receipt line for a flagged check gives what caused the flag
   first, in the rules' own words (a rule the checker could not evaluate is
   said so), and then, after what the user and the agent chose, the rules the
