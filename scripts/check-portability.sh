@@ -258,20 +258,18 @@ cd "$work/out"
 page_bundle recipient.html >bundle.json
 
 # broken-bundle: the action record's payload commitment edited in the page's
-# bundle, and its CSP re-pinned so the page runs it.
+# bundle (data in a JSON element, so the page's CSP needs no change).
 jq -c --arg last "$(jq -r '.records | max_by(.evidence_record_header.seq) | .capsule_id' bundle.json)" \
   '(.records[] | select(.capsule_id == $last)).evidence_record_header.payload_commitments[0] |= (if startswith("0") then "1" else "0" end + .[1:])' bundle.json>broken-bundle.json
 replace_bundle recipient.html broken-bundle.json >broken-bundle.html
-rehash_bundle_csp recipient.html broken-bundle.html
 check "broken-bundle: the copy differs" differs recipient.html broken-bundle.html
-broken broken-bundle broken-bundle.html records.json "verify --bundle: VALID, exit 0" "the page says none of its bundle's checks failed"
+broken broken-bundle broken-bundle.html records.json "verify --bundle: VALID, exit 0" "the page says its bundle verified"
 check "broken-bundle: the page says its bundle failed" refused broken-bundle.html
 
 # dropped-record: the bundle without its last record (the action taken).
 jq -c '.records |= (sort_by(.evidence_record_header.seq) | .[:-1])' bundle.json >dropped-record.json
 replace_bundle recipient.html dropped-record.json >dropped-record.html
-rehash_bundle_csp recipient.html dropped-record.html
-broken dropped-record dropped-record.html records.json "verify --bundle: VALID, exit 0" "the page says none of its bundle's checks failed"
+broken dropped-record dropped-record.html records.json "verify --bundle: VALID, exit 0" "the page says its bundle verified"
 check "dropped-record: the page says its bundle failed" refused dropped-record.html
 
 # broken-records: the exported action record says $62.70 was paid.

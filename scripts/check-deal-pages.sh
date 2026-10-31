@@ -103,16 +103,10 @@ check "deal-receipt-rebuilt: the page ran every check" no_check_unrun receipt-re
 # records still verify, so the page's runtime runs the deal view, which
 # refuses: the report's signature no longer verifies.
 jq -c '.extensions["x-deal-report/v0"].agent_input.report.did_line = "A line nobody sealed."' receipt.json >receipt-edited.json
+# The bundle is data in a JSON element (capsule-viewer 0.4.0), so the edit
+# needs no change to the page's CSP, which pins only executable scripts.
 replace_bundle receipt.html receipt-edited.json >receipt-edited.html
-rehash_bundle_csp receipt.html receipt-edited.html
 check "deal-receipt-edited: the page carries the edited line" contains receipt-edited.html 'A line nobody sealed.'
-# The same edit without touching the policy: the edited bundle script is not
-# the one the CSP pins, so the browser does not run it and the page shows no
-# deal text at all.
-replace_bundle receipt.html receipt-edited.json >receipt-unpinned.html
-render receipt-unpinned.html
-check "deal-receipt-unpinned: an edited bundle the CSP does not pin shows no deal text" lacks receipt-unpinned.html.dom '<p class="deal-note">A line nobody sealed.</p>'
-check "deal-receipt-unpinned: and no deal section" lacks receipt-unpinned.html.dom '<h1>Deal report</h1>'
 render receipt-edited.html
 check "deal-receipt-edited: the page says the text could not be checked" contains receipt-edited.html.dom "<p class=\"deal-bad\">⚠️ The deal's text could not be checked against its sealed report"
 check "deal-receipt-edited: the page shows no edited line" lacks receipt-edited.html.dom '<p class="deal-note">A line nobody sealed.</p>'
@@ -127,7 +121,6 @@ check "deal-receipt-edited: verify --bundle: INVALID, exit 1" test "$verdict" -e
 jq -c '.extensions["x-deal-report/v0"].agent_input.report as $text
   | .extensions["x-deal-v0"] = ($text | .did_line = "A line nobody sealed.") | del(.extensions["x-deal-report/v0"])' receipt.json >receipt-downgraded.json
 replace_bundle receipt.html receipt-downgraded.json >receipt-downgraded.html
-rehash_bundle_csp receipt.html receipt-downgraded.html
 check "deal-receipt-downgraded: the page carries the inline line" contains receipt-downgraded.html 'A line nobody sealed.'
 render receipt-downgraded.html
 check "deal-receipt-downgraded: the page says the text could not be checked" contains receipt-downgraded.html.dom "<p class=\"deal-bad\">⚠️ The deal's text could not be checked against its sealed report"

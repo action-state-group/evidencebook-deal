@@ -59,6 +59,8 @@ func TestTheShareGateReadsAnUnplacedPageWhole(t *testing.T) {
 	assert.NoError(t, dealShareGate([]byte(`<!doctype html><script>window.__BUNDLE__ = {"line":"ok"};</script>`+code), events, cli.DealAudienceCounterparty))
 	assert.Error(t, dealShareGate([]byte(`<!doctype html><script>window.data = {"line":"ok"};</script>`+code), events, cli.DealAudienceCounterparty), "no bundle script: read whole")
 	assert.Error(t, dealShareGate([]byte(`<!doctype html><script>window.__BUNDLE__ = {"line":"my limit is $8.00"</script>`), events, cli.DealAudienceCounterparty), "a bundle that does not decode is read whole")
+	assert.Error(t, dealShareGate([]byte(`<!doctype html><script type="application/json">{"line":"my limit is $8.00"</script>`), events, cli.DealAudienceCounterparty), "a JSON bundle element that does not decode is read whole")
+	assert.NoError(t, dealShareGate([]byte(`<!doctype html><script type="application/json">{"line":"ok"}</script>`+code), events, cli.DealAudienceCounterparty), "a JSON bundle element is placed, and the code beside it is not read")
 	assert.Error(t, dealShareGate([]byte(`<!doctype html><script>window.__BUNDLE__ = {"line":"ok"};</script><script>globalThis.capsulectlDealPage = Object.freeze({"note":"my limit is $8.00"</script>`), events, cli.DealAudienceCounterparty), "page data that does not decode is read whole")
 	// A bundle's JSON whose text holds script-like markup is not a page: its
 	// "script" is read like the rest of it.

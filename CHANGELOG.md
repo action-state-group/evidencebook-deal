@@ -26,8 +26,8 @@ Built against capsulectl v0.1.0-rc25 and capsule-viewer v0.5.0 (RELEASING.md).
   one that names a pack alone, is held to the flat digests, and a profile
   without roles checks as before. Sending the checker the role's pack is a
   separate change that needs the `external-check-input/v0` schema to carry it
-  (#66). The capsule-cli pin moves to main (c3acf35e), and the two
-  witness-delivery wording assertions follow capsule-cli#489 (#68).
+  (#66). The two witness-delivery wording assertions follow
+  capsule-cli#489 (#68).
 
 - `deal terms-leg` writes the buyer's signed terms leg, the file
   `deal note --kind payment_received|delivered --terms` answers, so scripts
