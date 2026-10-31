@@ -435,3 +435,19 @@ func TestADerivationMemberIsMatchedExactly(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "artifact_digest", "no card is signed for a request that names no derivation")
 }
+
+// The same policy again changes nothing, so a card as of an earlier tick is
+// still built.
+func TestTheSamePolicyAgainMakesNoAnchorStale(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	dealRun(t, "standard-history", "policy", "--months", "12")
+	dealRun(t, "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
+	dealRun(t, "standard-history", "policy", "--months", "3")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "again.json"))
+	require.Error(t, err, "a different policy does")
+}

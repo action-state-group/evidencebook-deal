@@ -161,16 +161,34 @@ func readSHPolicy(p cli.Profile) (standardhistory.Policy, error) {
 	return standardhistory.Policy{Digest: hex.EncodeToString(sum[:]), Window: window}, nil
 }
 
+// shPolicyOctets is the policy file's octets for a window.
+func shPolicyOctets(months int, all bool) ([]byte, error) {
+	doc := map[string]any{"months": months}
+	if all {
+		doc = map[string]any{"all": true}
+	}
+	return json.Marshal(doc)
+}
+
+// currentSHPolicyOctets are the octets in force: the file's, or the default's.
+func currentSHPolicyOctets(p cli.Profile) ([]byte, error) {
+	dir, err := shDir(p)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := readSetting(filepath.Join(dir, shPolicyFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return []byte(shDefaultPolicy), nil
+	}
+	return raw, err
+}
+
 func writeSHPolicy(p cli.Profile, months int, all bool) error {
 	dir, err := shDir(p)
 	if err != nil {
 		return err
 	}
-	doc := map[string]any{"months": months}
-	if all {
-		doc = map[string]any{"all": true}
-	}
-	raw, err := json.Marshal(doc)
+	raw, err := shPolicyOctets(months, all)
 	if err != nil {
 		return err
 	}
@@ -249,6 +267,16 @@ func shPolicyCommand() *cobra.Command {
 		case months < 0:
 			return cli.InputError("--months is a positive whole number")
 		case months > 0 || all:
+			raw, err := shPolicyOctets(months, all)
+			if err != nil {
+				return err
+			}
+			// The same policy again changes nothing, so it makes no anchor stale.
+			if current, err := currentSHPolicyOctets(p); err != nil {
+				return err
+			} else if string(current) == string(raw) {
+				break
+			}
 			// The change time is written before the policy: a failure between
 			// the two leaves an anchor refused as stale, never a card that
 			// carries a policy newer than its anchor. A policy set before
