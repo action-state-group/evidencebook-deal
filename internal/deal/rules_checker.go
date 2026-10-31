@@ -159,7 +159,11 @@ func parseExternalCheck(out []byte) (externalCheckResult, error) {
 // It runs exactly the bytes it hashed: the executable is read once, hashed,
 // and run from a private copy, so a file swapped after the check is not what
 // runs.
-func runRulesChecker(ctx context.Context, p cli.Profile, input []byte, history *dealRulesHistory) dealRules {
+//
+// role is the side the check acts as: the answer is held to that role's
+// pinned definition digests (cli.ProfileRulesChecker.ForRole), so swapping one
+// role's pin changes only that role's check.
+func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []byte, history *dealRulesHistory) dealRules {
 	pin := p.RulesChecker
 	if len(pin.Command) == 0 {
 		return dealRules{Status: "not_configured"}
@@ -204,7 +208,7 @@ func runRulesChecker(ctx context.Context, p cli.Profile, input []byte, history *
 	if err != nil {
 		return notEvaluated("unreadable", "the rules checker's answer could not be read: "+err.Error())
 	}
-	if pinned := pin.PinnedDigests(); len(pinned) > 0 && !slices.Contains(pinned, result.DefinitionDigest) {
+	if pinned := pin.ForRole(role).PinnedDigests(); len(pinned) > 0 && !slices.Contains(pinned, result.DefinitionDigest) {
 		return notEvaluated("ruleset_changed", "the ruleset changed since it was pinned ("+result.RulesetID+" reports another definition digest)"+rePinHint)
 	}
 	return dealRules{Status: "evaluated", RulesetID: result.RulesetID, DefinitionDigest: result.DefinitionDigest, CheckerSHA256: pin.SHA256,
@@ -557,6 +561,16 @@ func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events [
 	// explicit, so a checker selects its rules without inferring the side.
 	input := map[string]interface{}{"schema": cli.ExternalCheckInput, "party_role": dealRole(events), "record": record, "history": history,
 		"history_scope": map[string]interface{}{"days": scope.Days, "max_records": rulesHistoryMax, "complete": scope.Complete}}
+	// rules_pin: the pin this check runs under, the acting role's alone, so a
+	// checker is not told the other role's pack. Absent when the role's pin
+	// names neither a pack nor a digest.
+	if rp := s.p.RulesChecker.ForRole(dealRole(events)); rp.Pack != "" || len(rp.PinnedDigests()) > 0 {
+		pinNote := map[string]interface{}{"definition_digests": rp.PinnedDigests()}
+		if rp.Pack != "" {
+			pinNote["pack"] = rp.Pack
+		}
+		input["rules_pin"] = pinNote
+	}
 	if task := taskAuthorityAt(events, ""); task != "" {
 		for _, se := range events {
 			if se.Digest == task && (se.Event.Kind == "task_authority" || se.Event.Approval != nil) {
