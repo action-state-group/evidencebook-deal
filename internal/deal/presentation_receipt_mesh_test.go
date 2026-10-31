@@ -1,8 +1,10 @@
 package deal
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -13,6 +15,7 @@ import (
 
 	aacbundle "github.com/action-state-group/agent-action-capsule/go/bundle"
 	aaccanonical "github.com/action-state-group/agent-action-capsule/go/canonical"
+	"github.com/action-state-group/agent-action-capsule/go/evidencerequest"
 	"github.com/action-state-group/capsule-cli/cli"
 	emit "github.com/action-state-group/capsule-emit/go"
 	"github.com/action-state-group/capsule-emit/go/artifact"
@@ -164,7 +167,20 @@ func newMeshPayer(t *testing.T) meshPayer {
 // its deal steps, its exchange half, its keep report citing that half, and
 // the composition record, which is the root; the provider's member is the
 // provider's own ledger rooted at its half, with its signed response.
-func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, citing func(theirs artifact.Record, provider string) *artifact.Record) map[string]any {
+// meshOptions vary the synthetic composition: the payer's citing record for
+// the provider's half, and a response in neither form V3 reads.
+type meshOptions struct {
+	citing    func(theirs artifact.Record, provider string) *artifact.Record
+	otherForm bool
+}
+
+type ed25519Signer struct{ key ed25519.PrivateKey }
+
+func (s ed25519Signer) Sign(_ context.Context, message []byte) ([]byte, error) {
+	return ed25519.Sign(s.key, message), nil
+}
+
+func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, opts meshOptions) map[string]any {
 	t.Helper()
 	at := time.Date(2026, 10, 9, 16, 10, 0, 0, time.UTC)
 	ownHalf := meshHalfRecord(t, payer.key, "requested", own, at)
@@ -177,19 +193,28 @@ func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, citing
 	require.NoError(t, err)
 	cp := memberBundle["checkpoint"].(map[string]any)
 	requestDigest := cli.BytesDigest([]byte("synthetic ask " + provider))
-	response := dealArtifactResponse{
-		RequestDigest: requestDigest, Anchor: cp["root"].(string) + ":" + jsonNumber(cp["mmr_size"]), ArtifactKind: dealArtifactBundle,
-		ArtifactDigest: digest, IssuedAt: "2026-10-09T16:20:00Z", KeyID: provider,
-	}
-	body, err := response.SigningBody()
+	// The provider answers under the evidence-interop profile (§6.2): its
+	// envelope names the anchor by the digest of the checkpoint's COSE
+	// octets, and the member carries it as received, minus the artifact.
+	cose, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(cp["cose"].(string), "="))
 	require.NoError(t, err)
-	response.Sig = hex.EncodeToString(ed25519.Sign(providerKey, body))
+	anchor := cli.BytesDigest(cose)
+	profile := "evidence-interop/1"
+	if opts.otherForm {
+		profile = "example-response/1"
+	}
+	envelope := evidencerequest.Envelope{
+		Profile: profile, RequestDigest: requestDigest,
+		Subject: evidencerequest.Subject{Kind: evidencerequest.SubjectRecord, Digest: theirHalf.CapsuleID},
+		Anchor:  evidencerequest.Anchor{Digest: anchor}, ArtifactDigest: digest, Responder: provider, IssuedAt: "2026-10-09T16:20:00Z",
+	}
+	envelope, err = envelope.Sign(t.Context(), ed25519Signer{providerKey})
+	require.NoError(t, err)
+	response := envelope.Value()
+	delete(response, "artifact")
 	member := map[string]any{
 		"id": strings.Repeat("ab", 32), "observer": provider, "request_digest": requestDigest, "outcome": "artifact", "digest": digest, "bundle": memberBundle,
-		"response": map[string]any{
-			"request_digest": response.RequestDigest, "anchor": response.Anchor, "artifact_kind": response.ArtifactKind,
-			"artifact_digest": response.ArtifactDigest, "issued_at": response.IssuedAt, "key_id": response.KeyID, "sig": response.Sig,
-		},
+		"response": response,
 	}
 	payerCheckpoint := hex.EncodeToString(payer.key.Public().(ed25519.PublicKey))
 	block := map[string]any{
@@ -218,8 +243,8 @@ func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, citing
 		"type": "deal_composition", "profile": "x-deal-v0", "deal_id": payer.dealID, "composed_digest": composed, "request_records": []any{member["id"]},
 	})
 	records := append(append([]artifact.Record{}, payer.steps...), ownHalf)
-	if citing != nil {
-		if c := citing(theirHalf, provider); c != nil {
+	if opts.citing != nil {
+		if c := opts.citing(theirHalf, provider); c != nil {
 			records = append(records, *c)
 		}
 	}
@@ -250,11 +275,6 @@ func sealSynthetic(t *testing.T, key ed25519.PrivateKey, actionID string, payloa
 	return record
 }
 
-func jsonNumber(v any) string {
-	raw, _ := json.Marshal(v)
-	return string(raw)
-}
-
 // The Mesh receipt (D4), from the synthetic composition, in Chrome at 390px:
 // both halves name the same exchange by the client's nonce and request, so
 // it is stamped by both; a placeholder nonce, or another nonce over the same
@@ -267,13 +287,13 @@ func TestPresentationMeshReceiptWithTheirHalf(t *testing.T) {
 	chrome := startHeadlessChrome(t, binary)
 	payer := newMeshPayer(t)
 	request := cli.BytesDigest([]byte("the request body"))
-	read := func(t *testing.T, own, theirs meshHalf, citing ...func(artifact.Record, string) *artifact.Record) (string, string, []string, string) {
+	read := func(t *testing.T, own, theirs meshHalf, opts ...meshOptions) (string, string, []string, string) {
 		t.Helper()
-		var cite func(artifact.Record, string) *artifact.Record
-		if len(citing) > 0 {
-			cite = citing[0]
+		var o meshOptions
+		if len(opts) > 0 {
+			o = opts[0]
 		}
-		b := meshComposition(t, payer, own, theirs, cite)
+		b := meshComposition(t, payer, own, theirs, o)
 		page, err := composedPage(b, nil, dealVerifyCommand("page.html"), cli.BuiltinWording())
 		require.NoError(t, err)
 		path := filepath.Join(t.TempDir(), "page.html")
@@ -309,10 +329,10 @@ func TestPresentationMeshReceiptWithTheirHalf(t *testing.T) {
 	same := meshHalf{nonce: "client-nonce-1", source: "client_supplied", requestDigest: request}
 	at := time.Date(2026, 10, 9, 16, 15, 0, 0, time.UTC)
 	t.Run("a pushed half the payer accepted under their key", func(t *testing.T) {
-		banner, their, _, _ := read(t, same, same, func(h artifact.Record, provider string) *artifact.Record {
+		banner, their, _, _ := read(t, same, same, meshOptions{citing: func(h artifact.Record, provider string) *artifact.Record {
 			c := meshCitingRecord(t, payer.key, h.CapsuleID, provider, false, at)
 			return &c
-		})
+		}})
 		assert.Contains(t, banner, "Stamped by both sides")
 		assert.Equal(t, "verified", their)
 	})
@@ -327,12 +347,17 @@ func TestPresentationMeshReceiptWithTheirHalf(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			banner, their, stamps, _ := read(t, same, same, cite)
+			banner, their, stamps, _ := read(t, same, same, meshOptions{citing: cite})
 			assert.Contains(t, banner, "Your receipt only")
 			assert.Equal(t, "failed", their)
 			assert.Contains(t, stamps[1], "failed | —Each side's record is stamped into its own book")
 		})
 	}
+	t.Run("a response in neither form", func(t *testing.T) {
+		banner, their, _, _ := read(t, same, same, meshOptions{otherForm: true})
+		assert.Contains(t, banner, "Your receipt only")
+		assert.Equal(t, "failed", their)
+	})
 	for name, theirs := range map[string]meshHalf{
 		"a placeholder nonce":            {nonce: "plugin_generated", source: "plugin_generated_fallback", requestDigest: request},
 		"the host-served placeholder":    {nonce: "host-served-no-nonce", source: "host_served_observed", requestDigest: request},

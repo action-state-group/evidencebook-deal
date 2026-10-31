@@ -238,10 +238,24 @@ Their `artifact` member verifies when:
 - **V3.** The member carries its `response`, and the core reports it bound: digest `reproduced`,
   no `response_request_digest_mismatch` or `response_artifact_digest_mismatch` finding, and
   `responseSignature` not `invalid`. Beyond the core, the page checks that the response's
-  `anchor` is the member bundle's checkpoint (`root:mmr_size`), as `verifyDealCopy` does; a
-  member that fails only this gets the failed box. The response's own signature is a deployment signature that
-  this verifier reports `signature_unverified`. The page says so on the stamp and does not count
-  it as checked. `deal compose` checked that signature when it recorded the answer.
+  anchor is the member bundle's checkpoint; a member that fails only this gets the failed box.
+  The response comes in one of two forms, told apart by its `anchor`:
+  - **The deal wire's response** (`deal_wire.go`, an `x-deal-v0` copy): `anchor` is the string
+    `root:mmr_size` of the member bundle's checkpoint, as `verifyDealCopy` checks it.
+  - **An evidence-interop envelope** (interop profile v0 or v1 §6.2, a Mesh half, D4): `profile`
+    is `evidence-interop/0` or `evidence-interop/1`, `anchor` is `{digest, freshness?}`, and
+    `artifact_digest` equals the member digest, so the envelope's artifact octets are the JCS
+    of the bundle with no countersignatures (`BundleDigest`). `anchor.digest` is the SHA-256
+    over the octets of the member bundle's checkpoint COSE, in the profile's one
+    `cll-checkpoint` form (§6.2.1). The page does not compute it: the module never hashes, and
+    reads only the verified context. That binding, like the envelope's signature, is checked by
+    `capsulectl verify`, and the page holds the envelope only to its profile. The deal wire's
+    string anchor is no stronger on the page, since its signature is not checked there either.
+
+  The response's own signature is a deployment signature that this verifier reports
+  `signature_unverified`. The page says so on the stamp and does not count it as checked.
+  `deal compose` checked that signature when it recorded the answer; for an interop envelope the
+  plugin checked it when it recorded the ask's outcome.
 - **V4.** It is about this deal:
   - For an `x-deal-v0` copy: its root carries the composition's deal id, the same id your half
     carries. When a member of yours is also in the block, the core's join between the two
@@ -282,13 +296,18 @@ reads; a composition missing one is refused (V0) or fails the member (V1-V4).
 - **The provider's member** comes only from an ask (`ask_book.rs`). Its `request_digest` is the
   ask's `evidence_request` digest, and its outcome is that ask's recorded outcome:
   - `artifact`: the provider's evidence bundle, whose root is its own `x-mesh-poc-v1` half,
-    proven under its signed checkpoint, with the signed `evidence_response` as `response`, minus
-    the artifact bytes;
+    proven under its signed checkpoint and interval-complete. Its `response` is the signed
+    evidence-interop envelope the provider answered with, as received, minus `artifact` (V3's
+    second form). That needs an answer form the plugin does not have yet: one that serves this
+    bundle, its artifact octets the JCS of the bundle (Mesh-LLM/capsules-plugin#196, gap G1);
+    no answer form today is an Evidence Bundle;
   - `refusal`: the signed refusal;
   - `absence`: the payer's `recorded_absence`, with its window.
 
   A half received only by push has no Evidence Request, so it is not a member. To put a pushed
-  half on the receipt, the payer asks for it.
+  half on the receipt, the payer asks for it. The payer keeps each reply's bytes, with their
+  digest sealed in its `evidence_response` record, so a member can be rebuilt from its record
+  (gap G2); today the reply is dropped.
 - **Observers.** An observer's `id` is the node's raw 64-hex Ed25519 key (its `key_id`), its
   `custody_domain` that node's checkpoint key, its role `party`. An absence's observer is the
   payer.
@@ -413,7 +432,12 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
   is "Stamped by both sides · not fully checked" at best.
 - **The core page builder repeats a shared script.** `capsulectl presentation build` puts one
   module slot per declared presentation, so this plugin's two manifests would inline the one
-  script twice. The fix is the coordinator's call: a core change, or one manifest.
+  script twice. capsule-cli dedups the slots by script digest (coordinator's decision, rc27).
+- **`capsulectl verify` reads one response form.** It checks a carried response's signature
+  only in the deal wire's form (`ResponseSignatureProfile`, capsule-cli `cli/composed.go`); an
+  interop envelope, with `sig` and no `key_id`, reads `invalid`, so a Mesh composition would be
+  INVALID until capsule-cli also checks the interop envelope: its signature under `responder`,
+  and that `anchor.digest` is the digest of the member bundle's checkpoint.
 
 ## Tests
 
@@ -438,6 +462,8 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
   - `deal compose` with a member recorded as `artifact_failed_verification` (refused);
   - their member whose checkpoint is not its response's `anchor` (failed box);
   - a Mesh composition whose payer half is not cited by its report (refused);
+  - a Mesh member whose response is neither form (failed box); the interop envelope's anchor
+    digest is capsule-cli's test;
   - a containing bundle failing each V0 check (refused);
   - a keep copy failing each D2 check in turn: not verifying, audience not `keep`, another
     root key, another deal id (refused).

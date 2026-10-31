@@ -338,6 +338,18 @@ const dealExchangeNonce = (record) => {
 };
 const dealRequestDigest = (record) => (record && record.effect && typeof record.effect.request_digest === "string" ? record.effect.request_digest : undefined);
 
+// Whether a carried response names the member bundle's checkpoint as its
+// anchor (V3). The deal wire's response names it `root:mmr_size`. An
+// evidence-interop envelope names it by the digest of the checkpoint's
+// octets, which this module does not compute (it never hashes): that
+// binding, like the envelope's signature, is capsulectl verify's, and the
+// page only holds the envelope to its profile.
+const dealInteropProfiles = ["evidence-interop/0", "evidence-interop/1"];
+const dealAnchorIsCheckpoint = (response, cp) => {
+  if (typeof response.anchor === "string") return response.anchor === `${cp.root}:${cp.mmr_size}`;
+  return dealInteropProfiles.includes(response.profile) && !!response.anchor && typeof response.anchor.digest === "string";
+};
+
 // One of their artifact members, checked V1 to V4. It returns the member's
 // state and, for the box, what its sealed record says.
 // The payer's citing record for a received half (a Mesh half that was also
@@ -359,7 +371,7 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
   // anchored under that observer's custody domain.
   if (!root || (await dealVerifiedKey(root)) !== member.observer || cp.key_id !== member.custody) return failed("V2");
   // V3 beyond the core: the response answered with this very checkpoint.
-  if (!member.response || member.response.anchor !== `${cp.root}:${cp.mmr_size}`) return failed("V3");
+  if (!member.response || !dealAnchorIsCheckpoint(member.response, cp)) return failed("V3");
   const at = cp.timestamp;
   if (mesh) {
     // V4 for Mesh: the same exchange as the payer's own half.
