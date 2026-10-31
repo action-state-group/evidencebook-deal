@@ -286,13 +286,13 @@ type standardHistoryCard struct {
 // errNoTick is a card with no checkpoint to be as of.
 var errNoTick = errors.New("no finished cadence tick")
 
-// standardHistory derives the card. The anchor is the profile's cadence
+// standardHistory derives the card as of tick n, or the newest finished tick when n is 0. The anchor is the profile's cadence
 // checkpoint, never one deal book's: it commits every book's checkpoint
 // and is the one a witness sees. A deal's records, and the Results on its
 // results book, are read only up to the extent that anchor commits for
 // their book, so the card is as of the anchor and the same whenever it is
 // derived (x-deal-v0 PROFILE.md §11).
-func (s *dealSession) standardHistory(ctx context.Context) (standardHistoryCard, error) {
+func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standardHistoryCard, error) {
 	settings, ok, err := readSHSettings(s.p)
 	if err != nil {
 		return standardHistoryCard{}, err
@@ -308,7 +308,7 @@ func (s *dealSession) standardHistory(ctx context.Context) (standardHistoryCard,
 	if err != nil {
 		return standardHistoryCard{}, err
 	}
-	anchor, err := cadence.StandardHistoryAnchor(ctx, 0)
+	anchor, err := cadence.StandardHistoryAnchor(ctx, tick)
 	if errors.Is(err, evidencebook.ErrNotFound) {
 		return standardHistoryCard{}, fmt.Errorf("%w (run `deal tick` first)", errNoTick)
 	}
@@ -412,7 +412,7 @@ func (s *dealSession) standardHistoryBundle(ctx context.Context, shared bool) (_
 	if s.p.Checkpoint.Signing == (cli.Secret{}) {
 		return nil, cli.InputError("a History card needs the profile's checkpoint key (see `deal init`)")
 	}
-	h, err := s.standardHistory(ctx)
+	h, err := s.standardHistory(ctx, 0)
 	if err != nil {
 		return nil, err
 	}
