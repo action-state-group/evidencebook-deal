@@ -370,21 +370,26 @@ func declaredRules(r *dealRules) []string {
 	return ids
 }
 
-// ruleCauses are the failing rules of an evaluated check, each in the words
-// the checker gave (its reason, else its id), in the order it reported them.
+// ruleCauses are what flagged an evaluated check, each in the words the
+// checker gave (its reason, else its id), in the order it reported them: the
+// failing rules, and the rules it could not evaluate, which also move a
+// verdict that is not an allow (rulesDifferences) and are said as such.
 // Declared rules are never among them: they take no part in the verdict.
 func ruleCauses(r *dealRules) []string {
-	if r == nil || r.Status != "evaluated" {
+	if r == nil || r.Status != "evaluated" || r.Verdict == "allow" {
 		return nil
 	}
 	var causes []string
 	for _, f := range r.Findings {
-		if isDeclaredRule(f) || f.Verdict != "fail" {
+		if isDeclaredRule(f) || f.Verdict != "fail" && f.Verdict != "not_evaluable" {
 			continue
 		}
 		cause := strings.TrimSpace(f.Reason)
 		if cause == "" {
 			cause = f.ID
+		}
+		if f.Verdict == "not_evaluable" {
+			cause += " (could not be checked)"
 		}
 		causes = append(causes, cause)
 	}

@@ -2436,7 +2436,11 @@ func buildDealReport(events []sealedEvent) dealReport {
 				who = append(who, "the agent picked, not you: "+attributeText(picked))
 			}
 			if len(who) > 0 {
-				text += " (" + strings.Join(who, "; ") + ")"
+				// An adjudicator needs who chose what; it is not the user's
+				// rules policy, which only the reasons above are.
+				choices := " (" + strings.Join(who, "; ") + ")"
+				text += choices
+				adjudicator += choices
 			}
 			r.Did = append(r.Did, dealReportItem{Kind: "check", Text: text, Steps: []string{e.Check.Snapshot, se.CapsuleID}, Shared: shared, Adjudicator: adjudicator, At: e.At})
 			var asked []string
