@@ -119,15 +119,21 @@ The module renders only a **deal composition**, and refuses the page unless all 
   carried member's own verdict is VALID, since `verify --bundle` counts each member's verdict in
   the file's (capsule-cli `cli/verify_bundle.go` ~239-245). The only findings tolerated are the
   members' `refusalSignature` and `responseSignature` being `signature_unverified`, which the
-  core reports whenever a refusal or response is carried (`ts/src/composed.ts` ~730). The page
-  checks this itself, because a viewer opening the file does not pass it through `PageGate`.
-  `deal compose --html` already refuses such a file through `PageGate`
-  (`deal_compose_page.go` 103).
+  core reports whenever a refusal or response is carried (`ts/src/composed.ts` ~730).
+  `deal compose --html` refuses any other file through `PageGate` (`deal_compose_page.go` 103).
+  A viewer opening the file does not pass it through `PageGate`, and the page cannot recompute
+  the whole verdict: parts of it (the report entries, sale and history entries, the witness
+  directory, `cli/verify_bundle.go` ~415-480) exist only in capsule-cli. So the page checks what
+  it can: the core's composed result (status not `fail`, no member claim `fail`, no digest
+  `mismatch`, no signature `invalid`, no response binding finding), V1 on each of their
+  artifacts, and the #83 sealed or standalone report check on any of their report text it draws.
+  The rest of the verdict is `capsulectl verify`'s alone, and the page's "how to check" line
+  names that command.
 
 So a member whose own bundle fails, whose response does not bind, or whose refusal signature is
 `invalid` makes the file INVALID, and no page is drawn: `capsulectl verify` names the member. ◇
 Sherlock2: C2's "present but does not verify" then has two readings. A half the core verifies
-but the page does not (V1's stricter membership, V2, V4) is drawn as **your receipt only** with
+but the page does not (V1's stricter membership, V2, V3's anchor, V4) is drawn as **your receipt only** with
 the failed box. A half the core itself fails gives no receipt page at all, as every INVALID file
 does today. The alternative, a page for an INVALID file, would need capsule-cli's verdict to
 change first.
@@ -165,15 +171,17 @@ Rejected:
 - **Their members** are every `artifact` or `refusal` member whose observer is not the composer,
   and every `absence` member (whose observer is always the composer). A composition of one deal
   has at most one other party, so more than one non-composer observer is refused.
-- **They are not you.** Their observer, its declared custody domain, and the `key_id` of their
-  artifact's root must each differ from the composer's key and checkpoint key. If any is equal,
+- **They are not you.** For each of their `artifact` and `refusal` members (an absence's
+  observer is you by definition), their observer and its declared custody domain, and for an
+  artifact also the `key_id` of its root, must each differ from the composer's key and checkpoint key. If any is equal,
   their member is your own record under another label: the page is refused. This is the check the
   core reports as `redundant` between two members, applied between their member and you.
 - **What "their key" proves.** Nothing in the records ties their observer key to the
   counterparty in the world: the composer declared it. The page says whose key it is only as
   "their key" with its first 16 hex digits in the fold-out, so a reader who knows the
-  counterparty's key can compare. For a Mesh half, the payer's citing record ties it further
-  (D4). ◇ Sherlock2: whether "stamped by both" may rest on a half signed under a declared key that
+  counterparty's key can compare. For a Mesh half that was also pushed, the payer's citing record
+  is checked against it (D4); an ask-only half has no citing record, and its absence proves
+  nothing. ◇ Sherlock2: whether "stamped by both" may rest on a half signed under a declared key that
   differs from yours, with this fold-out line, is the what question this note asks.
 
 ### D3. The three cases
@@ -183,7 +191,7 @@ Each of their members has a state:
 | Their member | Checked by the page | State | Their side box |
 |---|---|---|---|
 | `artifact`, V1-V4 below all pass | yes | verified | amber, "Their side · in their book · as received" |
-| `artifact`, V1, V2 or V4 fails (V3 failing makes the file INVALID: V0) | the failing check | failed | grey dashed; their record is in the file but did not check: "failed" on that stamp, never a line that reads like absence (S4) |
+| `artifact`, V1, V2, V3's anchor check or V4 fails (the core's V3 checks failing make the file INVALID: V0) | the failing check | failed | grey dashed; their record is in the file but did not check: "failed" on that stamp, never a line that reads like absence (S4) |
 | `refusal`, `refusalSignature` `verified` | the refusal's signature | refused | grey dashed; "They answered that they would not share their record, on DATE." (S2) |
 | `refusal`, `refusalSignature` `signature_unverified` | the refusal's presence | refused, unchecked | grey dashed; "A refusal in their name came back on DATE; its signature was not checked here." (S2) |
 | `absence` | the absence member | absent | grey dashed; "No record. Your agent asked and nothing came back by DATE; that is written down too." |
@@ -217,12 +225,20 @@ Their `artifact` member verifies when:
   their book. For an `x-deal-v0` copy the observer is the key the response was signed with
   (`deal_evidence.go` 1039), and nothing checks today that the copy's root was sealed under that
   same key. `deal request --response` gains that check in `verifyDealCopy`: a copy whose root
-  `key_id` is not the response's signer is recorded as `artifact_failed_verification`. A
-  responder that rotated its key between sealing its deal and answering gets the failed box,
-  which is the true state: the page cannot tie the two keys.
+  `key_id` is not the response's signer is recorded as `artifact_failed_verification`.
+- **What `deal request` recorded.** `verifyDealCopy` records a genuinely signed copy as
+  `artifact_failed_verification` for reasons the composed block does not carry: a wrong anchor,
+  not the pinned checkpoint, too little coverage or freshness, and now another root key. The page
+  cannot see that judgment, and it cannot recheck coverage, since the request is not carried.
+  So `deal compose` refuses a member whose recorded outcome is `artifact_failed_verification`,
+  naming it and the recorded reason: no file is written, as for an INVALID file (V0), rather than
+  a composition that draws as verified or one that leaves the half out and reads as no record.
+  A responder that rotated its key between sealing its deal and answering is refused this way.
 - **V3.** The member carries its `response`, and the core reports it bound: digest `reproduced`,
   no `response_request_digest_mismatch` or `response_artifact_digest_mismatch` finding, and
-  `responseSignature` not `invalid`. The response's own signature is a deployment signature that
+  `responseSignature` not `invalid`. Beyond the core, the page checks that the response's
+  `anchor` is the member bundle's checkpoint (`root:mmr_size`), as `verifyDealCopy` does; a
+  member that fails only this gets the failed box. The response's own signature is a deployment signature that
   this verifier reports `signature_unverified`. The page says so on the stamp and does not count
   it as checked. `deal compose` checked that signature when it recorded the answer.
 - **V4.** It is about this deal:
@@ -277,14 +293,19 @@ reads; a composition missing one is refused (V0) or fails the member (V1-V4).
   payer.
 - **Joins:** none are needed. The payer's half is not a member, so there is no pair to join.
 - **V4 for Mesh.** The page derives it from the two halves' sealed fields:
-  - the provider's root and the payer's cited exchange half carry the same `client_nonce`, which
-    is neither empty nor `host-served-no-nonce`;
+  - the provider's root and the payer's cited exchange half carry the same `client_nonce`, and
+    each half's `client_nonce_source` is `client_supplied` or `host_forwarded_nonce`. The other
+    sources carry a fixed placeholder that names no exchange: `host-served-no-nonce`
+    (`host_served_observed`) and `plugin_generated` (`plugin_generated_fallback`,
+    `capsule_emit.rs` ~777-781);
   - their `/effect/request_digest` values are equal;
   - the payer's sealed report cites the payer's exchange half in `did[].steps`.
 
   The request digest alone is not enough: the same prompt sent twice gives the same digest. The
   per-node `exchange_id` is not used.
-- **The citing record**, when the containing bundle carries one whose
+- **The citing record.** The plugin seals one only for a pushed half (`record_push_bridge.rs`,
+  `evidence_key_acceptance.rs`; `ask_book.rs` seals none), so it is present only when the same
+  half was also pushed, and leaving it out proves nothing. When the containing bundle carries one whose
   `received_half.cited_capsule_id` is the provider's root: its `sender_key_id` must equal the
   provider's observer, and its `same_controller_as_receiver` must not be `true` (one operator on
   both sides). Otherwise V2 fails.
@@ -394,8 +415,11 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
   - two non-composer observers (refused);
   - their observer, custody domain or root key equal to yours (refused);
   - a Mesh citing record whose `sender_key_id` differs, or with `same_controller_as_receiver`;
-  - a Mesh half with the placeholder nonce, and two halves sharing a request digest but not a
-    nonce;
+  - a Mesh half with each placeholder nonce source (`host_served_observed`,
+    `plugin_generated_fallback`), and two halves sharing a request digest but not a nonce;
+  - a composition with only an absence member of theirs, which must render (case 4);
+  - `deal compose` with a member recorded as `artifact_failed_verification` (refused);
+  - their member whose checkpoint is not its response's `anchor` (failed box);
   - a Mesh composition whose payer half is not cited by its report (refused);
   - a containing bundle failing each V0 check (refused);
   - a keep copy failing each D2 check in turn: not verifying, audience not `keep`, another
