@@ -47,13 +47,24 @@ func TestNoCardWithoutADeclarationOrATick(t *testing.T) {
 	assert.Contains(t, err.Error(), "deal tick")
 }
 
-// The answer default follows the holder kind, and a flag overrides it.
+// The answer default follows the holder kind, a flag overrides it, and
+// declaring again confirms: it never turns answering back on, and the kind
+// is set once.
 func TestTheAnswerDefaultFollowsTheHolderKind(t *testing.T) {
 	dealFixture(t)
 	node := dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	assert.Equal(t, true, node["answers"])
 	assert.Contains(t, node["notice"], "--no-answer")
 	assert.Equal(t, false, dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--no-answer")["answers"])
+	assert.Equal(t, false, dealRun(t, "standard-history", "declare", "--holder-kind", "node")["answers"], "declaring again keeps the opt-out")
+	assert.Equal(t, true, dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--answer")["answers"])
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "declare", "--holder-kind", "person")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "set once")
+}
+
+func TestAPersonDoesNotAnswerByDefault(t *testing.T) {
+	dealFixture(t)
 	person := dealRun(t, "standard-history", "declare", "--holder-kind", "person")
 	assert.Equal(t, false, person["answers"])
 	assert.NotContains(t, person, "notice")
@@ -82,10 +93,9 @@ func TestTheCardCountsTheDealsUnderTheAnchor(t *testing.T) {
 	dealFixture(t)
 	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
 	id := retailDeal(t)
-	_ = id
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	*now = now.Add(2 * time.Minute)
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
-	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 
 	dir := t.TempDir()
 	own := filepath.Join(dir, "own.json")
@@ -133,6 +143,9 @@ func respondCard(t *testing.T, request string) evidencerequest.Reply {
 	raw, err := os.ReadFile(out)
 	require.NoError(t, err)
 	reply, err := evidencerequest.ParseReply(evidencerequest.Message{Octets: raw, MediaType: evidencerequest.MediaTypeJSON})
+	if err != nil {
+		t.Logf("reply: %s", raw)
+	}
 	require.NoError(t, err)
 	return reply
 }
@@ -153,9 +166,9 @@ func TestANodeAnswersTheCard(t *testing.T) {
 	dealFixture(t)
 	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
 	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	*now = now.Add(2 * time.Minute)
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
-	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 
 	reply := respondCard(t, cardRequest(t, fullHistory))
 	require.NotNil(t, reply.Envelope, "an envelope, not a refusal")
@@ -176,34 +189,171 @@ func TestANodeAnswersTheCard(t *testing.T) {
 // Who is answered is the holder's policy, and what is not a choice is not
 // said as one: a person's default and a node's opt-out decline, an
 // undeclared holder does not serve the derivation, no tick is no anchor, and a
-// subject form the derivation is not registered for has no such subject.
+// subject form the derivation is not registered for has no such subject,
+// said only to a holder that answers.
 func TestTheCardRefusalsAreTheRightTokens(t *testing.T) {
 	dealFixture(t)
 	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
 	retailDeal(t)
 	request := cardRequest(t, fullHistory)
+	wrong := cardRequest(t, evidencerequest.Subject{Kind: evidencerequest.SubjectCheckpoints})
 
 	assert.Equal(t, evidencebook.ReasonDerivationUnsupported, refusedWith(t, respondCard(t, request)), "undeclared")
 
-	dealRun(t, "standard-history", "declare", "--holder-kind", "person")
-	assert.Equal(t, evidencebook.ReasonPolicyDeclined, refusedWith(t, respondCard(t, request)), "a person answers only when set to")
-
 	dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--no-answer")
 	assert.Equal(t, evidencebook.ReasonPolicyDeclined, refusedWith(t, respondCard(t, request)), "a node that opted out")
+	assert.Equal(t, evidencebook.ReasonPolicyDeclined, refusedWith(t, respondCard(t, wrong)), "a holder that declines does not say which subjects it serves")
 
-	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--answer")
 	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, request)), "no finished tick yet")
 
 	*now = now.Add(2 * time.Minute)
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 	require.NotNil(t, respondCard(t, request).Envelope)
-
-	wrong := cardRequest(t, evidencerequest.Subject{Kind: evidencerequest.SubjectCheckpoints})
 	assert.Equal(t, evidencebook.ReasonNoSuchSubject, refusedWith(t, respondCard(t, wrong)))
+}
 
-	// A person who turned answering on is answered.
+func TestAPersonWhoTurnedAnsweringOnIsAnswered(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "person")
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	request := cardRequest(t, fullHistory)
+	assert.Equal(t, evidencebook.ReasonPolicyDeclined, refusedWith(t, respondCard(t, request)))
 	dealRun(t, "standard-history", "declare", "--holder-kind", "person", "--answer")
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, request)), "the change is after that checkpoint")
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 	require.NotNil(t, respondCard(t, request).Envelope)
+}
+
+// The card is as of its anchor: a deal agreed after the tick is not on it, a
+// pin to the older anchor answers that anchor's card whatever came since, and
+// a change of policy needs a later tick before it is in a card.
+func TestTheCardIsAsOfItsAnchor(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	retailDeal(t)
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	first := respondCard(t, cardRequest(t, fullHistory))
+	require.NotNil(t, first.Envelope)
+	pin := first.Envelope.Anchor.Digest
+
+	*now = now.Add(3 * time.Hour)
+	retailDeal(t)
+	own := filepath.Join(t.TempDir(), "own.json")
+	dealRun(t, "standard-history", "card", "--out", own)
+	assert.Len(t, shBlock(t, readBundle(t, own))["deals"], 1, "a deal agreed after the tick is not on the card")
+
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	own2 := filepath.Join(t.TempDir(), "own2.json")
+	dealRun(t, "standard-history", "card", "--out", own2)
+	deals := shBlock(t, readBundle(t, own2))["deals"].([]any)
+	require.Len(t, deals, 2)
+	assert.Less(t, deals[0].(map[string]any)["deal"], deals[1].(map[string]any)["deal"], "in deal id order")
+
+	// A pin to the first anchor is answered with its own card: one deal.
+	pinned := pinRequest(t, pin)
+	reply := respondCard(t, pinned)
+	require.NotNil(t, reply.Envelope)
+	assert.Equal(t, pin, reply.Envelope.Anchor.Digest)
+	var card map[string]any
+	require.NoError(t, json.Unmarshal(reply.Envelope.Artifact, &card))
+	assert.Equal(t, float64(1), card["in_window"].(map[string]any)["of"])
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, pinRequest(t, "00"+pin[2:]))), "a pin that names no anchor")
+
+	// A policy change is in no card until a tick follows it.
+	*now = now.Add(3 * time.Hour)
+	dealRun(t, "standard-history", "policy", "--months", "3")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "x.json"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "deal tick")
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, pinRequest(t, pin))))
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	later := respondCard(t, cardRequest(t, fullHistory))
+	require.NotNil(t, later.Envelope)
+	require.NoError(t, json.Unmarshal(later.Envelope.Artifact, &card))
+	assert.Equal(t, map[string]any{"months": float64(3)}, card["window"])
+}
+
+func pinRequest(t *testing.T, pin string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "pin.json")
+	body := `{"subject":{"full_history":null},"coverage":{"expected_pin":"` + pin + `"},"derivation":"standard_history/1","profile":"evidence-interop/0"}`
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	return path
+}
+
+// Coverage of the request: a time floor is met by the anchor's own time and
+// the envelope states it; both members, or none, is the request reader's
+// refusal in an interop reply; a deadline already past is deadline_unmet.
+func TestTheCardCoverageAndDeadline(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	retailDeal(t)
+	*now = now.Add(3 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	base := respondCard(t, cardRequest(t, fullHistory))
+	require.NotNil(t, base.Envelope)
+	pin := base.Envelope.Anchor.Digest
+
+	write := func(body string) string {
+		path := filepath.Join(t.TempDir(), "req.json")
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+		return path
+	}
+	head := `{"subject":{"full_history":null},"derivation":"standard_history/1","profile":"evidence-interop/0",`
+	shared := filepath.Join(t.TempDir(), "shared.json")
+	dealRun(t, "standard-history", "card", "--out", shared, "--shared")
+	anchorTime := shBlock(t, readBundle(t, shared))["as_of"].(map[string]any)["anchor_time"].(string)
+
+	met := respondCard(t, write(head+`"coverage":{"min_freshness":"`+anchorTime+`"}}`))
+	require.NotNil(t, met.Envelope)
+	assert.Equal(t, anchorTime, met.Envelope.Anchor.FreshnessTime)
+	future := respondCard(t, write(head+`"coverage":{"min_freshness":"2030-01-01T00:00:00Z"}}`))
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, future))
+
+	both := respondCard(t, write(head+`"coverage":{"expected_pin":"`+pin+`","min_freshness":1}}`))
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, both), "both members, in an interop reply")
+	none := respondCard(t, write(head+`"coverage":{}}`))
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, none))
+
+	bad := respondCard(t, write(head+`"coverage":{"min_freshness":"not a time"}}`))
+	assert.Equal(t, evidencebook.ReasonRequestMalformed, refusedWith(t, bad), "a malformed request is refused in an interop reply too")
+
+	late := respondCard(t, write(head+`"deadline":"2020-01-01T00:00:00Z","coverage":{"expected_pin":"`+pin+`"}}`))
+	assert.Equal(t, evidencebook.ReasonDeadlineUnmet, refusedWith(t, late))
+}
+
+// The settings are the holder's: a file another user can write is not
+// trusted, a malformed policy is refused with what it must be, and the error
+// names the fix.
+func TestTheSettingsFilesAreProtectedAndChecked(t *testing.T) {
+	dir := dealFixture(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	policy := filepath.Join(dir, shPolicyFile)
+	require.NoError(t, os.WriteFile(policy, []byte(`{"months":0}`), 0o600))
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "policy")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive whole number")
+	require.NoError(t, os.WriteFile(policy, []byte(`{"months":3,"all":true}`), 0o600))
+	_, err = invoke(t, "", "--profile", "deal", "deal", "standard-history", "policy")
+	require.Error(t, err)
+
+	require.NoError(t, os.WriteFile(policy, []byte(`{"months":3}`), 0o666))
+	require.NoError(t, os.Chmod(policy, 0o666))
+	_, err = invoke(t, "", "--profile", "deal", "deal", "standard-history", "policy")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chmod 600")
+	require.NoError(t, os.Chmod(policy, 0o600))
+	assert.Equal(t, map[string]any{"months": float64(3)}, dealRun(t, "standard-history", "policy")["window"])
 }
 
 // standardHistoryDir holds the golden bundles of a real run: a node's own
@@ -220,9 +370,9 @@ func TestTheStandardHistoryGoldens(t *testing.T) {
 		dealFixture(t)
 		now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
 		retailDeal(t)
-		*now = now.Add(2 * time.Minute)
-		require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 		dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+		*now = now.Add(3 * time.Hour)
+		require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 		require.NoError(t, os.MkdirAll(filepath.Join(standardHistoryDir, "verify"), 0o755))
 		for name, extra := range map[string][]string{"node-own": nil, "node-shared": {"--shared"}} {
 			path := filepath.Join(standardHistoryDir, name+".bundle.json")

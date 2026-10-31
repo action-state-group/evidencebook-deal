@@ -624,8 +624,16 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		answered["outcome"], answered["reason"] = evidencebook.OutcomeRefusal, reason
 		return s.writeAnswer(c, dealID, answered, dealResponse{Refusal: &refusal}, path)
 	}
-	if check := evidencerequest.ParseRequest(evidencerequest.Message{Octets: raw, MediaType: evidencerequest.MediaTypeJSON}); check.Reason == "" && check.Request.Derivation == evidencebook.DerivationStandardHistory {
-		return s.respondStandardHistory(c, check.Request, raw, requester, path, signer)
+	// A request that names the History card is answered in evidence-interop's
+	// own reply, whatever else is wrong with it: a malformed one is the request
+	// reader's request_malformed there, never a deal-local refusal.
+	var peek struct {
+		Derivation string `json:"derivation"`
+	}
+	if json.Unmarshal(raw, &peek) == nil && peek.Derivation == evidencebook.DerivationStandardHistory {
+		check := evidencerequest.ParseRequest(evidencerequest.Message{Octets: raw, MediaType: evidencerequest.MediaTypeJSON})
+		check.Request.Derivation = peek.Derivation
+		return s.respondStandardHistory(c, check, raw, requester, path, signer)
 	}
 	req, e := parseDealRequest(raw)
 	if e != nil || !dealSubject(req.Subject) {

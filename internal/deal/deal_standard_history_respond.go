@@ -28,8 +28,9 @@ import (
 // not a choice, so the card that cannot be built at the anchor is
 // coverage_unsatisfiable. The coverage is a cadence anchor: a tick's
 // checkpoint. None is issued here, since `deal tick` cuts them.
-func (s *dealSession) respondStandardHistory(c *cobra.Command, req evidencerequest.Request, raw []byte, requester, path string, signer evidencebook.Signer) error {
+func (s *dealSession) respondStandardHistory(c *cobra.Command, check evidencerequest.RequestCheck, raw []byte, requester, path string, signer evidencebook.Signer) error {
 	ctx := c.Context()
+	req := check.Request
 	digest := evidencerequest.Digest(raw)
 	now := cli.DealClock().UTC()
 	answered := map[string]interface{}{"request_digest": digest, "requester": requester, "subject_kind": string(req.Subject.Kind)}
@@ -46,6 +47,11 @@ func (s *dealSession) respondStandardHistory(c *cobra.Command, req evidencereque
 		answered["outcome"], answered["reason"] = evidencebook.OutcomeRefusal, reason
 		return s.writeAnswerBytes(c, "", answered, reply.Octets, path)
 	}
+	if check.Reason != "" {
+		// The request reader's own refusal (profile §6.1), in the interop
+		// reply every other answer here is.
+		return refuse(check.Reason)
+	}
 	if req.Deadline != "" {
 		deadline, ok := evidencerequest.ParseRequestTime(req.Deadline)
 		if !ok {
@@ -59,16 +65,17 @@ func (s *dealSession) respondStandardHistory(c *cobra.Command, req evidencereque
 	if err != nil {
 		return err
 	}
-	if !declared || req.Subject.Kind != evidencerequest.SubjectFullHistory {
-		// Another subject form is no form this derivation is registered for
-		// (ER §3.3), which the holder who serves it says as no_such_subject.
-		if declared {
-			return refuse(evidencebook.ReasonNoSuchSubject)
-		}
+	if !declared {
 		return refuse(evidencebook.ReasonDerivationUnsupported)
 	}
 	if !settings.answers() {
 		return refuse(evidencebook.ReasonPolicyDeclined)
+	}
+	if req.Subject.Kind != evidencerequest.SubjectFullHistory {
+		// Another subject form is no form this derivation is registered for
+		// (ER §3.3). It is said after who is answered, so a holder that
+		// declines does not say which forms it serves.
+		return refuse(evidencebook.ReasonNoSuchSubject)
 	}
 	cadence, _, err := s.cadenceOf(ctx)
 	if err != nil {
@@ -118,7 +125,7 @@ func (s *dealSession) respondStandardHistory(c *cobra.Command, req evidencereque
 		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 	}
 	h, err := s.standardHistory(ctx, tick.N)
-	if errors.Is(err, dealprofile.ErrUnpriced) || errors.Is(err, errNoTick) {
+	if errors.Is(err, dealprofile.ErrUnpriced) || errors.Is(err, errNoTick) || errors.Is(err, errStaleAnchor) || errors.Is(err, errLegacyDeal) {
 		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 	}
 	if err != nil {

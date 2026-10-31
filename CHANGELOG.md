@@ -3,8 +3,9 @@
 ## Unreleased
 
 - The History card (`standard_history/1`, evidencebook-deal#85, evidencebook#237):
-  `deal standard-history declare --holder-kind person|node` (declared once; with
-  no declaration there is no card), `policy [--months N | --all]` (its own file
+  `deal standard-history declare --holder-kind person|node` (declared once, and
+  declaring again never turns answering back on; with no declaration there is
+  no card), `policy [--months N | --all]` (its own file
   beside the deal store, default the last 12 months, never part of the share
   policy) and `card --out FILE [--shared]`, which seals the card as a Capsule
   and writes the bundle with the `x-standard-history/v0` block (policy and
@@ -18,7 +19,9 @@
   an undeclared one `derivation_unsupported`, and no finished tick, or a deal
   with no amount, `coverage_unsatisfiable`. `happened` reads `receipt_only` or
   `no_record` until the other side's half is verified (evidencebook-deal#86).
-  Requires evidencebook `v0.11.0`.
+  A card is as of a tick cut after the last change of declaration or policy:
+  run `deal tick` after a change. The settings files must be owner-protected
+  regular files. Requires evidencebook `v0.11.0`.
 
 - Requires capsule-viewer `v0.7.0` (the frames merged since 0.6.0:
   capsule-viewer#186, #187, #188, #189, #190, #192, #193). The presentation
