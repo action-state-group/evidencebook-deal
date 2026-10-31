@@ -328,7 +328,6 @@ const DEAL_VIEW_CSS = `#deal { --deal-warn: #9a3b00; --deal-ok: #1d6b35; --deal-
 #deal .deal-col { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 #deal .deal-box { border: 1px solid var(--aac-line); border-radius: 12px; padding: 12px 14px; }
 #deal .deal-banner { border: 1px solid var(--deal-theirs-line); background: var(--deal-theirs); border-radius: 12px; padding: 12px 14px; }
-#deal .deal-banner.deal-both { border-color: var(--deal-good-line); background: var(--deal-good); }
 #deal .deal-banner b { display: block; }
 #deal .deal-small { font-size: 0.8rem; color: var(--aac-muted); }
 #deal .deal-caps { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--aac-muted); }
@@ -351,10 +350,9 @@ const DEAL_VIEW_CSS = `#deal { --deal-warn: #9a3b00; --deal-ok: #1d6b35; --deal-
 #deal .deal-say b { color: var(--deal-ours-line); }
 `;
 
-// receiptStamps is the stamps ladder (9b, "The stamps"): one line per proof
-// this page can speak to, each in one of the five consumer words. A stamp the
+// The stamps ladder's five consumer words (9b, "The stamps"). A stamp the
 // page did not check says "not checked", never "passed"; one side missing is
-// "missing", never "failed".
+// "missing", never "failed"; "failed" is only a check that ran and did not hold.
 const dealStampWords = ["passed", "failed", "missing", "not checked", "unclear"];
 
 const dealViewRender = (model, regions) => {
@@ -484,17 +482,33 @@ const dealViewRender = (model, regions) => {
 
   // The verdict: said once, in the receipt's own words.
   const banner = el("div", undefined, "deal-banner");
-  banner.dataset.case = "single";
+  const stepsAll = report.steps || [];
+  const allMatched = stepsAll.length > 0 && stepsAll.every((st) => matched.has(st.capsule_id) || (shared && st.withheld && recordOk(st.capsule_id)));
+  const holds = allMatched && (askedChecked || shared);
+  banner.dataset.checked = holds ? "yes" : "no";
   if (shared) {
     const who = report.audience === "counterparty" ? "the other party" : "an adjudicator";
-    banner.append(el("b", "A shared copy · checked"), el("div", `Made for ${who}. Left out of this copy: ${(report.withheld || []).join(", ")}.`, "deal-small"));
+    banner.append(el("b", holds ? "A shared copy · checked" : "A shared copy · not fully checked"), el("div", `Made for ${who}. Left out of this copy: ${(report.withheld || []).join(", ")}.`, "deal-small"));
   } else {
     banner.append(
-      el("b", "Your copy only · checked"),
+      el("b", holds ? "Your copy only · checked" : "Your copy only · not fully checked"),
       el("div", "This file holds your side of the deal. The other side's record is not in it, so this page cannot say whether they agree.", "deal-small"),
     );
   }
   col.append(banner);
+  // What the deal's text rests on, said on the face of every copy: sealed with
+  // the page and checked unchanged, or (a bundle written before reports were
+  // sealed) read from the x-deal-v0 extension, which no record seals.
+  const rests = el(
+    "p",
+    sealed
+      ? "The words below were written by capsulectl when this page was made and sealed in this file; this page checked they have not changed since. They are capsulectl's summary of the steps, not the steps themselves."
+      : "The words below were written by capsulectl when this page was made, and this page does not check them. It checks the sealed records in this file, not those words." + (shared || !askedChecked ? "" : " Only the words you asked, marked ✓ under More on this deal, are checked against their sealed record."),
+    "deal-note",
+  );
+  if (sealed) rests.dataset.sealed = "x-deal-v0";
+  else rests.dataset.unchecked = "x-deal-v0";
+  col.append(rests);
 
   // The receipt: what was asked, in the person's words, then what was done.
   const card = el("div", undefined, "deal-card");
@@ -512,17 +526,17 @@ const dealViewRender = (model, regions) => {
   const did = report.did || [];
   if (did.length > 0) {
     const last = did[did.length - 1];
-    card.append(el("div", `Done: ${String(last.text).replace(/^Did: /, "")}`));
+    const lifeNow = report.lifecycle;
+    card.append(el("div", `${lifeNow && lifeNow.state === "open" ? "So far" : "Done"}: ${String(last && last.text).replace(/^Did: /, "")}`));
   } else {
     card.append(el("div", "Nothing done yet.", "deal-small"));
   }
   if (report.money && typeof report.money.text === "string") card.append(el("div", report.money.text));
-  card.append(el("div", shared ? "This is a shared copy. It shows only what the other party may see." : "This is your copy. It shows everything.", "deal-small"));
+  card.append(el("div", shared ? (report.audience === "counterparty" ? "This is a shared copy. It shows only what the other party may see." : "This is a shared copy. It shows only what an adjudicator may see.") : "This is your copy. It shows what your agent recorded.", "deal-small"));
   col.append(card);
 
-  // Your side, in your book: the errand's moves in order. A time is said when
-  // it changes: moves a minute apart read as one run. Each row says whether
-  // its sealed step verified.
+  // Your side, in your book: the errand's moves in order, a time on every row
+  // as the frames show. Each row says whether its sealed step verified.
   const ours = el("div", undefined, "deal-half deal-ours");
   ours.append(el("div", shared ? "The holder's side · in their book" : "Your side · in your book", "deal-caps"));
   const journey = Array.isArray(report.journey) ? report.journey.filter((m) => m && typeof m === "object") : [];
@@ -532,7 +546,7 @@ const dealViewRender = (model, regions) => {
     if (tail) line.append(el("span", ` · ${tail}`, "deal-small"));
     return line;
   };
-  const verified = (id) => matched.has(id) || (shared && byId.get(id) && byId.get(id).withheld && recordOk(id));
+  const verified = (id) => matched.has(id);
   if (!shared && journey.length === 0 && askedChecked && askedStep) ours.append(row(short(askedStep.at), "you asked for it", "your words, sealed"));
   const movers = { user: "You", agent: "Your agent", other: "The other side" };
   if (!shared && journey.length > 0) {
@@ -545,7 +559,10 @@ const dealViewRender = (model, regions) => {
       ours.append(r);
     });
   } else {
-    did.forEach((i) => ours.append(row(typeof i.at === "string" && i.at ? short(i.at) : "", i.text, "")));
+    did.forEach((i) => {
+      const ok = typeof i.self !== "string" || i.self === "" || verified(i.self);
+      ours.append(row(ok && typeof i.at === "string" && i.at ? short(i.at) : "", i.text, ok ? "" : "step not verified in this report"));
+    });
   }
   const life = report.lifecycle;
   if (life && typeof life.text === "string") ours.append(row("", lifecycleText(life), ""));
@@ -559,14 +576,22 @@ const dealViewRender = (model, regions) => {
 
   // The stamps: the proofs ladder in the five consumer words, closed until
   // opened. Only what this page checked, or says it did not.
-  const allMatched = (report.steps || []).length > 0 && (report.steps || []).every((s) => matched.has(s.capsule_id) || (shared && s.withheld && recordOk(s.capsule_id)));
   const countersign = page && page.countersign && typeof page.countersign.text === "string" ? page.countersign : undefined;
+  // [word, line, detail]: a word is "passed" only for a check this page ran.
   const stamps = [
-    [askedChecked || shared ? "passed" : "failed", shared ? "The words asked are withheld from this copy" : "Your words are sealed exactly as you said them, checked when this page was built"],
-    [allMatched ? "passed" : "failed", (shared ? "Each step's record is stamped into the holder's book and can't be changed after" : "Each step's record is stamped into your book and can't be changed after")],
-    [model.witnessed ? "not checked" : "missing", (shared ? "An outside witness saw the holder's book" : "An outside witness saw your book") + (model.witnessed ? ": this page can't check the witness's signature" : "")],
-    ["missing", shared ? "Nothing points back from the other side's book: it is not in this file" : "Nothing points back at you from the other side's book: it is not in this file"],
-    ["not checked", "\"It happened\" rests on what the agent reported: not checked by anyone else"],
+    shared
+      ? ["not checked", "The words asked are withheld from this copy", ""]
+      : askedChecked
+        ? ["passed", "Your words are sealed exactly as you said them", "checked when this page was built"]
+        : ["not checked", "Your words could not be checked against their sealed record", ""],
+    stepsAll.length === 0
+      ? ["not checked", "No step is listed in this copy", ""]
+      : allMatched
+        ? ["passed", shared ? "Each step's record is in the holder's book, and a change after would show" : "Each step's record is in your book, and a change after would show", ""]
+        : ["failed", "A step's record could not be found in this deal's log", "see More on this deal"],
+    [model.witnessed ? "not checked" : "missing", shared ? "An outside witness saw the holder's book" : "An outside witness saw your book", model.witnessed ? "this page can't check the witness's signature" : ""],
+    ["missing", "Nothing points back from the other side's book", "it is not in this file"],
+    ["not checked", "\"It happened\" rests on what the agent reported", "no one else has checked it"],
   ];
   const passed = stamps.filter((s) => s[0] === "passed").length;
   const stampBox = el("details", undefined, "deal-box deal-stamps");
@@ -574,10 +599,10 @@ const dealViewRender = (model, regions) => {
   const pill = el("span", `${passed} of ${stamps.length} passed`, "deal-pill");
   sum.append(pill);
   stampBox.append(sum, el("div", "What is under it:", "deal-small"));
-  stamps.forEach(([word, text]) => {
+  stamps.forEach(([word, text, detail]) => {
     const line = el("div", undefined, "deal-stamp");
     line.dataset.stamp = word;
-    line.append(el("b", word === "passed" ? "✓" : "—", "deal-mark " + (word === "passed" ? "deal-ok" : "deal-bad")), el("span", `${text}${word === "passed" ? "" : `: ${word}`}`));
+    line.append(el("b", word === "passed" ? "✓" : "—", "deal-mark " + (word === "passed" ? "deal-ok" : "deal-bad")), el("span", `${text} · ${word}${detail ? ` · ${detail}` : ""}`));
     stampBox.append(line);
   });
   if (countersign) stampBox.append(el("div", countersign.text, countersign.flag === true ? "deal-small deal-bad" : "deal-small"));
@@ -588,15 +613,16 @@ const dealViewRender = (model, regions) => {
   const proves = box("What this receipt proves", true);
   const provesLines = [];
   if (askedChecked && !shared) provesLines.push("The words you asked are sealed, exactly as said, and this page checked them against the record.");
-  provesLines.push(allMatched ? "Every step listed here is in this deal's log and unchanged since it was sealed." : "");
+  if (allMatched) provesLines.push("Every step listed here is in this deal's log and unchanged since it was sealed.");
   const authority = report.authority || [];
-  if (authority.length > 0 && authority.every((b) => b.covered)) provesLines.push("Every action the agent took is covered by an approval or a rule recorded for it.");
-  proves.append(bullets(provesLines.filter((t) => t !== ""), true));
+  if (sealed && authority.length > 0 && authority.every((b) => b.covered)) provesLines.push("Each action recorded here has an approval or a rule recorded for it.");
+  if (provesLines.length === 0) provesLines.push("Nothing on this page is vouched for beyond the stamps above.");
+  proves.append(bullets(provesLines, true));
   col.append(proves);
   const doesnt = box("What it doesn't", true);
   const doesntLines = [
     "That what the agent reported is true. It records what the agent reported.",
-    "Who made the records. It shows they were not changed after they were sealed.",
+    "Who made the records. It shows a change after they were sealed would show.",
     "That the merchant shipped, delivered or refunded anything.",
   ];
   if (typeof report.scope === "string" && report.scope) doesntLines.push(report.scope);
@@ -671,27 +697,6 @@ const dealViewRender = (model, regions) => {
 
   // What this receipt can prove and how to check it.
   const header = el("section", undefined, "deal-assurance");
-  if (sealed) {
-    const checked = el(
-      "p",
-      "The text on this page was written by capsulectl when the page was made and sealed as a record in this file: " +
-        "this page checked that it has not changed since. It is capsulectl's summary of the steps, not the steps themselves.",
-      "deal-note",
-    );
-    checked.dataset.sealed = "x-deal-v0";
-    header.append(checked);
-  } else {
-    const unchecked = el(
-      "p",
-      "The text on this page was written by capsulectl when the page was made, and this page does not check it: " +
-        "the summary lines, each step's line, the amounts and what was told. " +
-        "This page checks the sealed records in this file, not those words." +
-        (shared ? "" : " Only the words you asked, marked ✓, are checked against their sealed record."),
-      "deal-note",
-    );
-    unchecked.dataset.unchecked = "x-deal-v0";
-    header.append(unchecked);
-  }
   header.append(el("p", report.scope || "This receipt covers this one deal. It is not a record of everything the agent did.", "deal-scope"));
   // The countersign rung, as capsulectl checked it when it wrote this page
   // (a page cannot resolve a signer against a directory): "Not
@@ -882,7 +887,7 @@ const dealViewRender = (model, regions) => {
 };
 
 EvidenceGraph.registerPresentation({
-  manifest: {"spec_version": "aac.presentation-manifest/v0", "id": "capsulectl.deal-view/v0", "presentation_api": "aac.presentation-api/v0", "runtime_min": "0.1.0", "trust_class": "trusted-executable", "requires": {"bundle_kind": "evidence-bundle/v2", "extensions": {"required": ["x-deal-v0"]}}, "forbids": {"extensions": ["x-history-selection/v0"], "profiles": ["spec_version:report/v1", "result_version:evidence-result-v0", "spec_version:evaluation-summary/v1"]}, "audiences": ["*"], "formats": ["html"], "fallback": false, "priority": 1, "executable": {"carrier": "module-slot", "script_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "style_sha256": ["53f4d7eb3b14b04b10c5e8f2c812c7d4ed6d994fcda47f67939a63887cd2fb49"]}},
+  manifest: {"spec_version": "aac.presentation-manifest/v0", "id": "capsulectl.deal-view/v0", "presentation_api": "aac.presentation-api/v0", "runtime_min": "0.1.0", "trust_class": "trusted-executable", "requires": {"bundle_kind": "evidence-bundle/v2", "extensions": {"required": ["x-deal-v0"]}}, "forbids": {"extensions": ["x-history-selection/v0"], "profiles": ["spec_version:report/v1", "result_version:evidence-result-v0", "spec_version:evaluation-summary/v1"]}, "audiences": ["*"], "formats": ["html"], "fallback": false, "priority": 1, "executable": {"carrier": "module-slot", "script_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "style_sha256": ["04759c13ec65dd02645149cb7d009153712b8f8c31027fd73923df35e95f8279"]}},
   canRender: dealViewVerified,
   buildModel: dealViewModel,
   render: dealViewRender,

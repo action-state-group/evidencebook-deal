@@ -63,7 +63,12 @@ if (edit === "withhold") {
   const L0 = new Node("div");
   resolution.module.render(model, { L0 });
   const rows = L0.all((n) => n.dataset.journey !== undefined);
+  const banner = L0.all((n) => n.dataset.checked !== undefined)[0];
   process.stdout.write(JSON.stringify({
+    banner: banner ? banner.dataset.checked : "",
+    bannerText: banner ? banner.children[0].textContent : "",
+    stamps: L0.all((n) => n.dataset.stamp !== undefined).map((n) => n.dataset.stamp),
+    restsNote: L0.all((n) => n.dataset.sealed !== undefined || n.dataset.unchecked !== undefined).length,
     refusal: model.refusal || "",
     shown: rows.length > 0,
     labels: rows.map((n) => n.dataset.journey),
@@ -128,6 +133,33 @@ func TestTheDealPageShowsTheJourney(t *testing.T) {
 	withheld := renderJourney(t, id, false, "withhold")
 	require.Empty(t, withheld["refusal"])
 	assert.Equal(t, "You · Switched to eBay · step not verified in this report", withheld["rows"].([]any)[5], "and gives no time")
+}
+
+// The receipt's face says only what this page checked: the banner says
+// "checked" only when every step and the asked words were, a stamp is "passed"
+// only for a check that ran, a withheld or unreadable one is "not checked" or
+// "failed", and the note on what the words rest on is on the face.
+func TestTheReceiptFaceSaysOnlyWhatWasChecked(t *testing.T) {
+	dealFixture(t)
+	id, _, _ := fawnDeal(t)
+
+	own := renderJourney(t, id, false)
+	require.Empty(t, own["refusal"])
+	assert.Equal(t, "yes", own["banner"])
+	assert.Equal(t, "Your copy only · checked", own["bannerText"])
+	assert.Equal(t, []any{"passed", "passed", "not checked", "missing", "not checked"}, own["stamps"], "the deal is witnessed but the page cannot check the witness, and the other side is not in the file")
+	assert.EqualValues(t, 1, own["restsNote"], "what the words rest on is on the face")
+
+	shared := renderJourney(t, id, true)
+	require.Empty(t, shared["refusal"])
+	assert.Equal(t, "not checked", shared["stamps"].([]any)[0], "withheld words are not a passed check")
+
+	// A step whose disclosure is gone is not verified: the banner stops saying "checked".
+	withheld := renderJourney(t, id, false, "withhold")
+	require.Empty(t, withheld["refusal"])
+	assert.Equal(t, "no", withheld["banner"])
+	assert.Equal(t, "Your copy only · not fully checked", withheld["bannerText"])
+	assert.Equal(t, "failed", withheld["stamps"].([]any)[1])
 }
 
 // The sealed report's journey is facts only: no word from a wording pack,

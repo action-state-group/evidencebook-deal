@@ -26,7 +26,6 @@
 #deal .deal-col { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 #deal .deal-box { border: 1px solid var(--aac-line); border-radius: 12px; padding: 12px 14px; }
 #deal .deal-banner { border: 1px solid var(--deal-theirs-line); background: var(--deal-theirs); border-radius: 12px; padding: 12px 14px; }
-#deal .deal-banner.deal-both { border-color: var(--deal-good-line); background: var(--deal-good); }
 #deal .deal-banner b { display: block; }
 #deal .deal-small { font-size: 0.8rem; color: var(--aac-muted); }
 #deal .deal-caps { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--aac-muted); }
