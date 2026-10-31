@@ -596,7 +596,9 @@ const dealViewRender = (model, regions) => {
   const passed = stamps.filter((s) => s[0] === "passed").length;
   const stampBox = el("details", undefined, "deal-box deal-stamps");
   const sum = el("summary", "The stamps");
-  const pill = el("span", `${passed} of ${stamps.length} checked here`, "deal-pill");
+  const failed = stamps.filter((st) => st[0] === "failed").length;
+  const rest = stamps.length - passed - failed;
+  const pill = el("span", [`${passed} passed`, failed > 0 ? `${failed} failed` : "", rest > 0 ? `${rest} not checkable here` : ""].filter((t) => t !== "").join(" · "), failed > 0 ? "deal-pill deal-bad" : "deal-pill");
   sum.append(pill);
   stampBox.append(sum, el("div", "What is under it:", "deal-small"));
   stamps.forEach(([word, text, detail]) => {

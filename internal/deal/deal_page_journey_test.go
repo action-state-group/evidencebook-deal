@@ -68,6 +68,7 @@ if (edit === "withhold") {
     banner: banner ? banner.dataset.checked : "",
     bannerText: banner ? banner.children[0].textContent : "",
     stamps: L0.all((n) => n.dataset.stamp !== undefined).map((n) => n.dataset.stamp),
+    pill: (L0.all((n) => /\bdeal-pill\b/.test(n.className))[0] || { textContent: "" }).textContent,
     restsNote: L0.all((n) => n.dataset.sealed !== undefined || n.dataset.unchecked !== undefined).length,
     refusal: model.refusal || "",
     shown: rows.length > 0,
@@ -148,6 +149,7 @@ func TestTheReceiptFaceSaysOnlyWhatWasChecked(t *testing.T) {
 	assert.Equal(t, "yes", own["banner"])
 	assert.Equal(t, "Your copy only · checked", own["bannerText"])
 	assert.Equal(t, []any{"passed", "passed", "not checked", "missing", "not checked"}, own["stamps"], "the deal is witnessed but the page cannot check the witness, and the other side is not in the file")
+	assert.Equal(t, "2 passed · 3 not checkable here", own["pill"], "no failure to name, and the unchecked ones are said")
 	assert.EqualValues(t, 1, own["restsNote"], "what the words rest on is on the face")
 
 	shared := renderJourney(t, id, true)
@@ -160,6 +162,7 @@ func TestTheReceiptFaceSaysOnlyWhatWasChecked(t *testing.T) {
 	assert.Equal(t, "no", withheld["banner"])
 	assert.Equal(t, "Your copy only · not fully checked", withheld["bannerText"])
 	assert.Equal(t, "failed", withheld["stamps"].([]any)[1])
+	assert.Equal(t, "1 passed · 1 failed · 3 not checkable here", withheld["pill"], "a check that ran and failed is on the pill")
 }
 
 // The sealed report's journey is facts only: no word from a wording pack,
