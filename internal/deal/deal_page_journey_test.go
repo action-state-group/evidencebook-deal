@@ -62,13 +62,12 @@ if (edit === "withhold") {
   const model = await resolution.module.buildModel(ctx);
   const L0 = new Node("div");
   resolution.module.render(model, { L0 });
-  const headings = L0.all((n) => n.tag === "h2").map((n) => n.textContent);
   const rows = L0.all((n) => n.dataset.journey !== undefined);
   process.stdout.write(JSON.stringify({
     refusal: model.refusal || "",
-    shown: headings.includes("How it went"),
+    shown: rows.length > 0,
     labels: rows.map((n) => n.dataset.journey),
-    rows: rows.map((n) => n.children[0].textContent),
+    rows: rows.map((n) => n.textContent),
     words: Object.keys(words).filter((k) => k.startsWith("journey.") || k.startsWith("class.")),
   }));
 })();
@@ -116,8 +115,8 @@ func TestTheDealPageShowsTheJourney(t *testing.T) {
 	rows := got["rows"].([]any)
 	require.Len(t, rows, len(labels))
 	assert.Regexp(t, `^\S.* · You · Asked$`, rows[0], "the first row says its time")
-	assert.Equal(t, "Your agent · Couldn't (AliExpress sign-in)", rows[4], "the same time is said once")
-	assert.Equal(t, "You · Switched to eBay", rows[5], "the switch is the user's")
+	assert.Regexp(t, `^\S.* · Your agent · Couldn't \(AliExpress sign-in\)$`, rows[4], "every row says its time, as the receipt's frames do")
+	assert.Regexp(t, `^\S.* · You · Switched to eBay$`, rows[5], "the switch is the user's")
 
 	shared := renderJourney(t, id, true)
 	require.Empty(t, shared["refusal"])
