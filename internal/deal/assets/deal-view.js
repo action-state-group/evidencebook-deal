@@ -691,6 +691,13 @@ const dealViewRender = (model, regions) => {
     banner.dataset.case = composed.theirCase;
     const sub = !composed.mine ? "Your own copy of this deal is not in this file." : theirShown ? said[theirShown.state] : "Nothing from their side is in this file.";
     banner.append(el("b", `${label} · ${ok ? "checked" : "not fully checked"}`), el("div", sub, "deal-small"));
+    // The keep copy rides in this page whole: said on its face, since
+    // people forward receipts (Sherlock2, #86 round 2).
+    if (page && page.keep !== undefined) {
+      const own = el("div", "This page is your private copy: it carries your own record of this deal in full. To share this receipt, send the composed bundle file, not this page.", "deal-small");
+      own.dataset.private = "keep";
+      banner.append(own);
+    }
   } else if (shared) {
     const who = report.audience === "counterparty" ? "the other party" : "an adjudicator";
     banner.append(el("b", holds ? "A shared copy · checked" : "A shared copy · not fully checked"), el("div", `Made for ${who}. Left out of this copy: ${(report.withheld || []).join(", ")}.`, "deal-small"));

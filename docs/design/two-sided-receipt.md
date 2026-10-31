@@ -115,12 +115,15 @@ The module renders only a **deal composition**, and refuses the page unless all 
   `composed_digest` equals the block's, and `compositionClosure` is `pass`.
 - No join reports `join_state_mismatch`. The page re-derives what it shows (D3), and a block
   whose declared state disagrees with its records says something its records do not.
-- The file is one `capsulectl verify` calls VALID: the block's status is not `fail`, and every
-  carried member's own verdict is VALID, since `verify --bundle` counts each member's verdict in
-  the file's (capsule-cli `cli/verify_bundle.go` ~239-245). The only findings tolerated are the
+- The file is one `capsulectl verify` calls VALID, or INCOMPLETE only because it holds a
+  refusal member (capsule-cli reads what was asked and not served as INCOMPLETE, `cli/composed.go`
+  `composedOutput`): the block's status is not `fail`, and every carried member's own verdict is
+  VALID, since `verify --bundle` counts each member's verdict in the file's (capsule-cli
+  `cli/verify_bundle.go` ~239-245). The only findings tolerated are a refusal member and the
   members' `refusalSignature` and `responseSignature` being `signature_unverified`, which the
   core reports whenever a refusal or response is carried (`ts/src/composed.ts` ~730).
-  `deal compose --html` refuses any other file through `PageGate` (`deal_compose_page.go` 103).
+  `deal compose --html` refuses any file `verify` does not call VALID through `PageGate`
+  (`deal_compose_page.go` 103), the refusal case included (see "Found while building").
   A viewer opening the file does not pass it through `PageGate`, and the page cannot recompute
   the whole verdict: parts of it (the report entries, sale and history entries, the witness
   directory, `cli/verify_bundle.go` ~415-480) exist only in capsule-cli. So the page checks what
@@ -181,8 +184,9 @@ Rejected:
   "their key" with its first 16 hex digits in the fold-out, so a reader who knows the
   counterparty's key can compare. For a Mesh half that was also pushed, the payer's citing record
   is checked against it (D4); an ask-only half has no citing record, and its absence proves
-  nothing. ◇ Sherlock2: whether "stamped by both" may rest on a half signed under a declared key that
-  differs from yours, with this fold-out line, is the what question this note asks.
+  nothing. Sherlock2 accepted "stamped by both" on a declared key that differs from yours, with
+  these guards (round 2, Buzz `51726629`), on condition that the page never shows a name or label
+  for them from the composer's declaration: only "their key" and its digits.
 
 ### D3. The three cases
 
@@ -401,7 +405,11 @@ expected. Any copy that turns out to be needed goes to Sherlock2.
   writes the keep copy's lines into the page. Under D2 it writes the whole keep bundle: every
   payload and opening that copy discloses, including what a shared copy holds back. It is still
   only the composer's own page, and the composed bundle and every shared file are unchanged. A
-  composer who passes the page file on passes their keep copy with it.
+  composer who passes the page file on passes their keep copy with it. Sherlock2 accepted this
+  (round 2, Buzz `51726629`) on condition that the page says on its face that it is your private
+  copy and that the composed bundle is the one to share, and that no share path ever emits it:
+  the banner says so whenever the bootstrap carries a keep copy, and only `deal compose --html`
+  writes this page.
 - **What the Mesh composition carries.** ◇ Sherlock2, for the plugin task: the payer's
   composition carries its own exchange half (payload withheld), which `deal-receipt-bundle` does
   not carry today, and, to be interval-complete, the Capsule headers of the other ledger records

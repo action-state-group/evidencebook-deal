@@ -40,6 +40,7 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		Box     string   `json:"box"`
 		Stamps  []string `json:"stamps"`
 		Refusal string   `json:"refusal"`
+		Private string   `json:"private"`
 	}
 	// The buyer's own copy, answered to its own request: a member the
 	// composer observed is its own, never theirs, so each composition below
@@ -81,6 +82,7 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
     box: their ? their.className + " | " + their.textContent : "",
     stamps: [...document.querySelectorAll("#deal [data-stamp]")].map((s) => s.dataset.stamp + " | " + s.textContent),
     refusal: (q("p.deal-bad") || {}).textContent || "",
+    private: (q("[data-private]") || {}).textContent || "",
   };
 })()`, &got)
 		return got
@@ -108,6 +110,8 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		assert.Contains(t, got.Stamps[2], "passed | ✓Their record and yours are about the same deal")
 		assert.Contains(t, got.Stamps[2], "both records name the same deal; neither points at the other")
 		assert.Contains(t, got.Stamps[4], "An outside witness recorded both books' snapshots")
+		assert.Contains(t, got.Private, "This page is your private copy", "the page says on its face that it carries the keep copy")
+		assert.Contains(t, got.Private, "send the composed bundle file, not this page")
 	})
 
 	t.Run("your receipt only: an absence", func(t *testing.T) {
@@ -161,6 +165,7 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		assert.Equal(t, "no", got.Checked)
 		assert.Contains(t, got.Banner, "Your own copy of this deal is not in this file.")
 		assert.Contains(t, got.Stamps[1], "missing | —Each side's record is stamped into its own book and can't be changed after · missing · your record is not in this file")
+		assert.Empty(t, got.Private, "no keep copy, no private-copy line")
 	})
 
 	t.Run("their half is yours under another label", func(t *testing.T) {
