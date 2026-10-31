@@ -15,7 +15,7 @@ const declaredFindings = `{"id":"r14-commits-the-user","verdict":"not_evaluable"
 	`{"id":"r24-outside-instructions","verdict":"not_evaluable","reason":"declared, not measured"},` +
 	`{"id":"r25-no-bypassing","verdict":"not_evaluable","reason":"declared, not measured"}`
 
-const declaredLine = "3 rules are declared by the ruleset but not measured by this checker (r14, r24, r25)."
+const declaredLine = "r14, r24, r25 (in the ruleset, not measured by this checker)"
 
 func checkWithRules(t *testing.T, verdict, findings string) (string, map[string]any) {
 	t.Helper()
@@ -96,9 +96,9 @@ func TestTheReceiptSaysDeclaredRulesQuietly(t *testing.T) {
 	report := dealRun(t, "report", "--deal", id)
 	raw, err := json.Marshal(report["did"])
 	require.NoError(t, err)
-	assert.Contains(t, string(raw), "Checked before paying: no differences; not yet checked: 3 rules are declared by the ruleset but not measured by this checker (r14, r24, r25)")
+	assert.Contains(t, string(raw), "Checked before paying: no differences (you asked for: item otter sticker); not yet checked: r14, r24, r25 (in the ruleset, not measured by this checker)")
 	_, shared := sharedCopy(t, id, cli.DealAudienceCounterparty, "the shop")
-	assert.NotContains(t, shared, "declared by the ruleset")
+	assert.NotContains(t, shared, "in the ruleset")
 }
 
 // A flagged check's receipt line gives the rules that caused the flag first,
@@ -113,19 +113,20 @@ func TestTheReceiptNamesWhatFlaggedTheCheckBeforeWhatIsNotYetChecked(t *testing.
 	report := dealRun(t, "report", "--deal", id)
 	raw, err := json.Marshal(report["did"])
 	require.NoError(t, err)
-	assert.Contains(t, string(raw), "Checked before paying: flagged (first payment to this merchant; over your per-purchase limit); not yet checked: 3 rules are declared by the ruleset but not measured by this checker (r14, r24, r25)")
+	assert.Contains(t, string(raw), "Checked before paying: flagged (first payment to this merchant; over your per-purchase limit) (you asked for: item otter sticker); not yet checked: r14, r24, r25 (in the ruleset, not measured by this checker)")
 	_, shared := sharedCopy(t, id, cli.DealAudienceCounterparty, "the shop")
 	assert.NotContains(t, shared, "per-purchase limit", "a shared copy does not name the user's rules")
 	assert.NotContains(t, shared, "not yet checked")
 	_, adjudicator := sharedCopy(t, id, cli.DealAudienceAdjudicator, "the shop's support desk")
-	assert.Contains(t, adjudicator, "not yet checked: 3 rules", "an adjudicator keeps the not-yet-checked note")
+	assert.Contains(t, adjudicator, "not yet checked: r14, r24, r25", "an adjudicator keeps the not-yet-checked note")
+	assert.Contains(t, adjudicator, "you asked for: item otter sticker", "and who chose what")
 	assert.NotContains(t, adjudicator, "per-purchase limit", "and not the user's rules' reasons")
 
 	// Nothing caused a flag: the not-yet-checked note stands on its own.
 	id, _ = checkWithRules(t, "allow", passFinding+","+declaredFindings)
 	raw, err = json.Marshal(dealRun(t, "report", "--deal", id)["did"])
 	require.NoError(t, err)
-	assert.Contains(t, string(raw), "Checked before paying: no differences; not yet checked: 3 rules")
+	assert.Contains(t, string(raw), "Checked before paying: no differences (you asked for: item otter sticker); not yet checked: r14, r24, r25")
 }
 
 // A flag caused only by a rule the checker could not evaluate says so, so the
@@ -137,5 +138,5 @@ func TestAFlagFromARuleThatCouldNotBeEvaluatedSaysSo(t *testing.T) {
 	require.Equal(t, "pause", check["verdict"])
 	raw, err := json.Marshal(dealRun(t, "report", "--deal", id)["did"])
 	require.NoError(t, err)
-	assert.Contains(t, string(raw), "Checked before paying: flagged (the record states no terms (could not be checked)); not yet checked: 3 rules")
+	assert.Contains(t, string(raw), "Checked before paying: flagged (the record states no terms (could not be checked)) (you asked for: item otter sticker); not yet checked: r14, r24, r25")
 }

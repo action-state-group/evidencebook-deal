@@ -2187,10 +2187,11 @@ type dealReportItem struct {
 	// check's line without the user's and the agent's choices (the items go
 	// only to an adjudicator).
 	Shared string `json:"-"`
-	// Adjudicator is the text for an adjudicator's copy, when it differs: a
-	// check's line without what the user's rules flagged (their reasons are
-	// the user's policy; an adjudicator gets the neutral difference texts).
-	Adjudicator string `json:"-"`
+	// Causes is the part of Text that says what the user's rules flagged on a
+	// check: the user's policy, so an adjudicator's copy takes it out of Text
+	// and keeps the rest (the choices, the approval, the not-yet-checked
+	// note), and gets the neutral difference texts instead.
+	Causes string `json:"-"`
 	// Self is the step that is the item itself (an act, a close): the page
 	// checks it and does not list its line again under the item
 	// (capsule-cli#341).
@@ -2403,14 +2404,14 @@ func buildDealReport(events []sealedEvent) dealReport {
 			// checker does not measure, as not yet checked: they took no part
 			// in the verdict, and a shared copy names none of the user's
 			// rules (they are the user's policy).
-			adjudicator := text
+			causeText := ""
 			if causes := ruleCauses(e.Check.Rules); len(causes) > 0 && e.Check.Verdict != "pass" {
-				text += " (" + strings.Join(causes, "; ") + ")"
+				causeText = " (" + strings.Join(causes, "; ") + ")"
+				text += causeText
 			}
+			notYetChecked := ""
 			if declared := declaredRules(e.Check.Rules); len(declared) > 0 {
-				note := "; not yet checked: " + strings.TrimSuffix(declaredRulesLine(declared), ".")
-				text += note
-				adjudicator += note
+				notYetChecked = "; not yet checked: " + declaredRulesLine(declared)
 			}
 			// What the user chose and what the agent chose for them, told
 			// apart as the approval text tells them, so a choice the agent
@@ -2436,13 +2437,11 @@ func buildDealReport(events []sealedEvent) dealReport {
 				who = append(who, "the agent picked, not you: "+attributeText(picked))
 			}
 			if len(who) > 0 {
-				// An adjudicator needs who chose what; it is not the user's
-				// rules policy, which only the reasons above are.
-				choices := " (" + strings.Join(who, "; ") + ")"
-				text += choices
-				adjudicator += choices
+				text += " (" + strings.Join(who, "; ") + ")"
 			}
-			r.Did = append(r.Did, dealReportItem{Kind: "check", Text: text, Steps: []string{e.Check.Snapshot, se.CapsuleID}, Shared: shared, Adjudicator: adjudicator, At: e.At})
+			// Last, so the choices above do not read as part of the note.
+			text += notYetChecked
+			r.Did = append(r.Did, dealReportItem{Kind: "check", Text: text, Steps: []string{e.Check.Snapshot, se.CapsuleID}, Shared: shared, Causes: causeText, At: e.At})
 			var asked []string
 			for _, d := range e.Check.Differences {
 				// The user's own yes answered it: a "you didn't ask for this" on

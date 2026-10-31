@@ -397,7 +397,9 @@ func ruleCauses(r *dealRules) []string {
 }
 
 // declaredRulesLine says them, by each id's short form (its first part, when
-// the id is a numbered rule such as r14-...).
+// the id is a numbered rule such as r14-...), as the receipt's not-yet-checked
+// note continues: "r14, r24, r25 (in the ruleset, not measured by this
+// checker)".
 func declaredRulesLine(ids []string) string {
 	short := make([]string, len(ids))
 	for i, id := range ids {
@@ -406,11 +408,7 @@ func declaredRulesLine(ids []string) string {
 			short[i] = head
 		}
 	}
-	rules := "rules are"
-	if len(ids) == 1 {
-		rules = "rule is"
-	}
-	return fmt.Sprintf("%d %s declared by the ruleset but not measured by this checker (%s).", len(ids), rules, strings.Join(short, ", "))
+	return strings.Join(short, ", ") + " (in the ruleset, not measured by this checker)"
 }
 
 var numberedRule = regexp.MustCompile(`^[a-z]{0,3}[0-9]{1,4}$`)
