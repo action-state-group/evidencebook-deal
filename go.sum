@@ -6,8 +6,8 @@ github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 h1:UQHMgLO+TxOEl
 github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/action-state-group/agent-action-capsule/go v0.14.1-0.20261027225214-1d1752bf3956 h1:IhYtJhzXnCPWgiVKyuc0qRv61VV3/lC/WY3hq9vj02w=
-github.com/action-state-group/agent-action-capsule/go v0.14.1-0.20261027225214-1d1752bf3956/go.mod h1:Q1yzmSvtxEQiE/rMZZaN7qrSEN8JYQnfwF4VNtqsmTM=
+github.com/action-state-group/agent-action-capsule/go v0.16.0 h1:MjgHUuR/z4/jjwtbmc4Hpjbi/UghmRF/jzGc5DIcUmQ=
+github.com/action-state-group/agent-action-capsule/go v0.16.0/go.mod h1:vlUl3rsHyR9DJaSqRSClVgmeuo2ORj7kCa54V25ZxuU=
 github.com/action-state-group/capsule-cli v0.1.0-rc27 h1:9rvYKbibXEGNlKifpfs2OFXQb0GV+NLykCd/j3UpEeI=
 github.com/action-state-group/capsule-cli v0.1.0-rc27/go.mod h1:BDMJivdm6jU2V4bJVpu/FntPW5Y5W4fMUp7sIaIbYa4=
 github.com/action-state-group/capsule-emit/go v0.3.0 h1:DEFDSHktFQoUxWScjeIbMKfET/4Kjgm/ZQsWJp4AI+Y=
@@ -16,8 +16,8 @@ github.com/action-state-group/capsule-viewer/go v0.7.0 h1:vPhHWd5vbRBK5U2cMqUHJY
 github.com/action-state-group/capsule-viewer/go v0.7.0/go.mod h1:ZbHGy5rg7ofNMPBU9qB8S6glMz8eLdMQU7ey0Uvu+iI=
 github.com/action-state-group/checkpointed-local-log/go v0.1.0 h1:bDJSW+fy3eZnwneJBOGuvqYXe0VlvDfPKEJ6ecHnTek=
 github.com/action-state-group/checkpointed-local-log/go v0.1.0/go.mod h1:zyHyXVNqA4pMTJ14xtcRoDHZF0n4QyjS5KMDD3KwQ2Q=
-github.com/action-state-group/evidencebook v0.10.0 h1:FEJZQ77Hegdfn0fd+vcwxeM66oiy1O9PuBOB3XyZbwk=
-github.com/action-state-group/evidencebook v0.10.0/go.mod h1:zw1FuKH7AL+3t5nU8WwF3x1k79WheQiemaDuhvM5iPg=
+github.com/action-state-group/evidencebook v0.11.0 h1:IS/45l2iwVSPVV2zTHlGziuAy7cVUJRETYSBRMMOESk=
+github.com/action-state-group/evidencebook v0.11.0/go.mod h1:jCrwtOxSdZOnjZXbReNyVeX2EH3O0r4vkx+/Ul5uyXM=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
