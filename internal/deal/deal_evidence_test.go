@@ -745,15 +745,14 @@ func checkPrivateHalfPage(t *testing.T, id string, composer, other dealParty, me
 	out, err := compose("--output", bundlePath, "--html", pagePath, "--keep", keepPath)
 	require.NoError(t, err, out)
 	page := string(mustRead(t, pagePath))
-	assert.Contains(t, page, "Your half (private)")
-	assert.Contains(t, page, asked, "the page shows the composer's own half")
+	assert.Contains(t, page, `"keep":{`, "the keep copy rides in the bootstrap")
+	assert.Contains(t, page, asked, "the page carries the composer's own half")
 
 	// Negative: the keep copy is in no bundle. The composed bundle, the
 	// only thing share and export carry, holds none of it, and it is a
 	// composed/v1 bundle exactly as without --keep.
 	composed := string(mustRead(t, bundlePath))
 	assert.NotContains(t, composed, asked)
-	assert.NotContains(t, composed, "Your half (private)")
 	assert.NotContains(t, composed, `"audience":"keep"`, "no keep-audience report is a member")
 	assert.Equal(t, 2, len(composedBlock(t, bundlePath)["members"].([]any)), "the members are the served and recorded outcomes only")
 	result, err := verifyWithDirectory(t, bundlePath, "")
@@ -765,7 +764,7 @@ func checkPrivateHalfPage(t *testing.T, id string, composer, other dealParty, me
 	bare := filepath.Join(dir, "bare.html")
 	out, err = compose("--output", filepath.Join(dir, "composed2.json"), "--html", bare)
 	require.NoError(t, err, out)
-	assert.NotContains(t, string(mustRead(t, bare)), "Your half (private)")
+	assert.NotContains(t, string(mustRead(t, bare)), `"keep":{`)
 
 	refuse := func(why string, extra ...string) {
 		t.Helper()
@@ -814,17 +813,6 @@ func checkPrivateHalfPage(t *testing.T, id string, composer, other dealParty, me
 	dealRun(t, "report", "--deal", foreign, "--bundle", otherDeal)
 	party(t, composer.config)
 	refuse("not of the composed deal", "--keep", otherDeal)
-}
-
-// The private half lists what the agent did, not only what was asked.
-func TestPrivateHalfListsWhatTheAgentDid(t *testing.T) {
-	raw := mustRead(t, "../../testdata/presentation/2-unilateral-receipt/bundle.json")
-	keep := exactBundle(t, string(raw))
-	half, err := privateHalfFrom(keep, "deal-x", cli.BuiltinWording())
-	require.NoError(t, err)
-	assert.Equal(t, "Your half (private)", half.Label)
-	assert.Equal(t, "Order the cat sticker in my cart at Example Stickers", half.Asked)
-	assert.Contains(t, half.Did, "Did: pay $6.27 to Example Stickers by card")
 }
 
 // A copy recorded as failing verification is never composed: the composed
