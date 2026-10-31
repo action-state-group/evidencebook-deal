@@ -395,6 +395,11 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
 const dealComposedModel = async (context) => {
   const refused = (why) => ({ refusal: `⚠️ ${why} Do not rely on it; run capsulectl verify on the file.` });
   const bundle = context.bundle;
+  // Every half here is checked by its signature: a viewer that cannot check
+  // Ed25519 says so, and never calls their record bad (Sherlock2, #86).
+  if (!EvidenceGraph.ed25519Available()) {
+    return { refusal: "⚠️ This viewer can't check the signatures in this file here. Run capsulectl verify on the file before relying on it." };
+  }
   // V0: the composition itself.
   if (!dealViewVerified(context)) return refused("This file's composition did not verify.");
   const root = dealRootRecord(bundle, context.records);
@@ -883,7 +888,7 @@ const dealViewRender = (model, regions) => {
       : theirArtifact.state === "verified"
         ? ["passed", `Their record and yours are about ${sameWhat}`, theirArtifact.mesh ? "both records name the same request; neither points at the other" : "both records name the same deal; neither points at the other"]
         : ["failed", `Their record and yours are about ${sameWhat}`, "their record did not check"],
-    ["not checked", "The payment is confirmed by the card company, not by either agent", "this page checks no settlement"],
+    ["not checked", "The payment is confirmed by its payment network, not by either agent", "this page checks no settlement"],
     [anyWitness ? "not checked" : "missing", "An outside witness recorded both books' snapshots", anyWitness ? "this page can't check the witness's signature" : ""],
   ] : [
     shared

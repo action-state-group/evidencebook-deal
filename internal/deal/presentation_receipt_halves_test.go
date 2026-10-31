@@ -51,6 +51,8 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 	// the page as a reader at 390px sees it. A composition the page gate
 	// refuses (a refusal member reads INCOMPLETE) is emitted ungated, as a
 	// viewer that opens the bundle itself shows it.
+	// view is the page view open reads; a subtest may take Ed25519 away.
+	view := presentationViews[0]
 	// openWith also takes the keep copy to carry (nil for none) and an edit
 	// of the composition before its page is built.
 	var openWith func(t *testing.T, withKeep map[string]interface{}, edit func(map[string]any), members ...askedCopy) shown
@@ -79,7 +81,7 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		require.NoError(t, err)
 		path := filepath.Join(t.TempDir(), "page.html")
 		require.NoError(t, os.WriteFile(path, []byte(page), 0o600))
-		p := chrome.open(t, "file://"+path, presentationViews[0])
+		p := chrome.open(t, "file://"+path, view)
 		var got shown
 		p.eval(t, `(() => {
   const q = (s) => document.querySelector("#deal " + s);
@@ -208,6 +210,16 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		dealRun(t, "report", "--deal", otherDeal, "--bundle", path)
 		got := openWith(t, exactBundle(t, string(mustRead(t, path))), nil, theirs)
 		assert.Contains(t, got.Refusal, "not the composer's own copy of this deal")
+	})
+
+	t.Run("a viewer without Ed25519", func(t *testing.T) {
+		// Ed25519 taken away from WebCrypto, as in a viewer without it: the
+		// page says it cannot check, and never calls their record bad.
+		view.before = `(() => { const s = crypto.subtle; const ed = (args) => args.some((a) => a && String(typeof a === "string" ? a : a.name).toLowerCase() === "ed25519"); for (const m of ["importKey", "verify", "generateKey"]) { const f = s[m].bind(s); s[m] = (...args) => (ed(args) ? Promise.reject(new DOMException("no Ed25519 here", "NotSupportedError")) : f(...args)); } })();`
+		defer func() { view.before = "" }()
+		got := open(t, false, theirs)
+		assert.Contains(t, got.Refusal, "This viewer can't check the signatures in this file here")
+		assert.Empty(t, got.Their, "no failed box for their record")
 	})
 
 	t.Run("their half is yours under another label", func(t *testing.T) {

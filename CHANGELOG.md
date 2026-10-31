@@ -6,7 +6,7 @@
   capsule-viewer#186, #187, #188, #189, #190, #192, #193). The presentation
   goldens are rebuilt with `build-fixtures.sh` against it (capsulectl-book from
   evidencebook#244), their snapshots regenerated with Chrome.
-- The receipt with the other party's half (Steven's 9b frames 6 and 7;
+- The receipt with the other party's half (the 9b frames 6 and 7;
   evidencebook-deal#78, #79, #81; design note `docs/design/two-sided-receipt.md`).
   The deal view gains a second module, `capsulectl.deal-view-composed/v0`, for a
   deal composition: it checks the composition and each of the other party's
