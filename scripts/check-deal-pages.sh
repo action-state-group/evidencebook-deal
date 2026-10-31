@@ -32,11 +32,12 @@ export XDG_CONFIG_HOME="$work/config"
 source "$core/scripts/lib/page-checks.sh"
 
 # The reasons the page names for the checks it did not run: the parenthesised
-# codes of its banner detail. "incomplete" covers any check that did not run,
-# so the pages must name this one and no other, or a regression that skips
-# more checks (producer signatures, say) would pass as "incomplete".
+# codes of its banner detail. A page whose records and checkpoint verify runs
+# every check (capsule-viewer 0.4.0: the browser verifies the checkpoint
+# signature), so it names none; a regression that skips a check would put its
+# code here.
 unrun_reasons() { grep -o '<p class="cv-banner-detail" data-banner-detail="">[^<]*</p>' "$1" | grep -o '([a-z_][a-z_]*)' | tr '\n' ' '; }
-only_checkpoint_unrun() { [[ "$(unrun_reasons "$1")" == "(checkpoint_verifier_unavailable) " ]]; }
+no_check_unrun() { [[ -z "$(unrun_reasons "$1")" ]]; }
 find_chrome || { echo "check-deal-pages: no Chrome or Chromium found (set CHROME)" >&2; exit 2; }
 
 mkdir -p "$work/bin"
@@ -89,16 +90,14 @@ check "deal-receipt: the page renders its sealed summary line" contains receipt.
 # capsulectl's own presentation build, so the page and its runtime are the
 # host's, not the ones this plugin embeds. Against capsule-cli main
 # (core-main.yml) this is main rendering what the newest deal build produces.
-# It renders as an evidence page none of whose checks failed (the viewer's
-# "incomplete" state: the browser has no CLL checkpoint verifier, so under
-# AAC 0.8.0's strict mode the page cannot check the checkpoint signature and
-# reports checkpoint_verifier_unavailable); the deal section itself comes only
-# from this plugin's `deal report`.
+# It renders as an evidence page that verified (the browser checks the
+# checkpoint signature, capsule-viewer 0.4.0, so no check is left unrun); the
+# deal section itself comes only from this plugin's `deal report`.
 capsulectl presentation build --bundle receipt.json --out receipt-rebuilt.html >/dev/null
 render receipt-rebuilt.html
 check "deal-receipt-rebuilt: no console.error, uncaught error or unhandled rejection" no_render_errors receipt-rebuilt.html.dom
-check "deal-receipt-rebuilt: the page says none of the bundle's checks failed" contains receipt-rebuilt.html.dom 'class="cv-pill" data-verify="incomplete"'
-check "deal-receipt-rebuilt: the only check the page did not run is the checkpoint signature" only_checkpoint_unrun receipt-rebuilt.html.dom
+check "deal-receipt-rebuilt: the page says the bundle verified" contains receipt-rebuilt.html.dom 'class="cv-pill" data-verify="verified"'
+check "deal-receipt-rebuilt: the page ran every check" no_check_unrun receipt-rebuilt.html.dom
 
 # deal-receipt-edited: one line of the signed report edited. The bundle's own
 # records still verify, so the page's runtime runs the deal view, which
