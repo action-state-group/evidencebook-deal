@@ -827,9 +827,11 @@ func TestComposeRefusesACopyRecordedAsFailed(t *testing.T) {
 	good := askFor(t, pair.buyer, pair.seller, pair.id, map[string]any{"min_freshness": map[string]any{"size": 1}})
 	require.Equal(t, "artifact", good.outcome)
 	party(t, pair.buyer.config)
-	out, err := composeMembers(t, pair.id, good, failed)
+	out := filepath.Join(t.TempDir(), "composed.json")
+	text, err := dealInvoke(t, "", "--profile", "deal", "deal", "compose", "--deal", pair.id, "--member", good.recordID, "--member", failed.recordID, "--output", out)
 	require.Error(t, err)
-	assert.Contains(t, out+err.Error(), "member "+failed.recordID+" was recorded as a copy that does not hold up")
+	assert.Contains(t, text+err.Error(), "member "+failed.recordID+" was recorded as a copy that does not hold up")
+	assert.NoFileExists(t, out)
 }
 
 // The receipt with the other party's half composes their one answer with

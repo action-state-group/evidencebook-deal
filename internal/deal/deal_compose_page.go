@@ -3,7 +3,6 @@ package deal
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/capsule-viewer/go/emitter"
@@ -85,22 +84,14 @@ func composedPage(composition, keep map[string]interface{}, verifyCommand string
 	if err != nil {
 		return "", err
 	}
-	boot := map[string]interface{}{"verify_command": verifyCommand}
+	boot := map[string]interface{}{}
 	if keep != nil {
-		openings, err := dealPageOpenings(keep)
-		if err != nil {
+		if boot, _, err = dealPageBoot(keep, dealNotCountersigned(), w); err != nil {
 			return "", err
 		}
-		words := map[string]string{}
-		for _, k := range pageWords {
-			if v, ok := w.Entries[k]; ok {
-				words[k] = v
-			}
-		}
-		maps.Copy(words, journeyPageWords(w))
-		boot["keep"], boot["openings"], boot["words"] = keep, openings, words
-		boot["countersign"] = dealCountersignForPage(keep, dealNotCountersigned())
+		boot["keep"] = keep
 	}
+	boot["verify_command"] = verifyCommand
 	// json.Marshal escapes <, > and &, so the data cannot close its element.
 	data, err := json.Marshal(boot)
 	if err != nil {

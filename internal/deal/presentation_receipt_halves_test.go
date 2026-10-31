@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,7 +51,17 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 	// the page as a reader at 390px sees it. A composition the page gate
 	// refuses (a refusal member reads INCOMPLETE) is emitted ungated, as a
 	// viewer that opens the bundle itself shows it.
+	// openWith also takes the keep copy to carry (nil for none) and an edit
+	// of the composition before its page is built.
+	var openWith func(t *testing.T, withKeep map[string]interface{}, edit func(map[string]any), members ...askedCopy) shown
 	open := func(t *testing.T, bare bool, members ...askedCopy) shown {
+		t.Helper()
+		if bare {
+			return openWith(t, nil, nil, members...)
+		}
+		return openWith(t, keep, nil, members...)
+	}
+	openWith = func(t *testing.T, withKeep map[string]interface{}, edit func(map[string]any), members ...askedCopy) shown {
 		t.Helper()
 		party(t, pair.buyer.config)
 		out := filepath.Join(t.TempDir(), "composed.json")
@@ -61,9 +72,8 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		text, err := dealInvoke(t, "", args...)
 		require.NoError(t, err, text)
 		composition := exactBundle(t, string(mustRead(t, out)))
-		var withKeep map[string]interface{}
-		if !bare {
-			withKeep = keep
+		if edit != nil {
+			edit(composition)
 		}
 		page, err := composedPage(composition, withKeep, dealVerifyCommand("page.html"), cli.BuiltinWording())
 		require.NoError(t, err)
@@ -104,7 +114,9 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		assert.Equal(t, "verified", got.Their)
 		assert.Contains(t, got.Box, "deal-theirs")
 		assert.Contains(t, got.Box, "Their side · in their book · as received")
-		assert.Contains(t, got.Box, "Their key "+pair.seller.signer[:16])
+		assert.Contains(t, got.Box, "Their key "+pair.seller.signer[:16], "in their side's fold-out")
+		assert.Contains(t, got.Box, "Their reply's signature, and the checkpoint it names, are checked by capsulectl verify, not on this page.")
+		assert.NotContains(t, got.Box, "named it", "no label from the composer's declaration")
 		require.Len(t, got.Stamps, 5)
 		assert.Contains(t, got.Stamps[1], "passed | ✓Each side's record is stamped into its own book")
 		assert.Contains(t, got.Stamps[2], "passed | ✓Their record and yours are about the same deal")
@@ -161,11 +173,41 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 	t.Run("no keep copy", func(t *testing.T) {
 		got := open(t, true, theirs)
 		require.Empty(t, got.Refusal)
-		assert.Contains(t, got.Banner, "Their side only · not fully checked")
+		assert.Contains(t, got.Banner, "Your copy is not in this file · not fully checked")
 		assert.Equal(t, "no", got.Checked)
 		assert.Contains(t, got.Banner, "Your own copy of this deal is not in this file.")
 		assert.Contains(t, got.Stamps[1], "missing | —Each side's record is stamped into its own book and can't be changed after · missing · your record is not in this file")
 		assert.Empty(t, got.Private, "no keep copy, no private-copy line")
+	})
+
+	// A member whose response names another checkpoint: the response is not
+	// in the composed digest, so the core passes it, and the page fails it
+	// (V3).
+	t.Run("a response anchored at another checkpoint", func(t *testing.T) {
+		got := openWith(t, keep, func(c map[string]any) {
+			for _, raw := range c["extensions"].(map[string]any)["composed/v1"].(map[string]any)["members"].([]any) {
+				if m := raw.(map[string]any); m["id"] == theirs.recordID {
+					m["response"].(map[string]any)["anchor"] = strings.Repeat("0", 64) + ":1"
+				}
+			}
+		}, theirs)
+		assert.Equal(t, "failed", got.Their)
+		assert.Contains(t, got.Banner, "Your receipt only")
+	})
+	t.Run("a composition whose digest does not hold", func(t *testing.T) {
+		got := openWith(t, keep, func(c map[string]any) {
+			c["extensions"].(map[string]any)["composed/v1"].(map[string]any)["composed_digest"] = strings.Repeat("0", 64)
+		}, theirs)
+		assert.Contains(t, got.Refusal, "Do not rely on it")
+		assert.Empty(t, got.Banner)
+	})
+	t.Run("a keep copy of another deal", func(t *testing.T) {
+		dealFixture(t)
+		otherDeal := dealRun(t, "open", "--input", writeJSON(t, crossPartyBuyerOpen))["deal_id"].(string)
+		path := filepath.Join(t.TempDir(), "other.json")
+		dealRun(t, "report", "--deal", otherDeal, "--bundle", path)
+		got := openWith(t, exactBundle(t, string(mustRead(t, path))), nil, theirs)
+		assert.Contains(t, got.Refusal, "not the composer's own copy of this deal")
 	})
 
 	t.Run("their half is yours under another label", func(t *testing.T) {

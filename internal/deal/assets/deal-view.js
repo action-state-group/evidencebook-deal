@@ -370,6 +370,11 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
   // V2: their half's own signature, under the observer it is declared as,
   // anchored under that observer's custody domain.
   if (!root || (await dealVerifiedKey(root)) !== member.observer || cp.key_id !== member.custody) return failed("V2");
+  // A Mesh half that was also pushed has the payer's citing record: the key
+  // it accepted the half under is their observer, and not one operator on
+  // both sides (D4). An ask-only half has none, which proves nothing.
+  const citing = mesh ? dealCitingRecord(payerRecords, root.capsule_id) : undefined;
+  if (citing && (citing.sender_key_id !== member.observer || citing.same_controller_as_receiver === true)) return failed("V2");
   // V3 beyond the core: the response answered with this very checkpoint.
   if (!member.response || !dealAnchorIsCheckpoint(member.response, cp)) return failed("V3");
   const at = cp.timestamp;
@@ -377,11 +382,6 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
     // V4 for Mesh: the same exchange as the payer's own half.
     const nonce = dealExchangeNonce(root);
     if (!meshOwn || nonce === undefined || nonce !== dealExchangeNonce(meshOwn) || dealRequestDigest(root) === undefined || dealRequestDigest(root) !== dealRequestDigest(meshOwn)) return failed("V4");
-    // A half that was also pushed has the payer's citing record: the key it
-    // accepted the half under is their observer, and not one operator on
-    // both sides (D4). An ask-only half has none, which proves nothing.
-    const citing = dealCitingRecord(payerRecords, root.capsule_id);
-    if (citing && (citing.sender_key_id !== member.observer || citing.same_controller_as_receiver === true)) return failed("V2");
     return { state: "verified", mesh: true, at: root.timestamp, stamped: at, key: member.observer, witnessed };
   }
   // V4 for a deal copy: their copy of this deal, its text checked as a
@@ -431,7 +431,12 @@ const dealComposedModel = async (context) => {
     if (!dealViewVerified(mineContext)) return refused("Your own copy on this page did not verify.");
     mine = await dealViewModel(mineContext);
     if (mine.refusal !== undefined) return mine;
-    if (mine.report.audience !== "keep" || !mineRoot || (await dealVerifiedKey(mineRoot)) !== composer || mine.dealId !== dealID) {
+    // On a node's one ledger the root is the composition itself, so the
+    // sealed report the half is read from is held to the composer's key too.
+    const sealedId = ((mineContext.bundle.extensions || {})["x-deal-v0"] || {}).sealed_report;
+    const sealedRecord = mineContext.records.find((r) => r && r.capsule_id === sealedId);
+    const sealedKey = sealedRecord ? await dealVerifiedKey(sealedRecord) : composer;
+    if (mine.report.audience !== "keep" || !mineRoot || (await dealVerifiedKey(mineRoot)) !== composer || sealedKey !== composer || mine.dealId !== dealID) {
       return refused("The copy shown as yours is not the composer's own copy of this deal.");
     }
   }
@@ -441,6 +446,11 @@ const dealComposedModel = async (context) => {
   if (mine && mineContext === context) {
     const cited = new Set((mine.report.did || []).flatMap((d) => (Array.isArray(d.steps) ? d.steps : [])));
     meshOwn = context.records.find((r) => r && cited.has(r.capsule_id) && dealMeshHalf(r));
+    // A Mesh composition whose payer half its report does not cite does not
+    // say which exchange it is about (D4).
+    if (!meshOwn && (block.members || []).some((m) => m.outcome === "artifact" && dealMeshHalf(dealRootRecord(m.bundle || {}, (m.bundle || {}).records || [])))) {
+      return refused("Your own record of this exchange is not cited by your receipt.");
+    }
   }
 
   // Their members (D2), and that they are not you.
@@ -456,14 +466,18 @@ const dealComposedModel = async (context) => {
     if (m.observer === composer) continue;
     const obs = observers.get(m.observer) || {};
     others.add(m.observer);
-    if (obs.custody_domain === custody) return refused("A record shown as theirs is yours under another label.");
+    // They are not you (D2): none of their observer, its custody domain or
+    // (for an artifact) its root's key is your key or your checkpoint key.
+    const mRoot = m.outcome === "artifact" ? dealRootRecord(m.bundle || {}, (m.bundle || {}).records || []) : undefined;
+    const yours = new Set([composer, custody]);
+    if ([m.observer, obs.custody_domain, mRoot && mRoot.key_id].some((k) => typeof k === "string" && yours.has(k))) {
+      return refused("A record shown as theirs is yours under another label.");
+    }
     if (m.outcome === "refusal") {
       const r = results.get(m.id) || {};
       theirs.push({ outcome: "refusal", state: r.refusalSignature === "verified" ? "refused" : "refused_unchecked", at: (m.refusal || {}).issued_at });
       continue;
     }
-    const mRoot = dealRootRecord(m.bundle || {}, (m.bundle || {}).records || []);
-    if (mRoot && mRoot.key_id === composer) return refused("A record shown as theirs is yours under another label.");
     theirs.push({ outcome: "artifact", ...(await dealTheirArtifact({ ...m, custody: obs.custody_domain }, dealID, mine, meshOwn, context.records)) });
   }
   if (others.size > 1) return refused("This file holds records from more than one other party.");
@@ -480,7 +494,7 @@ const dealComposedModel = async (context) => {
   // Without your own copy the page still draws its frame: an empty report,
   // nothing checked on your side.
   const base = mine || { page, report: { steps: [], did: [] }, sealed: false, standalone: false, shared: false, demo: false, matched: [], recorded: [], builds: [], ...dealBuildsCompared([], {}), claimClasses: [], dealId: dealID, witnessed: false };
-  return { ...base, composed: { mine: mine !== undefined, theirCase, shown, also: theirs.filter((t) => t !== shown), dealId: dealID } };
+  return { ...base, composed: { mine: mine !== undefined, theirCase, shown, also: theirs.filter((t) => t !== shown).sort((a, b) => String(a.at).localeCompare(String(b.at))), dealId: dealID } };
 };
 
 const DEAL_VIEW_CSS = `#deal { --deal-warn: #9a3b00; --deal-ok: #1d6b35; --deal-ours: #e4edf5; --deal-ours-line: #2b5a85; --deal-theirs: #fbefd9; --deal-theirs-line: #8a6a2f; --deal-none: #eceae5; --deal-none-line: #a9afb8; --deal-good: #e3f1ea; --deal-good-line: #2e7d5b; --deal-pill: #f4f1ea; --deal-ink: #232f42; line-height: 1.45; overflow-wrap: anywhere; max-width: 34rem; margin: 0 auto; }
@@ -673,14 +687,14 @@ const dealViewRender = (model, regions) => {
   if (composed) {
     const theirShown = composed.shown;
     const label = !composed.mine
-      ? "Their side only"
+      ? "Your copy is not in this file"
       : composed.theirCase === "both"
         ? "Stamped by both sides"
         : composed.theirCase === "only"
           ? "Your receipt only"
           : "No record";
     const said = {
-      verified: "Both records are about the same deal, and each is stamped into its own book.",
+      verified: `Their record is about ${composed.shown && composed.shown.mesh ? "the same exchange" : "the same deal"} as yours${allMatched ? ", and each is stamped into its own book" : ""}.`,
       failed: "Their record is in this file, but it did not check.",
       refused: "They did not share their record.",
       refused_unchecked: "A refusal in their name is in this file.",
@@ -807,7 +821,6 @@ const dealViewRender = (model, regions) => {
       if (theirLife && typeof theirLife.text === "string") theirs.append(row("", lifecycleText(theirLife), ""));
     }
     theirs.append(el("div", `Stamped into their book ${short(theirShown.stamped)}`, "deal-small"));
-    theirs.append(el("div", `Their key ${String(theirShown.key).slice(0, 16)}…, as the composer of this file named it`, "deal-small"));
   } else {
     theirs.dataset.their = theirShown ? theirShown.state : "none";
     theirs.append(el("div", "Their side", "deal-caps"));
@@ -823,14 +836,25 @@ const dealViewRender = (model, regions) => {
             : `No record. Your agent asked and nothing came back by ${day}; that is written down too.`;
     theirs.append(el("div", line));
   }
-  if (composed) {
+  // Their side's fold-out: whose key it is (only "their key" and its
+  // digits, never a name the composer declared), what this page left to
+  // capsulectl verify, and their other answers by date (D2, D3; Sherlock2,
+  // #86 rounds 2 and 5).
+  if (composed && theirShown) {
+    const more = el("details", undefined, "deal-their-more");
+    more.append(el("summary", "More on their side"));
+    if (theirShown.key) {
+      more.append(el("div", `Their key ${String(theirShown.key).slice(0, 16)}…`, "deal-small"));
+      more.append(el("div", "Their reply's signature, and the checkpoint it names, are checked by capsulectl verify, not on this page.", "deal-small"));
+    }
     composed.also
       .filter((t) => t.state !== "verified" && t.state !== "failed")
       .forEach((t) => {
         const day = typeof t.at === "string" ? shortDay(t.at) : "";
         const also = t.state === "absent" ? `Also: your agent asked and nothing came back by ${day}.` : t.state === "refused" ? `Also: they answered on ${day} that they would not share.` : `Also: a refusal in their name came back on ${day}; its signature was not checked here.`;
-        theirs.append(el("div", also, "deal-small"));
+        more.append(el("div", also, "deal-small"));
       });
+    theirs.append(more);
   }
   col.append(theirs);
 

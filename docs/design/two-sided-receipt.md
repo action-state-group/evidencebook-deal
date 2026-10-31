@@ -170,7 +170,8 @@ Rejected:
      `extensions["x-deal-v0"].sealed_report`, read by the same #83 model. A page a viewer opens
      has no bootstrap: no openings (the asked words show as committed, as `deal-receipt-bundle`
      keeps them closed today), no countersign line, and the module's own words.
-  3. Neither: "Your side" says it is not in this file, and the banner is never "stamped by both".
+  3. Neither: "Your side" says it is not in this file, and the banner is never "stamped by both":
+     it reads "Your copy is not in this file · not fully checked".
 - **Their members** are every `artifact` or `refusal` member whose observer is not the composer,
   and every `absence` member (whose observer is always the composer). A composition of one deal
   has at most one other party, so more than one non-composer observer is refused.
@@ -257,7 +258,9 @@ Their `artifact` member verifies when:
     string anchor is no stronger on the page, since its signature is not checked there either.
 
   The response's own signature is a deployment signature that this verifier reports
-  `signature_unverified`. The page says so on the stamp and does not count it as checked.
+  `signature_unverified`. The page does not count it as checked, and their side's fold-out says
+  that the reply's signature and the checkpoint it names are checked by `capsulectl verify`, not
+  on the page (Sherlock2's condition, round 5, Buzz `edd2c83a`).
   `deal compose` checked that signature when it recorded the answer; for an interop envelope the
   plugin checked it when it recorded the ask's outcome.
 - **V4.** It is about this deal:

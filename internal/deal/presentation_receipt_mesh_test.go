@@ -87,7 +87,8 @@ func meshRecord(t *testing.T, key ed25519.PrivateKey, actionID, requestDigest, b
 // store holding records, checkpointed under the node's own key (on Mesh the
 // checkpoint key is the announced signing key), and the bundle of it rooted
 // at root, every retained payload disclosed.
-func meshLedger(t *testing.T, key ed25519.PrivateKey, records []artifact.Record, root string) map[string]any {
+// Records sealed under another key are stored when that key is in also.
+func meshLedger(t *testing.T, key ed25519.PrivateKey, records []artifact.Record, root string, also ...ed25519.PrivateKey) map[string]any {
 	t.Helper()
 	p := dealProfile(t)
 	p.LogID = "synthetic-mesh/" + hex.EncodeToString(key.Public().(ed25519.PublicKey))[:16]
@@ -102,6 +103,9 @@ func meshLedger(t *testing.T, key ed25519.PrivateKey, records []artifact.Record,
 	p.Checkpoint.Signing = cli.Secret{File: seed}
 	p.TrustedKeys = append(p.TrustedKeys, hex.EncodeToString(key.Public().(ed25519.PublicKey)))
 	p.Checkpoint.TrustedKeys = append(p.Checkpoint.TrustedKeys, hex.EncodeToString(key.Public().(ed25519.PublicKey)))
+	for _, k := range also {
+		p.TrustedKeys = append(p.TrustedKeys, hex.EncodeToString(k.Public().(ed25519.PublicKey)))
+	}
 	target, err := cli.OpenTarget(t.Context(), p, cli.UseInitialization)
 	require.NoError(t, err)
 	defer func() { _ = target.Close() }()
@@ -168,10 +172,19 @@ func newMeshPayer(t *testing.T) meshPayer {
 // the composition record, which is the root; the provider's member is the
 // provider's own ledger rooted at its half, with its signed response.
 // meshOptions vary the synthetic composition: the payer's citing record for
-// the provider's half, and a response in neither form V3 reads.
+// the provider's half, a response in neither form V3 reads, a second member
+// (from the same provider, or another), the provider's custody declared as
+// the payer's key, a report that cites no payer half, a report sealed under
+// another key, and a root that is not a deal composition.
 type meshOptions struct {
-	citing    func(theirs artifact.Record, provider string) *artifact.Record
-	otherForm bool
+	citing         func(theirs artifact.Record, provider string) *artifact.Record
+	otherForm      bool
+	second         *meshHalf
+	secondProvider bool
+	custodyIsPayer bool
+	uncited        bool
+	reportKey      ed25519.PrivateKey
+	rootActionID   string
 }
 
 type ed25519Signer struct{ key ed25519.PrivateKey }
@@ -180,50 +193,72 @@ func (s ed25519Signer) Sign(_ context.Context, message []byte) ([]byte, error) {
 	return ed25519.Sign(s.key, message), nil
 }
 
-func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, opts meshOptions) map[string]any {
+// meshMember is one provider answer: the provider's own ledger rooted at its
+// served half, answered under the evidence-interop profile (§6.2), whose
+// envelope names the anchor by the digest of the checkpoint's COSE octets;
+// the member carries it as received, minus the artifact.
+func meshMember(t *testing.T, providerKey ed25519.PrivateKey, half meshHalf, id string, otherForm bool) (map[string]any, artifact.Record) {
 	t.Helper()
-	at := time.Date(2026, 10, 9, 16, 10, 0, 0, time.UTC)
-	ownHalf := meshHalfRecord(t, payer.key, "requested", own, at)
-	_, providerKey, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
 	provider := hex.EncodeToString(providerKey.Public().(ed25519.PublicKey))
-	theirHalf := meshHalfRecord(t, providerKey, "served", theirs, at)
+	theirHalf := meshHalfRecord(t, providerKey, "served", half, time.Date(2026, 10, 9, 16, 10, 0, 0, time.UTC))
 	memberBundle := meshLedger(t, providerKey, []artifact.Record{theirHalf}, theirHalf.CapsuleID)
 	digest, err := aacbundle.BundleDigest(memberBundle)
 	require.NoError(t, err)
 	cp := memberBundle["checkpoint"].(map[string]any)
-	requestDigest := cli.BytesDigest([]byte("synthetic ask " + provider))
-	// The provider answers under the evidence-interop profile (§6.2): its
-	// envelope names the anchor by the digest of the checkpoint's COSE
-	// octets, and the member carries it as received, minus the artifact.
+	requestDigest := cli.BytesDigest([]byte("synthetic ask " + id))
 	cose, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(cp["cose"].(string), "="))
 	require.NoError(t, err)
-	anchor := cli.BytesDigest(cose)
 	profile := "evidence-interop/1"
-	if opts.otherForm {
+	if otherForm {
 		profile = "example-response/1"
 	}
 	envelope := evidencerequest.Envelope{
 		Profile: profile, RequestDigest: requestDigest,
 		Subject: evidencerequest.Subject{Kind: evidencerequest.SubjectRecord, Digest: theirHalf.CapsuleID},
-		Anchor:  evidencerequest.Anchor{Digest: anchor}, ArtifactDigest: digest, Responder: provider, IssuedAt: "2026-10-09T16:20:00Z",
+		Anchor:  evidencerequest.Anchor{Digest: cli.BytesDigest(cose)}, ArtifactDigest: digest, Responder: provider, IssuedAt: "2026-10-09T16:20:00Z",
 	}
 	envelope, err = envelope.Sign(t.Context(), ed25519Signer{providerKey})
 	require.NoError(t, err)
 	response := envelope.Value()
 	delete(response, "artifact")
-	member := map[string]any{
-		"id": strings.Repeat("ab", 32), "observer": provider, "request_digest": requestDigest, "outcome": "artifact", "digest": digest, "bundle": memberBundle,
+	return map[string]any{
+		"id": id, "observer": provider, "request_digest": requestDigest, "outcome": "artifact", "digest": digest, "bundle": memberBundle,
 		"response": response,
+	}, theirHalf
+}
+
+func newKey(t *testing.T) ed25519.PrivateKey {
+	t.Helper()
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return key
+}
+
+func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, opts meshOptions) map[string]any {
+	t.Helper()
+	at := time.Date(2026, 10, 9, 16, 10, 0, 0, time.UTC)
+	ownHalf := meshHalfRecord(t, payer.key, "requested", own, at)
+	providerKey := newKey(t)
+	provider := hex.EncodeToString(providerKey.Public().(ed25519.PublicKey))
+	payerKey := hex.EncodeToString(payer.key.Public().(ed25519.PublicKey))
+	member, theirHalf := meshMember(t, providerKey, theirs, strings.Repeat("ab", 32), opts.otherForm)
+	custody := provider
+	if opts.custodyIsPayer {
+		custody = payerKey
 	}
-	payerCheckpoint := hex.EncodeToString(payer.key.Public().(ed25519.PublicKey))
-	block := map[string]any{
-		"members": []any{member},
-		"observers": []any{
-			map[string]any{"id": provider, "role": dealObserverRole, "custody_domain": provider},
-		},
-		"joins": []any{},
+	members := []any{member}
+	observers := []any{map[string]any{"id": provider, "role": dealObserverRole, "custody_domain": custody}}
+	if opts.second != nil {
+		key := providerKey
+		if opts.secondProvider {
+			key = newKey(t)
+			other := hex.EncodeToString(key.Public().(ed25519.PublicKey))
+			observers = append(observers, map[string]any{"id": other, "role": dealObserverRole, "custody_domain": other})
+		}
+		second, _ := meshMember(t, key, *opts.second, strings.Repeat("cd", 32), false)
+		members = append(members, second)
 	}
+	block := map[string]any{"members": members, "observers": observers, "joins": []any{}}
 	composed, err := composedDigest(block)
 	require.NoError(t, err)
 	block["composed_digest"] = composed
@@ -234,13 +269,27 @@ func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, opts m
 	raw, err := json.Marshal(payer.report)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &report))
-	did := report["report"].(map[string]any)["did"].([]any)
-	last := did[len(did)-1].(map[string]any)
-	steps, _ := last["steps"].([]any)
-	last["steps"] = append(steps, ownHalf.CapsuleID)
-	reportRecord := sealSynthetic(t, payer.key, "capsulectl-deal-report", report)
-	composition := sealSynthetic(t, payer.key, dealCompositionActionID, map[string]any{
-		"type": "deal_composition", "profile": "x-deal-v0", "deal_id": payer.dealID, "composed_digest": composed, "request_records": []any{member["id"]},
+	if !opts.uncited {
+		did := report["report"].(map[string]any)["did"].([]any)
+		last := did[len(did)-1].(map[string]any)
+		steps, _ := last["steps"].([]any)
+		last["steps"] = append(steps, ownHalf.CapsuleID)
+	}
+	reportKey := payer.key
+	if opts.reportKey != nil {
+		reportKey = opts.reportKey
+	}
+	reportRecord := sealSynthetic(t, reportKey, "capsulectl-deal-report", report)
+	rootAction := dealCompositionActionID
+	if opts.rootActionID != "" {
+		rootAction = opts.rootActionID
+	}
+	ids := []any{}
+	for _, m := range members {
+		ids = append(ids, m.(map[string]any)["id"])
+	}
+	composition := sealSynthetic(t, payer.key, rootAction, map[string]any{
+		"type": "deal_composition", "profile": "x-deal-v0", "deal_id": payer.dealID, "composed_digest": composed, "request_records": ids,
 	})
 	records := append(append([]artifact.Record{}, payer.steps...), ownHalf)
 	if opts.citing != nil {
@@ -249,8 +298,12 @@ func meshComposition(t *testing.T, payer meshPayer, own, theirs meshHalf, opts m
 		}
 	}
 	records = append(records, reportRecord, composition)
-	b := meshLedger(t, payer.key, records, composition.CapsuleID)
-	require.Equal(t, payerCheckpoint, b["checkpoint"].(map[string]any)["key_id"], "the payer's checkpoint key is its signing key")
+	var also []ed25519.PrivateKey
+	if opts.reportKey != nil {
+		also = append(also, opts.reportKey)
+	}
+	b := meshLedger(t, payer.key, records, composition.CapsuleID, also...)
+	require.Equal(t, payerKey, b["checkpoint"].(map[string]any)["key_id"], "the payer's checkpoint key is its signing key")
 	extensions, _ := b["extensions"].(map[string]any)
 	if extensions == nil {
 		extensions = map[string]any{}
@@ -353,6 +406,32 @@ func TestPresentationMeshReceiptWithTheirHalf(t *testing.T) {
 			assert.Contains(t, stamps[1], "failed | —Each side's record is stamped into its own book")
 		})
 	}
+	other := meshHalf{nonce: "client-nonce-2", source: "client_supplied", requestDigest: request}
+	for name, c := range map[string]struct {
+		opts    meshOptions
+		refusal string
+	}{
+		"two other parties":                  {meshOptions{second: &same, secondProvider: true}, "more than one other party"},
+		"their custody domain is your key":   {meshOptions{custodyIsPayer: true}, "yours under another label"},
+		"your half not cited by your report": {meshOptions{uncited: true}, "not cited by your receipt"},
+		"your report under another key":      {meshOptions{reportKey: newKey(t)}, "not the composer's own copy"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, _, refusal := read(t, same, same, c.opts)
+			assert.Contains(t, refusal, c.refusal)
+		})
+	}
+	t.Run("a failing copy beside a passing one", func(t *testing.T) {
+		banner, their, _, refusal := read(t, same, same, meshOptions{second: &other})
+		require.Empty(t, refusal)
+		assert.Contains(t, banner, "Your receipt only", "a passing copy beside a failing one is never stamped by both")
+		assert.Equal(t, "failed", their)
+	})
+	t.Run("not a deal composition", func(t *testing.T) {
+		banner, their, stamps, refusal := read(t, same, same, meshOptions{rootActionID: "example-composition"})
+		assert.Empty(t, banner+their+refusal, "the deal view does not draw it")
+		assert.Empty(t, stamps)
+	})
 	t.Run("a response in neither form", func(t *testing.T) {
 		banner, their, _, _ := read(t, same, same, meshOptions{otherForm: true})
 		assert.Contains(t, banner, "Your receipt only")
