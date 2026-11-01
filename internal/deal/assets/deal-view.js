@@ -42,7 +42,8 @@ function versionBefore(a, b) {
   return x.pre < y.pre;
 }
 
-// The module's built-in words: the page.* entries of assets/wording/capsulectl-deal-en.json,
+// The module's built-in words: the page.* entries of assets/wording/capsulectl-deal-en.json
+// and the core's size.* entries,
 // written here by TestDealViewDefaultWordsAreThePack (CAPSULECTL_UPDATE_DEAL_VIEW_WORDS=1);
 // the pack is the source, and a test holds this table to it.
 // BEGIN DEAL_VIEW_WORDS
