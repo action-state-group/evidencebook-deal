@@ -454,9 +454,13 @@ func TestDealShareWithholdsTheCustomersNameFromTheMerchantEmail(t *testing.T) {
 	shareRun(t, dealID, "adjudicator", page)
 	raw, err := os.ReadFile(page)
 	require.NoError(t, err)
-	for _, n := range append(names, "Customer") {
+	for _, n := range names {
 		assert.NotContains(t, strings.ToLower(string(raw)), strings.ToLower(n))
 	}
+	// The surname alone is checked in the page's data and markup. The
+	// viewer's own runtime scripts are left out: since capsule-viewer 0.8.0
+	// their wording says "customer" (Outcomes frame 5), whoever the customer is.
+	assert.NotContains(t, strings.ToLower(withoutRuntimeScripts(string(raw))), "customer")
 	assert.Contains(t, string(raw), "Shipping to [withheld], [withheld], [withheld], [withheld] today")
 
 	// The gate alone, as if the scrubber had missed it.
@@ -525,4 +529,13 @@ func TestDealShareOneWordNameFloorIsThreeLetters(t *testing.T) {
 		assert.NotContains(t, strings.ToLower(p.scrub(in)), "amy", in)
 		assert.Error(t, dealPageGate(gatePage(t, in), events), in)
 	}
+}
+
+var runtimeScript = regexp.MustCompile(`(?s)<script>.*?</script>`)
+
+// withoutRuntimeScripts drops the page's plain <script> elements, the
+// viewer's runtime and the deal view's modules. The bundle the page carries
+// sits in a <script type="application/json"> element and stays.
+func withoutRuntimeScripts(page string) string {
+	return runtimeScript.ReplaceAllString(page, "")
 }
