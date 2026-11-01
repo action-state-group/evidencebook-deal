@@ -231,9 +231,10 @@ const dealRefTo = (deal, rel) => ((deal && Array.isArray(deal.refs) ? deal.refs 
 // earlier position: an approval that proceeds, answering a verdict that
 // answers a check; or, on typed records, an evaluation that let it go ahead
 // under the task's authority (DO), answering the proposed action. An act
-// sealed without an approval (an unchecked_action outcome, a disclosure
-// with no authority) fails, named; an authority withheld from this copy is
-// missing.
+// sealed without an approval (an unchecked_action outcome, x-deal or
+// typed; a disclosure with no authority; a claim sealed unchecked) fails,
+// named; an authority withheld from this copy is missing, and a copy with
+// any step withheld is not checked, since that step may be an act.
 const dealApprovalTypes = ["approval", "action-approval/v0"];
 const dealEvaluationTypes = ["verdict", "action-evaluation/v0"];
 const dealCheckTypes = ["check", "proposed-action/v0"];
@@ -249,8 +250,9 @@ const dealAfterYes = (steps, shared) => {
   for (const s of steps) {
     if (!s.deal) continue;
     const t = s.deal.record_type;
-    if (t === "outcome" && s.body.status === "unchecked_action") return { state: "failed", act: s, why: "unapproved" };
+    if ((t === "outcome" || t === "action-outcome/v0") && s.body.status === "unchecked_action") return { state: "failed", act: s, why: "unapproved" };
     if (t === "disclosure" && s.body.authority === "none") return { state: "failed", act: s, why: "unapproved" };
+    if (t === "claim" && s.body.unchecked === true) return { state: "failed", act: s, why: "unapproved" };
     if (dealRefTo(s.deal, "authorized_by") !== undefined || t === "action" || (t === "disclosure" && s.body.authority === "approval")) acts.push(s);
   }
   const withheld = steps.some((s) => !s.deal);
@@ -263,8 +265,20 @@ const dealAfterYes = (steps, shared) => {
     let approver;
     if (typeof by === "object" && dealApprovalTypes.includes(by.deal.record_type)) {
       if (by.body.proceed !== true) return { state: "failed", act, why: "order" };
-      approver = by.deal.record_type === "approval" ? by.body.approver : by.body.authority === "user_approval" ? "user" : undefined;
-      evaluation = earlier(dealRefTo(by.deal, "approves"), by, dealEvaluationTypes);
+      const answered = dealRefTo(by.deal, "approves");
+      evaluation = earlier(answered, by, dealEvaluationTypes);
+      // x-deal-v0 section 6 rule 5: only the verdict's first answer
+      // authorizes; a later one ("Hold", then "Pay anyway") never does.
+      if (steps.some((s) => s.deal && dealApprovalTypes.includes(s.deal.record_type) && s.seq < by.seq && dealRefTo(s.deal, "approves") === answered)) return { state: "failed", act, why: "order" };
+      if (by.deal.record_type === "approval") {
+        approver = by.body.approver;
+        // Standing intent approves only a passing verdict (rule 6).
+        if (approver === "standing_intent" && typeof evaluation === "object" && evaluation.body.result !== "pass") return { state: "failed", act, why: "order" };
+      } else {
+        // A typed ASK is answered only by the user's own approval.
+        if (by.body.authority !== "user_approval") return { state: "failed", act, why: "order" };
+        approver = "user";
+      }
     } else if (typeof by === "object") {
       if (by.body.disposition !== "DO") return { state: "failed", act, why: "order" };
       approver = "task_authority";
@@ -275,10 +289,12 @@ const dealAfterYes = (steps, shared) => {
       continue;
     }
     if (typeof check === "string") return { state: "failed", act, why: "order" };
+    // The check asked about this very act (rule 5).
+    if (typeof act.body.action === "string" && check.body.action !== act.body.action) return { state: "failed", act, why: "order" };
     if (approver !== undefined && !approvers.includes(approver)) approvers.push(approver);
   }
   if (missing) return { state: "missing", act: missing, approvers };
-  return { state: shared && withheld ? "not checked" : "passed", approvers };
+  return { state: withheld ? "not checked" : "passed", approvers };
 };
 
 // The payment's settlement (F8.1), per rail as its adapter states it
@@ -324,7 +340,8 @@ const dealBandLabel = (shown, words) => {
   const band = { ...shown, currency: Object.prototype.hasOwnProperty.call(dealAssetCodes, shown.currency) ? dealAssetCodes[shown.currency] : shown.currency };
   const fill = (key, fallback, vars) => (typeof words[key] === "string" ? words[key] : fallback).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
   const sym = Object.prototype.hasOwnProperty.call(dealBandSymbols, band.currency) ? dealBandSymbols[band.currency] : undefined;
-  if (sym && (band.decade === null || band.decade <= 17)) {
+  // Up to decade 16: the high bound's nines need power(decade + 1) in digits.
+  if (sym && (band.decade === null || band.decade <= 16)) {
     if (band.decade === null || band.decade <= 0) return fill("size.under", "under {amount}", { amount: sym + "10" });
     return fill("size.between", "{low} – {high}", { low: sym + dealGrouped(dealPower(band.decade)), high: sym + dealGrouped(dealPower(band.decade + 1).slice(1).replace(/0/g, "9")) });
   }

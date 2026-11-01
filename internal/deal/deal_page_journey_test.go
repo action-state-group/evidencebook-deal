@@ -178,7 +178,8 @@ func TestTheReceiptFaceSaysOnlyWhatWasChecked(t *testing.T) {
 	assert.Equal(t, "no", withheld["banner"])
 	assert.Equal(t, "Your copy only · not fully checked", withheld["bannerText"])
 	assert.Equal(t, "failed", withheld["stamps"].([]any)[1])
-	assert.Equal(t, "2 passed · 1 failed · 6 not checkable here", withheld["pill"], "a check that ran and failed is on the pill")
+	assert.Equal(t, "1 passed · 1 failed · 7 not checkable here", withheld["pill"], "a check that ran and failed is on the pill")
+	assert.Equal(t, "not checked", withheld["stamps"].([]any)[3], "a withheld step may be an act: the order is not passed")
 }
 
 // The sealed report's journey is facts only: no word from a wording pack,

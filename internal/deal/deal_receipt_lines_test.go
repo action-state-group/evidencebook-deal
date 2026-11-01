@@ -241,9 +241,9 @@ func TestTheSettlementBandIsWordedAsTheHistoryCardWordsIt(t *testing.T) {
 	}
 	got := runDealViewFunctions(t, map[string]any{
 		"close": []any{}, "afterYes": []any{}, "settlement": []any{},
-		"band": []any{band("USD", 0), band("USD", nil), band("USD", 1), band("USD", 3), band("BTC", -6), band("BTC", 0), band("BTC", nil), band("USDC", -2)},
+		"band": []any{band("USD", 0), band("USD", nil), band("USD", 1), band("USD", 3), band("USD", 16), band("USD", 17), band("BTC", -6), band("BTC", 0), band("BTC", nil), band("USDC", -2)},
 	})
-	assert.Equal(t, []any{"under $10", "under $10", "$10 – $99", "$1,000 – $9,999", "0.000001 to under 0.00001 BTC", "1 to under 10 BTC", "zero amount, BTC", "0.01 to under 0.1 USDC"}, got["band"])
+	assert.Equal(t, []any{"under $10", "under $10", "$10 – $99", "$1,000 – $9,999", "$10,000,000,000,000,000 – $99,999,999,999,999,999", "100000000000000000 to under 1000000000000000000 USD", "0.000001 to under 0.00001 BTC", "1 to under 10 BTC", "zero amount, BTC", "0.01 to under 0.1 USDC"}, got["band"])
 }
 
 // "After your yes", recomputed over a deal's steps: the approval, its
@@ -263,9 +263,21 @@ func TestAfterYourYesIsRecomputedFromTheLogsOrder(t *testing.T) {
 	withheld := map[string]any{"id": "a", "seq": 4, "digest": "d-a", "body": map[string]any{}}
 	unchecked := step("u", 5, "outcome", map[string]any{"status": "unchecked_action"})
 	told := step("t", 5, "disclosure", map[string]any{"authority": "none"})
+	typedUnchecked := step("tu", 5, "action-outcome/v0", map[string]any{"status": "unchecked_action"})
+	uncheckedClaim := step("uc", 5, "claim", map[string]any{"unchecked": true, "rule": "no_check"})
+	hidden := map[string]any{"id": "h", "seq": 6, "digest": "d-h", "body": map[string]any{}}
+	// Rule 5: the verdict's first answer only, the user's own approval for
+	// a typed ASK, standing intent only on a pass, and the check's action.
+	first := step("a0", 4, "approval", map[string]any{"proceed": false, "approver": "user"}, ref("approves", "v"))
+	second := step("a", 5, "approval", map[string]any{"proceed": true, "approver": "user"}, ref("approves", "v"))
+	actAfter := step("p", 6, "action", map[string]any{"action": "pay"}, ref("authorized_by", "a"))
+	cardAnswer := step("ty", 4, "action-approval/v0", map[string]any{"authority": "card_answer", "proceed": true}, ref("approves", "e"))
+	paused := step("v", 3, "verdict", map[string]any{"result": "pause"}, ref("checks", "c"))
+	standing := step("a", 4, "approval", map[string]any{"proceed": true, "approver": "standing_intent"}, ref("approves", "v"))
+	otherCheck := step("c", 2, "check", map[string]any{"action": "sign"})
 	// Typed records: an act the task's authority let go ahead (DO), or one
 	// the user approved after an evaluation that asked.
-	proposed := step("pc", 2, "proposed-action/v0", map[string]any{})
+	proposed := step("pc", 2, "proposed-action/v0", map[string]any{"action": "commit"})
 	do := step("e", 3, "action-evaluation/v0", map[string]any{"disposition": "DO"}, ref("checks", "pc"))
 	ask := step("e", 3, "action-evaluation/v0", map[string]any{"disposition": "ASK"}, ref("checks", "pc"))
 	typedYes := step("ty", 4, "action-approval/v0", map[string]any{"authority": "user_approval", "proceed": true}, ref("approves", "e"))
@@ -284,8 +296,54 @@ func TestAfterYourYesIsRecomputedFromTheLogsOrder(t *testing.T) {
 			[]any{check, verdict, act},
 			[]any{check, verdict, approval, unchecked},
 			[]any{told},
+			[]any{proposed, typedUnchecked},
+			[]any{uncheckedClaim},
+			[]any{check, verdict, approval, act, hidden},
+			[]any{check, verdict, first, second, actAfter},
+			[]any{proposed, ask, cardAnswer, typedApproved},
+			[]any{check, paused, standing, act},
+			[]any{otherCheck, verdict, approval, act},
 			[]any{check},
 		},
 	})
-	assert.Equal(t, []any{"passed by task_authority", "failed:order:ta", "passed by user", "passed by user", "failed:order:p", "failed:order:p", "missing:p", "failed:order:p", "failed:unapproved:u", "failed:unapproved:t", "none"}, got["afterYes"])
+	assert.Equal(t, []any{"passed by task_authority", "failed:order:ta", "passed by user", "passed by user", "failed:order:p", "failed:order:p", "missing:p", "failed:order:p", "failed:unapproved:u", "failed:unapproved:t", "failed:unapproved:tu", "failed:unapproved:uc", "not checked by user", "failed:order:p", "failed:order:ta", "failed:order:p", "failed:order:p", "none"}, got["afterYes"])
+}
+
+// The settlement as the legs state it: the rail from the payment
+// reference, whether the preimage is held (or withheld from this copy),
+// and a band only when every amount is in one asset.
+func TestTheSettlementIsReadFromItsLegs(t *testing.T) {
+	amount := func(code string, scale int, value string) map[string]any {
+		return map[string]any{"assetCode": code, "assetScale": scale, "value": value}
+	}
+	leg := func(ref, code string, fee map[string]any, body map[string]any, withheld bool) map[string]any {
+		s := map[string]any{"id": "l", "seq": 3, "body": body, "settlement": map[string]any{
+			"leg": "payee_observed", "status": "settled", "payment_ref": map[string]any{"type": ref}, "received": amount(code, 6, "2500000"), "receive_fee": fee,
+		}}
+		if !withheld {
+			s["deal"] = map[string]any{"record_type": "evidence"}
+		}
+		return s
+	}
+	usdc := amount("USDC", 6, "0")
+	got := runDealViewFunctions(t, map[string]any{
+		"close": []any{}, "band": []any{}, "afterYes": []any{},
+		"settlement": []any{
+			[]any{leg("x402.transaction", "USDC", usdc, map[string]any{}, false)},
+			[]any{leg("ln.payment_hash", "USDC", usdc, map[string]any{"preimage": "ab"}, false)},
+			[]any{leg("ln.payment_hash", "USDC", usdc, map[string]any{}, true)},
+			[]any{leg("x402.transaction", "USDC", amount("EUR", 2, "1"), map[string]any{}, false)},
+			[]any{map[string]any{"id": "p", "seq": 2, "deal": map[string]any{"record_type": "action"}, "body": map[string]any{"rail": "card"}}},
+			[]any{},
+		},
+	})
+	band := map[string]any{"currency": "USDC", "decade": float64(0)}
+	assert.Equal(t, []any{
+		map[string]any{"rail": "x402", "legs": true, "preimage": false, "band": band},
+		map[string]any{"rail": "lightning", "legs": true, "preimage": true, "band": band},
+		map[string]any{"rail": "lightning", "legs": true, "preimage": "withheld", "band": band},
+		map[string]any{"rail": "x402", "legs": true, "preimage": false},
+		map[string]any{"rail": "card", "legs": false},
+		nil,
+	}, got["settlement"])
 }
