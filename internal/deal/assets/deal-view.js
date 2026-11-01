@@ -42,6 +42,29 @@ function versionBefore(a, b) {
   return x.pre < y.pre;
 }
 
+// W is one consumer word of the page: the entry at key in the page's words
+// (capsulectlDealPage.words, the page.* entries of capsulectl-deal's wording
+// pack, which capsulectl puts on the page), its {placeholders} filled from
+// vals, as capsulectl's Wording.Line fills them: a key the page has no word
+// for, or a placeholder with no value, words nothing. Record data, the
+// separators between a row's parts and the glyphs (✓ ⚠️) are not words and
+// stay in code.
+const W = (key, vals) => {
+  const text = ((globalThis.capsulectlDealPage || {}).words || {})[key];
+  if (typeof text !== "string") return "";
+  let missing = false;
+  const filled = text.replace(/\{([a-z_]+)\}/g, (_, k) => {
+    const v = vals ? vals[k] : undefined;
+    if (v === undefined || v === null) missing = true;
+    return missing ? "" : String(v);
+  });
+  return missing ? "" : filled;
+};
+
+// WR is a refusal's word. A refusal is told by its text being there, so one
+// never words nothing: a page with no word for it shows the key.
+const WR = (key, vals) => W(key, vals) || key;
+
 // dealJourneyLabel words one move of the sealed journey (capsule-cli#370)
 // from the page's words, as capsulectl's Wording.Line words the report's
 // journey: a key the page has no word for, or a placeholder with no value,
@@ -63,7 +86,7 @@ const dealJourneyLabel = (words, move) => {
   }
   if (Array.isArray(facts.classes)) {
     const named = facts.classes.map((c) => (typeof words["class." + c] === "string" ? words["class." + c] : String(c).replace(/_/g, " ")));
-    vals.classes = named.length < 2 ? named.join("") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+    vals.classes = named.length < 2 ? named.join("") : W("page.join_and", { list: named.slice(0, -1).join(", "), last: named[named.length - 1] });
   }
   let missing = false;
   const filled = text.replace(/\{([a-z_]+)\}/g, (_, k) => {
@@ -114,9 +137,9 @@ const dealVerifiedKey = async (record) => {
   return key === record.key_id ? key : undefined;
 };
 const dealStandaloneReport = async (context, bundle, x, sealedId) => {
-  const refused = { refusal: "⚠️ The deal's text could not be checked against its sealed report. Do not rely on it." };
+  const refused = { refusal: WR("page.refuse.report") };
   if (!EvidenceGraph.ed25519Available()) {
-    return { refusal: "⚠️ This viewer cannot check the report's signature here. Run capsulectl verify on the file before relying on it." };
+    return { refusal: WR("page.refuse.report_signature") };
   }
   if (!x || typeof x !== "object" || Object.keys(x).length !== 2) return refused;
   const record = x.record;
@@ -185,14 +208,13 @@ const dealBuildsCompared = (builds, report) => {
   const earlier = (b) => b.producer === "capsulectl" && pageBuild.name === "capsulectl-deal";
   const olderBuilds = builds
     .filter((b) => !earlier(b) && b.producer === pageBuild.name && (b.version === undefined || versionBefore(b.version, pageBuild.version)))
-    .map((b) => b.version || "unrecorded");
+    .map((b) => b.version || W("page.build.unrecorded"));
   const earlierBuilds = builds.filter(earlier).map((b) => (b.version === undefined ? b.name : `${b.producer} ${b.version}`));
   const releaseNotes = typeof report.release_notes === "string" && report.release_notes.startsWith("https://") ? report.release_notes : "https://github.com/action-state-group/capsule-cli/releases";
   const said = [];
-  if (pageBuild.version && olderBuilds.length > 0) said.push(`Produced by an older version (${olderBuilds.join(", ")}) than the ${pageBuild.name} that made this page (${pageBuild.version}).`);
+  if (pageBuild.version && olderBuilds.length > 0) said.push(W("page.build.older", { versions: olderBuilds.join(", "), name: pageBuild.name, version: pageBuild.version }));
   if (pageBuild.version && earlierBuilds.length > 0) {
-    const what = earlierBuilds.length > 1 ? "the builds that sealed" : "the build that sealed";
-    said.push(`Some steps were sealed by ${earlierBuilds.join(", ")}, ${what} deals before ${pageBuild.name} did; ${pageBuild.name} ${pageBuild.version} made this page.`);
+    said.push(W(earlierBuilds.length > 1 ? "page.build.earlier_other" : "page.build.earlier_one", { builds: earlierBuilds.join(", "), name: pageBuild.name, version: pageBuild.version }));
   }
   return { pageBuild, olderBuilds, earlierBuilds, releaseNotes, buildNote: said.join(" ") };
 };
@@ -338,14 +360,13 @@ const dealGrouped = (digits) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const dealAssetCodes = { "bip122:000000000019d6689c085ae165831e93/slip44:0": "BTC" };
 const dealBandLabel = (shown, words) => {
   const band = { ...shown, currency: Object.prototype.hasOwnProperty.call(dealAssetCodes, shown.currency) ? dealAssetCodes[shown.currency] : shown.currency };
-  const fill = (key, fallback, vars) => (typeof words[key] === "string" ? words[key] : fallback).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
   const sym = Object.prototype.hasOwnProperty.call(dealBandSymbols, band.currency) ? dealBandSymbols[band.currency] : undefined;
   if (sym && (band.decade === null || band.decade <= 17)) {
-    if (band.decade === null || band.decade <= 0) return fill("size.under", "under {amount}", { amount: sym + "10" });
-    return fill("size.between", "{low} – {high}", { low: sym + dealGrouped(dealPower(band.decade)), high: sym + dealGrouped(dealPower(band.decade + 1).slice(1).replace(/0/g, "9")) });
+    if (band.decade === null || band.decade <= 0) return W("size.under", { amount: sym + "10" });
+    return W("size.between", { low: sym + dealGrouped(dealPower(band.decade)), high: sym + dealGrouped(dealPower(band.decade + 1).slice(1).replace(/0/g, "9")) });
   }
-  if (band.decade === null) return fill("size.zero", "zero amount, {currency}", { currency: band.currency });
-  return fill("size.range", "{low} to under {high} {currency}", { low: dealPower(band.decade), high: dealPower(band.decade + 1), currency: band.currency });
+  if (band.decade === null) return W("size.zero", { currency: band.currency });
+  return W("size.range", { low: dealPower(band.decade), high: dealPower(band.decade + 1), currency: band.currency });
 };
 
 // The deal's close, as the other side's records answer it (F8.1, F8.7):
@@ -412,7 +433,7 @@ const dealViewModel = async (context) => {
   const bookSteps = context.records.some((r) => r && r.evidence_record_header && dealStepTypes.includes(r.evidence_record_header.record_type));
   if (standalone !== undefined) {
     if (sealedId === undefined || Object.keys(dealExt).length !== 1) {
-      return { refusal: "⚠️ The deal's text could not be checked against its sealed report. Do not rely on it." };
+      return { refusal: WR("page.refuse.report") };
     }
     const checked = await dealStandaloneReport(context, bundle, standalone, sealedId);
     if (checked.refusal) return checked;
@@ -420,17 +441,17 @@ const dealViewModel = async (context) => {
   } else if (sealedId !== undefined || otherReports.length > 0 || reportRecords.length > 0) {
     const input = sealedId !== undefined ? payload(sealedId) : undefined;
     if (otherReports.length > 0 || !input || input.type !== "deal_report" || typeof input.report !== "object" || input.report === null) {
-      return { refusal: "⚠️ The deal's text could not be checked against its sealed record. Do not rely on it." };
+      return { refusal: WR("page.refuse.record") };
     }
     report = input.report;
     if (typeof input.deal_id === "string") reportDealId = input.deal_id;
   } else if (bookSteps) {
-    return { refusal: "⚠️ The deal's text could not be checked against its sealed report. Do not rely on it." };
+    return { refusal: WR("page.refuse.report") };
   }
   const shared = report.audience === "counterparty" || report.audience === "adjudicator";
   const base = payload(report.asked_step);
   if (!shared && (!base || !base["x-deal-v0"] || base["x-deal-v0"].record_type !== "baseline")) {
-    return { refusal: "⚠️ The deal's opening step is not in this report." };
+    return { refusal: WR("page.refuse.opening") };
   }
 
   const logSteps = dealLogSteps(context);
@@ -444,7 +465,7 @@ const dealViewModel = async (context) => {
     // An x-deal-v0 record names its producer in its block; a typed record, in its header.
     const p = (rec["x-deal-v0"] || rec).producer;
     const producer = (p && p.name) || "capsulectl";
-    const name = p && typeof p.version === "string" ? `${producer} ${p.version} (${p.commit || "unknown"})` : "an earlier capsulectl that did not record its version";
+    const name = p && typeof p.version === "string" ? `${producer} ${p.version} (${p.commit || W("page.build.commit_unknown")})` : W("page.build.earlier_name");
     if (!builds.some((b) => b.name === name)) builds.push({ name, producer, version: p && p.version });
   });
   const { pageBuild, olderBuilds, earlierBuilds, releaseNotes, buildNote } = dealBuildsCompared(builds, report);
@@ -573,22 +594,22 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
 };
 
 const dealComposedModel = async (context) => {
-  const refused = (why) => ({ refusal: `⚠️ ${why} Do not rely on it; run capsulectl verify on the file.` });
+  const refused = (why) => ({ refusal: WR("page.refuse.composed", { why }) });
   const bundle = context.bundle;
   // Every half here is checked by its signature: a viewer that cannot check
   // Ed25519 says so, and never calls their record bad (Sherlock2, #86).
   if (!EvidenceGraph.ed25519Available()) {
-    return { refusal: "⚠️ This viewer can't check the signatures in this file here. Run capsulectl verify on the file before relying on it." };
+    return { refusal: WR("page.refuse.signatures") };
   }
   // V0: the composition itself.
-  if (!dealViewVerified(context)) return refused("This file's composition did not verify.");
+  if (!dealViewVerified(context)) return refused(W("page.refuse.composition_unverified"));
   const root = dealRootRecord(bundle, context.records);
   const composer = await dealVerifiedKey(root);
   const input = EvidenceGraph.verifiedPayload(context, root.capsule_id, "agent_input");
   const block = (bundle.extensions || {})["composed/v1"] || {};
   const composed = dealComposedResult(context);
   if (!composer || !input || input.type !== "deal_composition" || input.profile !== "x-deal-v0" || typeof input.deal_id !== "string") {
-    return refused("This file's composition record could not be checked.");
+    return refused(W("page.refuse.composition_record"));
   }
   const memberFailed = (r) => r.digest === "mismatch" || r.refusalSignature === "invalid" || r.responseSignature === "invalid" || (r.bundle && Object.values(r.bundle).some((c) => c.status === "fail")) || r.findings.length > 0;
   if (
@@ -600,7 +621,7 @@ const dealComposedModel = async (context) => {
     composed.joins.some((j) => j.result === "join_state_mismatch") ||
     composed.members.some(memberFailed)
   ) {
-    return refused("This file's composition does not hold up.");
+    return refused(W("page.refuse.composition_holds"));
   }
   const dealID = input.deal_id;
   const custody = (bundle.checkpoint || {}).key_id;
@@ -613,7 +634,7 @@ const dealComposedModel = async (context) => {
   else if ((bundle.extensions || {})["x-deal-v0"] !== undefined) mineContext = context;
   if (mineContext !== undefined) {
     const mineRoot = dealRootRecord(mineContext.bundle, mineContext.records);
-    if (!dealViewVerified(mineContext)) return refused("Your own copy on this page did not verify.");
+    if (!dealViewVerified(mineContext)) return refused(W("page.refuse.own_unverified"));
     mine = await dealViewModel(mineContext);
     if (mine.refusal !== undefined) return mine;
     // On a node's one ledger the root is the composition itself, so the
@@ -622,7 +643,7 @@ const dealComposedModel = async (context) => {
     const sealedRecord = mineContext.records.find((r) => r && r.capsule_id === sealedId);
     const sealedKey = sealedRecord ? await dealVerifiedKey(sealedRecord) : composer;
     if (mine.report.audience !== "keep" || !mineRoot || (await dealVerifiedKey(mineRoot)) !== composer || sealedKey !== composer || mine.dealId !== dealID) {
-      return refused("The copy shown as yours is not the composer's own copy of this deal.");
+      return refused(W("page.refuse.own_not_composers"));
     }
   }
   // The payer's own exchange half, on a Mesh composition: the record its
@@ -634,7 +655,7 @@ const dealComposedModel = async (context) => {
     // A Mesh composition whose payer half its report does not cite does not
     // say which exchange it is about (D4).
     if (!meshOwn && (block.members || []).some((m) => m.outcome === "artifact" && dealMeshHalf(dealRootRecord(m.bundle || {}, (m.bundle || {}).records || [])))) {
-      return refused("Your own record of this exchange is not cited by your receipt.");
+      return refused(W("page.refuse.own_uncited"));
     }
   }
 
@@ -656,7 +677,7 @@ const dealComposedModel = async (context) => {
     const mRoot = m.outcome === "artifact" ? dealRootRecord(m.bundle || {}, (m.bundle || {}).records || []) : undefined;
     const yours = new Set([composer, custody]);
     if ([m.observer, obs.custody_domain, mRoot && mRoot.key_id].some((k) => typeof k === "string" && yours.has(k))) {
-      return refused("A record shown as theirs is yours under another label.");
+      return refused(W("page.refuse.theirs_yours"));
     }
     if (m.outcome === "refusal") {
       const r = results.get(m.id) || {};
@@ -665,7 +686,7 @@ const dealComposedModel = async (context) => {
     }
     theirs.push({ outcome: "artifact", ...(await dealTheirArtifact({ ...m, custody: obs.custody_domain }, dealID, mine, meshOwn, context.records)) });
   }
-  if (others.size > 1) return refused("This file holds records from more than one other party.");
+  if (others.size > 1) return refused(W("page.refuse.many_parties"));
 
   // The case (D3), in order.
   const latest = (state) => theirs.filter((t) => t.state === state || (state === "refused" && t.state === "refused_unchecked")).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
@@ -736,6 +757,8 @@ const DEAL_VIEW_CSS = `#deal { --deal-warn: #9a3b00; --deal-ok: #1d6b35; --deal-
 // page did not check says "not checked", never "passed"; one side missing is
 // "missing", never "failed"; "failed" is only a check that ran and did not hold.
 const dealStampWords = ["passed", "failed", "missing", "not checked", "unclear"];
+// The consumer word shown for a stamp's state (the state itself is a token).
+const dealStampWord = (state) => W("page.stamp." + state.replace(/ /g, "_"));
 
 const dealViewRender = (model, regions) => {
   if (!document.getElementById("capsulectl-deal-view-style")) {
@@ -806,9 +829,9 @@ const dealViewRender = (model, regions) => {
       } else if (shared && step && step.withheld && recordOk(id)) {
         // A withheld step: its record and its place in the log verified;
         // its contents are not in this copy.
-        li.append(el("span", `${local(step.at)} · `, "deal-at"), el("span", step.line), el("span", " · contents withheld", "deal-at"));
+        li.append(el("span", `${local(step.at)} · `, "deal-at"), el("span", step.line), el("span", ` · ${W("page.step.withheld")}`, "deal-at"));
       } else {
-        li.append(el("span", "step not verified in this report "), el("code", id));
+        li.append(el("span", `${W("page.step.unverified")} `), el("code", id));
       }
       list.append(li);
     });
@@ -821,8 +844,8 @@ const dealViewRender = (model, regions) => {
     if (typeof self === "string" && self) {
       const step = byId.get(self);
       const withheld = shared && step && step.withheld && recordOk(self);
-      if (!matched.has(self) && !withheld) text += " · step not verified in this report";
-      else if (withheld) text += " · contents withheld";
+      if (!matched.has(self) && !withheld) text += ` · ${W("page.step.unverified")}`;
+      else if (withheld) text += ` · ${W("page.step.withheld")}`;
       if (listed) listed.add(self);
       d.dataset.self = self;
     }
@@ -857,9 +880,9 @@ const dealViewRender = (model, regions) => {
   const askedStep = byId.get(report.asked_step);
   const col = el("div", undefined, "deal-col");
 
-  if (model.demo) host.append(el("span", "DEMO", "deal-demo"));
+  if (model.demo) host.append(el("span", W("page.demo"), "deal-demo"));
   const bar = el("div", undefined, "deal-bar");
-  bar.append(el("h1", "Receipt"), el("span", shared ? "A shared copy" : "Your copy"));
+  bar.append(el("h1", W("page.card.title")), el("span", shared ? W("page.bar.shared") : W("page.bar.own")));
   host.append(bar, col);
 
   // The verdict: said once, in the receipt's own words.
@@ -872,38 +895,38 @@ const dealViewRender = (model, regions) => {
   if (composed) {
     const theirShown = composed.shown;
     const label = !composed.mine
-      ? "Your copy is not in this file"
+      ? W("page.composed.no_copy")
       : composed.theirCase === "both"
-        ? "Stamped by both sides"
+        ? W("page.composed.both")
         : composed.theirCase === "only"
-          ? "Your receipt only"
-          : "No record";
+          ? W("page.composed.only")
+          : W("page.composed.none");
     const said = {
-      verified: `Their record is about ${composed.shown && composed.shown.mesh ? "the same exchange" : "the same deal"} as yours${allMatched ? ", and each is stamped into its own book" : ""}.`,
-      failed: "Their record is in this file, but it did not check.",
-      refused: "They did not share their record.",
-      refused_unchecked: "A refusal in their name is in this file.",
-      absent: "Your agent asked for their record and nothing came back.",
+      verified: W(allMatched ? "page.composed.said.verified_stamped" : "page.composed.said.verified", { same: W(composed.shown && composed.shown.mesh ? "page.same.exchange" : "page.same.deal") }),
+      failed: W("page.composed.said.failed"),
+      refused: W("page.composed.said.refused"),
+      refused_unchecked: W("page.composed.said.refused_unchecked"),
+      absent: W("page.composed.said.absent"),
     };
     const ok = composed.mine && holds;
     banner.dataset.checked = ok ? "yes" : "no";
     banner.dataset.case = composed.theirCase;
-    const sub = !composed.mine ? "Your own copy of this deal is not in this file." : theirShown ? said[theirShown.state] : "Nothing from their side is in this file.";
-    banner.append(el("b", `${label} · ${ok ? "checked" : "not fully checked"}`), el("div", sub, "deal-small"));
+    const sub = !composed.mine ? W("page.composed.sub_no_copy") : theirShown ? said[theirShown.state] : W("page.composed.sub_nothing");
+    banner.append(el("b", W(ok ? "page.composed.title_checked" : "page.composed.title_unchecked", { label })), el("div", sub, "deal-small"));
     // The keep copy rides in this page whole: said on its face, since
     // people forward receipts (Sherlock2, #86 round 2).
     if (page && page.keep !== undefined) {
-      const own = el("div", "This page is your private copy: it carries your own record of this deal in full. To share this receipt, send the composed bundle file, not this page.", "deal-small");
+      const own = el("div", W("page.composed.keep_note"), "deal-small");
       own.dataset.private = "keep";
       banner.append(own);
     }
   } else if (shared) {
-    const who = report.audience === "counterparty" ? "the other party" : "an adjudicator";
-    banner.append(el("b", holds ? "A shared copy · checked" : "A shared copy · not fully checked"), el("div", `Made for ${who}. Left out of this copy: ${(report.withheld || []).join(", ")}.`, "deal-small"));
+    const who = W(report.audience === "counterparty" ? "page.audience.counterparty" : "page.audience.adjudicator");
+    banner.append(el("b", holds ? W("page.shared.checked") : W("page.shared.unchecked")), el("div", W("page.shared.made_for", { who, left_out: (report.withheld || []).join(", ") }), "deal-small"));
   } else {
     banner.append(
-      el("b", holds ? "Your copy only · checked" : "Your copy only · not fully checked"),
-      el("div", "This file holds your side of the deal. The other side's record is not in it, so this page cannot say whether they agree.", "deal-small"),
+      el("b", holds ? W("page.own.checked") : W("page.own.unchecked")),
+      el("div", W("page.own.note"), "deal-small"),
     );
   }
   col.append(banner);
@@ -913,8 +936,8 @@ const dealViewRender = (model, regions) => {
   const rests = el(
     "p",
     sealed
-      ? "The words below were written by capsulectl when this page was made and sealed in this file; this page checked they have not changed since. They are capsulectl's summary of the steps, not the steps themselves."
-      : "The words below were written by capsulectl when this page was made, and this page does not check them. It checks the sealed records in this file, not those words." + (shared || !askedChecked ? "" : " Only the words you asked, marked ✓ under More on this deal, are checked against their sealed record."),
+      ? W("page.rests.sealed")
+      : W("page.rests.unchecked") + (shared || !askedChecked ? "" : " " + W("page.rests.unchecked_asked")),
     "deal-note",
   );
   if (sealed) rests.dataset.sealed = "x-deal-v0";
@@ -923,33 +946,33 @@ const dealViewRender = (model, regions) => {
 
   // The receipt: what was asked, in the person's words, then what was done.
   const card = el("div", undefined, "deal-card");
-  card.append(el("div", model.dealId ? `Receipt · deal ${model.dealId}` : "Receipt", "deal-caps"));
+  card.append(el("div", model.dealId ? W("page.card.title_deal", { deal: model.dealId }) : W("page.card.title"), "deal-caps"));
   if (shared) {
-    card.append(el("div", "What was asked is withheld from this copy.", "deal-small"));
+    card.append(el("div", W("page.card.withheld"), "deal-small"));
   } else if (askedChecked) {
-    card.append(el("div", askedStep && typeof askedStep.at === "string" ? `You asked, ${shortDay(askedStep.at)}` : "You asked", "deal-small"));
+    card.append(el("div", askedStep && typeof askedStep.at === "string" ? W("page.card.asked_day", { day: shortDay(askedStep.at) }) : W("page.card.asked"), "deal-small"));
     const quote = el("div", `“${opening.text}”`, "deal-quote");
     quote.dataset.asked = report.asked_step;
     card.append(quote);
   } else {
-    card.append(el("div", "⚠️ The words you asked could not be checked against the sealed record.", "deal-bad"));
+    card.append(el("div", W("page.card.asked_unchecked"), "deal-bad"));
   }
   const did = report.did || [];
   if (did.length > 0) {
     const last = did[did.length - 1];
     const lifeNow = report.lifecycle;
-    card.append(el("div", `${lifeNow && lifeNow.state === "open" ? "So far" : "Done"}: ${String(last && last.text).replace(/^Did: /, "")}`));
+    card.append(el("div", W(lifeNow && lifeNow.state === "open" ? "page.card.so_far" : "page.card.done", { text: String(last && last.text).replace(/^Did: /, "") })));
   } else {
-    card.append(el("div", "Nothing done yet.", "deal-small"));
+    card.append(el("div", W("page.card.nothing_done"), "deal-small"));
   }
   if (report.money && typeof report.money.text === "string") card.append(el("div", report.money.text));
-  card.append(el("div", shared ? (report.audience === "counterparty" ? "This is a shared copy. It shows only what the other party may see." : "This is a shared copy. It shows only what an adjudicator may see.") : "This is your copy. It shows everything in your book.", "deal-small"));
+  card.append(el("div", shared ? (report.audience === "counterparty" ? W("page.card.copy_counterparty") : W("page.card.copy_adjudicator")) : W("page.card.copy_own"), "deal-small"));
   if (!composed || composed.mine) col.append(card);
 
   // Your side, in your book: the errand's moves in order, a time on every row
   // as the frames show. Each row says whether its sealed step verified.
   const ours = el("div", undefined, "deal-half deal-ours");
-  ours.append(el("div", shared ? "The holder's side · in their book" : "Your side · in your book", "deal-caps"));
+  ours.append(el("div", shared ? W("page.ours.holder") : W("page.ours.own"), "deal-caps"));
   const journey = Array.isArray(report.journey) ? report.journey.filter((m) => m && typeof m === "object") : [];
   const row = (when, text, tail) => {
     const line = el("div");
@@ -959,14 +982,14 @@ const dealViewRender = (model, regions) => {
   };
   const verified = (id) => matched.has(id) || (shared && byId.get(id) && byId.get(id).withheld && recordOk(id));
   // A withheld step on a shared copy is verified present; what it says is not in the copy.
-  const rowTail = (id) => (matched.has(id) ? "" : verified(id) ? "contents withheld" : "step not verified in this report");
-  if (!shared && journey.length === 0 && askedChecked && askedStep) ours.append(row(short(askedStep.at), "you asked for it", "your words, sealed"));
-  const movers = { user: "You", agent: "Your agent", other: "The other side" };
+  const rowTail = (id) => (matched.has(id) ? "" : verified(id) ? W("page.step.withheld") : W("page.step.unverified"));
+  if (!shared && journey.length === 0 && askedChecked && askedStep) ours.append(row(short(askedStep.at), W("page.ours.asked"), W("page.ours.asked_tail")));
+  const movers = { user: W("page.mover.user"), agent: W("page.mover.agent"), other: W("page.mover.other") };
   if (!shared && journey.length > 0) {
     journey.forEach((m) => {
       const step = byId.get(m.step);
       const label = dealJourneyLabel(words, m);
-      const who = Object.hasOwn(movers, m.by) ? movers[m.by] : "Someone";
+      const who = Object.hasOwn(movers, m.by) ? movers[m.by] : W("page.mover.someone");
       const r = row(step && matched.has(m.step) && typeof step.at === "string" ? short(step.at) : "", `${who}${label ? ` · ${label}` : ""}`, rowTail(m.step));
       r.dataset.journey = label;
       ours.append(r);
@@ -983,7 +1006,7 @@ const dealViewRender = (model, regions) => {
   if (composed && !composed.mine) {
     // A composition without your own copy: your side is not on this page.
     const none = el("div", undefined, "deal-half deal-none");
-    none.append(el("div", "Your side", "deal-caps"), el("div", "Not in this file. This page cannot show your own record of this deal."));
+    none.append(el("div", W("page.none.title"), "deal-caps"), el("div", W("page.none.text")));
     col.append(none);
   } else col.append(ours);
 
@@ -992,33 +1015,33 @@ const dealViewRender = (model, regions) => {
   const theirShown = composed && composed.shown;
   const theirs = el("div", undefined, theirShown && theirShown.state === "verified" ? "deal-half deal-theirs" : "deal-half deal-none");
   if (!composed) {
-    theirs.append(el("div", shared ? "The other side" : "Their side", "deal-caps"));
-    theirs.append(el("div", "Not in this file. The other side's own record, if it keeps one, is held in its book; this page does not show it and does not say whether it exists."));
+    theirs.append(el("div", shared ? W("page.theirs.other") : W("page.theirs.title"), "deal-caps"));
+    theirs.append(el("div", W("page.theirs.absent")));
   } else if (theirShown && theirShown.state === "verified") {
     theirs.dataset.their = "verified";
-    theirs.append(el("div", "Their side · in their book · as received", "deal-caps"));
+    theirs.append(el("div", W("page.theirs.verified"), "deal-caps"));
     if (theirShown.mesh) {
-      theirs.append(row(short(theirShown.at), "their record of the exchange", ""));
-      theirs.append(el("div", "Their words: not stated", "deal-small"));
+      theirs.append(row(short(theirShown.at), W("page.theirs.exchange"), ""));
+      theirs.append(el("div", W("page.theirs.words_not_stated"), "deal-small"));
     } else {
       (theirShown.report.did || []).forEach((i) => theirs.append(row(typeof i.at === "string" && i.at ? short(i.at) : "", i.text, "")));
       const theirLife = theirShown.report.lifecycle;
       if (theirLife && typeof theirLife.text === "string") theirs.append(row("", lifecycleText(theirLife), ""));
     }
-    theirs.append(el("div", `Stamped into their book ${short(theirShown.stamped)}`, "deal-small"));
+    theirs.append(el("div", W("page.theirs.stamped", { when: short(theirShown.stamped) }), "deal-small"));
   } else {
     theirs.dataset.their = theirShown ? theirShown.state : "none";
-    theirs.append(el("div", "Their side", "deal-caps"));
+    theirs.append(el("div", W("page.theirs.title"), "deal-caps"));
     const day = theirShown && typeof theirShown.at === "string" ? shortDay(theirShown.at) : "";
     const line = !theirShown
-      ? "No record. Nothing from their side is in this file."
+      ? W("page.theirs.no_record")
       : theirShown.state === "failed"
-        ? "Their record is in this file, but it did not check: failed. Do not rely on it."
+        ? W("page.theirs.failed")
         : theirShown.state === "refused"
-          ? `They answered that they would not share their record, on ${day}.`
+          ? W("page.theirs.refused", { day })
           : theirShown.state === "refused_unchecked"
-            ? `A refusal in their name came back on ${day}; its signature was not checked here.`
-            : `No record. Your agent asked and nothing came back by ${day}; that is written down too.`;
+            ? W("page.theirs.refused_unchecked", { day })
+            : W("page.theirs.asked_nothing", { day });
     theirs.append(el("div", line));
   }
   // Their side's fold-out: whose key it is (only "their key" and its
@@ -1027,16 +1050,16 @@ const dealViewRender = (model, regions) => {
   // #86 rounds 2 and 5).
   if (composed && theirShown) {
     const more = el("details", undefined, "deal-their-more");
-    more.append(el("summary", "More on their side"));
+    more.append(el("summary", W("page.more_theirs")));
     if (theirShown.key) {
-      more.append(el("div", `Their key ${String(theirShown.key).slice(0, 16)}…`, "deal-small"));
-      more.append(el("div", "Their reply's signature, and the checkpoint it names, are checked by capsulectl verify, not on this page.", "deal-small"));
+      more.append(el("div", W("page.theirs.key", { key: String(theirShown.key).slice(0, 16) }), "deal-small"));
+      more.append(el("div", W("page.theirs.key_note"), "deal-small"));
     }
     composed.also
       .filter((t) => t.state !== "verified" && t.state !== "failed")
       .forEach((t) => {
         const day = typeof t.at === "string" ? shortDay(t.at) : "";
-        const also = t.state === "absent" ? `Also: your agent asked and nothing came back by ${day}.` : t.state === "refused" ? `Also: they answered on ${day} that they would not share.` : `Also: a refusal in their name came back on ${day}; its signature was not checked here.`;
+        const also = W(t.state === "absent" ? "page.also.absent" : t.state === "refused" ? "page.also.refused" : "page.also.refused_unchecked", { day });
         more.append(el("div", also, "deal-small"));
       });
     theirs.append(more);
@@ -1048,7 +1071,7 @@ const dealViewRender = (model, regions) => {
   const countersign = page && page.countersign && typeof page.countersign.text === "string" ? page.countersign : undefined;
   // [word, line, detail]: a word is "passed" only for a check this page ran.
   const theirArtifact = composed && composed.shown && (composed.shown.state === "verified" || composed.shown.state === "failed") ? composed.shown : undefined;
-  const sameWhat = theirArtifact && theirArtifact.mesh ? "the same exchange" : "the same deal";
+  const sameWhat = W(theirArtifact && theirArtifact.mesh ? "page.same.exchange" : "page.same.deal");
   const anyWitness = model.witnessed || (composed && [composed.shown, ...composed.also].some((t) => t && t.witnessed));
   // Frame 8's record lines (evidencebook-deal#94): your approval, its order,
   // the settlement and the close, each from its record; your side's copy
@@ -1058,193 +1081,188 @@ const dealViewRender = (model, regions) => {
   const actName = (act) => {
     const step = act && byId.get(act.id);
     if (step && matched.has(act.id) && typeof step.line === "string") return `“${step.line}”`;
-    return act && typeof act.body.action === "string" ? `the ${act.body.action} step` : "a step";
+    return act && typeof act.body.action === "string" ? W("page.act.named", { action: act.body.action }) : W("page.act.unnamed");
   };
   // A shared copy is read by the other side: its lines name the holder.
-  const who = shared ? "the holder's" : "your";
-  const Who = shared ? "The holder's" : "Your";
-  const their = shared ? "their" : "your";
-  const approverWords = {
-    user: `${who} yes is in ${their} words, recorded by ${their} agent`,
-    standing_intent: `approved under ${who} standing limits, recorded by ${their} agent`,
-    agent_card: `answered on a card ${who} agent showed, recorded by ${their} agent`,
-    task_authority: `allowed by the task ${shared ? "the holder" : "you"} gave ${their} agent, recorded by ${their} agent`,
-  };
+  const side = shared ? "shared" : "own";
+  const who = W("page.pron.who." + side);
+  const Who = W("page.pron.cap." + side);
+  const their = W("page.pron.their." + side);
+  const giver = W("page.pron.giver." + side);
+  const approverWords = Object.fromEntries(["user", "standing_intent", "agent_card", "task_authority"].map((a) => [a, W("page.approver." + a, { who, their, giver })]));
 
   const recordLines = [];
   if (!mineLines && !(composed && !composed.mine)) {
     // A copy whose steps have no place in a book: none of these lines is read.
-    const why = "this copy's steps were sealed before they had a place in a book";
-    recordLines.push(["not checked", `Each act came after ${who} yes`, why], ["not checked", "The payment is settled on its rail", why], ["not checked", "Their agreement with how the deal closed", why]);
+    const why = W("page.detail.sealed_before_book");
+    recordLines.push(["not checked", W("page.line.each_act", { who }), why], ["not checked", W("page.line.settled"), why], ["not checked", W("page.line.close"), why]);
   } else if (!mineLines) {
-    recordLines.push(["missing", `Each act came after ${who} yes`, "your record is not in this file"]);
+    recordLines.push(["missing", W("page.line.each_act", { who }), W("page.detail.no_own_record")]);
   } else if (mineLines.afterYes.state !== "none") {
     const yes = mineLines.afterYes;
     const said = (yes.approvers || []).map((a) => approverWords[a]).filter((t) => t);
-    recordLines.push(["missing", `${Who} own key's signature on ${their} yes`, said.length > 0 ? said.join("; ") : `no record here is signed with ${their} key`]);
+    recordLines.push(["missing", W("page.line.key_signature", { cap: Who, their }), said.length > 0 ? said.join("; ") : W("page.detail.no_signed_key", { their })]);
     recordLines.push(
       yes.state === "passed"
-        ? ["passed", `Each act came after ${who} yes`, "recomputed from the order of this log"]
+        ? ["passed", W("page.line.each_act", { who }), W("page.detail.recomputed")]
         : yes.state === "failed"
-          ? ["failed", `Each act came after ${who} yes`, yes.why === "unapproved" ? `${actName(yes.act)} was taken without ${who} yes` : `${actName(yes.act)} does not follow its approval in this log`]
+          ? ["failed", W("page.line.each_act", { who }), yes.why === "unapproved" ? W("page.detail.unapproved", { act: actName(yes.act), who }) : W("page.detail.order", { act: actName(yes.act) })]
           : yes.state === "missing"
-            ? ["missing", `Each act came after ${who} yes`, `the approval for ${actName(yes.act)} is not in this copy`]
-            : ["not checked", `Each act came after ${who} yes`, "steps are withheld from this copy"],
+            ? ["missing", W("page.line.each_act", { who }), W("page.detail.approval_missing", { act: actName(yes.act) })]
+            : ["not checked", W("page.line.each_act", { who }), W("page.detail.withheld")],
     );
   }
   const legOf = (lines) => lines && lines.settlement && lines.settlement.legs ? lines.settlement : undefined;
   const settled = legOf(mineLines) || legOf(theirLines);
-  const settledWhose = legOf(mineLines) ? "" : "in their record; ";
+  const settledWhose = legOf(mineLines) ? "" : W("page.settled.theirs");
   const unsettled = (mineLines && mineLines.settlement) || (theirLines && theirLines.settlement);
   const railText = !settled
     ? ""
     : settled.rail === "lightning"
       ? settled.preimage === "withheld"
-        ? "Lightning; this copy does not show its proof"
+        ? W("page.rail.lightning_withheld")
         : settled.preimage
-        ? "Lightning; its proof is sealed here, and this page can't check it yet"
-        : `Lightning; ${legOf(mineLines) ? who : "their"} wallet reported it final`
+        ? W("page.rail.lightning_sealed")
+        : W("page.rail.lightning_final", { whose: legOf(mineLines) ? who : W("page.pron.other") })
       : settled.rail === "x402"
-        ? "x402; the chain lookup is not checked on this page"
-        : "this page checks no settlement";
+        ? W("page.rail.x402")
+        : W("page.rail.none");
   if (mineLines || (composed && !composed.mine)) recordLines.push(
     settled
-      ? ["not checked", "The payment is settled on its rail", settledWhose + railText + (settled.band ? ` · size ${dealBandLabel(settled.band, words)}` : "")]
-      : ["missing", "The payment is settled on its rail", !unsettled ? "no settlement record is in this file" : unsettled.rail === "card" ? "a card payment; the card processor's report is not in this file" : `a ${String(unsettled.rail).replace(/_/g, " ")} payment; no settlement record is in this file`],
+      ? ["not checked", W("page.line.settled"), settledWhose + railText + (settled.band ? ` · ${W("page.settled.size", { band: dealBandLabel(settled.band, words) })}` : "")]
+      : ["missing", W("page.line.settled"), !unsettled ? W("page.settle.none") : unsettled.rail === "card" ? W("page.settle.card") : W("page.settle.other", { rail: String(unsettled.rail).replace(/_/g, " ") })],
   );
   const closed = mineLines && mineLines.close;
   let closeState = "none";
   let closeLine;
-  if (!closed) closeLine = ["not checked", "Their agreement with how the deal closed", mineLines ? "the deal is not closed in this copy" : "your record is not in this file"];
-  else if (closed.withheld) closeLine = ["not checked", "Their agreement with how the deal closed", "steps are withheld from this copy"];
-  else if (theirArtifact && theirArtifact.mesh) closeLine = ["not checked", "Their agreement with how the deal closed", `their record is of the exchange, not of ${who} close`];
-  else if (theirArtifact && theirArtifact.state !== "verified") closeLine = ["not checked", "Their agreement with how the deal closed", "their record did not check"];
-  else if (!theirArtifact) closeLine = ["missing", "Their agreement with how the deal closed", shared ? "no record from the other side" : "no record from their side"];
+  if (!closed) closeLine = ["not checked", W("page.line.close"), mineLines ? W("page.close.not_closed") : W("page.detail.no_own_record")];
+  else if (closed.withheld) closeLine = ["not checked", W("page.line.close"), W("page.detail.withheld")];
+  else if (theirArtifact && theirArtifact.mesh) closeLine = ["not checked", W("page.line.close"), W("page.close.exchange", { who })];
+  else if (theirArtifact && theirArtifact.state !== "verified") closeLine = ["not checked", W("page.line.close"), W("page.close.unchecked")];
+  else if (!theirArtifact) closeLine = ["missing", W("page.line.close"), shared ? W("page.close.none_other") : W("page.close.none_theirs")];
   else {
     closeState = dealCloseStatus(closed.id, theirArtifact.records, theirArtifact.book);
     closeLine =
       closeState === "agreed"
-        ? ["passed", "Their agreement with how the deal closed", `agreed: their record points at ${who} close`]
+        ? ["passed", W("page.line.close"), W("page.close.agreed", { who })]
         : closeState === "contested"
-          ? ["failed", "Their agreement with how the deal closed", `contested: their record disputes ${who} close`]
-          : ["missing", "Their agreement with how the deal closed", `closed by ${who} side only: their record is here, and it does not point at ${who} close`];
+          ? ["failed", W("page.line.close"), W("page.close.contested", { who })]
+          : ["missing", W("page.line.close"), W("page.close.unilateral", { who })];
   }
   if (mineLines || (composed && !composed.mine)) recordLines.push(closeLine);
   const stamps = composed ? [
     askedChecked
-      ? ["passed", "Your words are sealed exactly as you said them", "checked when this page was built"]
-      : ["not checked", "Your words could not be checked against their sealed record", ""],
+      ? ["passed", W("page.stamp_line.sealed"), W("page.detail.built")]
+      : ["not checked", W("page.stamp_line.sealed_unchecked"), ""],
     !composed.mine
-      ? ["missing", "Each side's record is stamped into its own book and can't be changed after", "your record is not in this file"]
+      ? ["missing", W("page.stamp_line.stamped_books"), W("page.detail.no_own_record")]
       : !theirArtifact
-      ? ["missing", "Each side's record is stamped into its own book and can't be changed after", "their record is not in this file"]
+      ? ["missing", W("page.stamp_line.stamped_books"), W("page.detail.theirs_missing")]
       : allMatched && !(theirArtifact.state === "failed" && (theirArtifact.check === "V1" || theirArtifact.check === "V2"))
-        ? ["passed", "Each side's record is stamped into its own book and can't be changed after", ""]
-        : ["failed", "Each side's record is stamped into its own book and can't be changed after", allMatched ? "their record did not check" : "see More on this deal"],
+        ? ["passed", W("page.stamp_line.stamped_books"), ""]
+        : ["failed", W("page.stamp_line.stamped_books"), allMatched ? W("page.close.unchecked") : W("page.detail.see_more")],
     !composed.mine
-      ? ["missing", `Their record and yours are about ${sameWhat}`, "your record is not in this file"]
+      ? ["missing", W("page.stamp_line.same", { same: sameWhat }), W("page.detail.no_own_record")]
       : !theirArtifact
-      ? ["missing", `Their record and yours are about ${sameWhat}`, "their record is not in this file"]
+      ? ["missing", W("page.stamp_line.same", { same: sameWhat }), W("page.detail.theirs_missing")]
       : theirArtifact.state === "verified"
-        ? ["passed", `Their record and yours are about ${sameWhat}`, theirArtifact.mesh ? "both records name the same request; neither points at the other" : "both records name the same deal; neither points at the other"]
-        : ["failed", `Their record and yours are about ${sameWhat}`, "their record did not check"],
+        ? ["passed", W("page.stamp_line.same", { same: sameWhat }), theirArtifact.mesh ? W("page.detail.same_request") : W("page.detail.same_deal")]
+        : ["failed", W("page.stamp_line.same", { same: sameWhat }), W("page.close.unchecked")],
     ...recordLines,
-    [anyWitness ? "not checked" : "missing", "An outside witness recorded both books' snapshots", anyWitness ? "this page can't check the witness's signature" : ""],
+    [anyWitness ? "not checked" : "missing", W("page.stamp_line.witness_both"), anyWitness ? W("page.detail.witness_unchecked") : ""],
   ] : [
     shared
-      ? ["not checked", "The words asked are withheld from this copy", ""]
+      ? ["not checked", W("page.stamp_line.asked_withheld"), ""]
       : askedChecked
-        ? ["passed", "Your words are sealed exactly as you said them", "checked when this page was built"]
-        : ["not checked", "Your words could not be checked against their sealed record", ""],
+        ? ["passed", W("page.stamp_line.sealed"), W("page.detail.built")]
+        : ["not checked", W("page.stamp_line.sealed_unchecked"), ""],
     stepsAll.length === 0
-      ? ["not checked", "No step is listed in this copy", ""]
+      ? ["not checked", W("page.stamp_line.no_steps"), ""]
       : allMatched
-        ? ["passed", shared ? "Each step's record is in the holder's book, and a change after would show" : "Each step's record is in your book, and a change after would show", ""]
-        : ["failed", "A step's record could not be found in this deal's log", "see More on this deal"],
+        ? ["passed", shared ? W("page.stamp_line.steps_holder") : W("page.stamp_line.steps_own"), ""]
+        : ["failed", W("page.stamp_line.step_missing"), W("page.detail.see_more")],
     ...recordLines,
-    [model.witnessed ? "not checked" : "missing", shared ? "An outside witness saw the holder's book" : "An outside witness saw your book", model.witnessed ? "this page can't check the witness's signature" : ""],
-    ["missing", "Nothing points back from the other side's book", "it is not in this file"],
-    ["not checked", "\"It happened\" rests on what the agent reported", "no one else has checked it"],
+    [model.witnessed ? "not checked" : "missing", shared ? W("page.stamp_line.witness_holder") : W("page.stamp_line.witness_own"), model.witnessed ? W("page.detail.witness_unchecked") : ""],
+    ["missing", W("page.stamp_line.nothing_back"), W("page.detail.not_in_file")],
+    ["not checked", W("page.stamp_line.happened"), W("page.detail.nobody")],
   ];
   const passed = stamps.filter((s) => s[0] === "passed").length;
   const stampBox = el("details", undefined, "deal-box deal-stamps");
-  const sum = el("summary", "The stamps");
+  const sum = el("summary", W("page.stamps.title"));
   const failed = stamps.filter((st) => st[0] === "failed").length;
   const rest = stamps.length - passed - failed;
-  const pill = el("span", [`${passed} passed`, failed > 0 ? `${failed} failed` : "", rest > 0 ? `${rest} not checkable here` : ""].filter((t) => t !== "").join(" · "), failed > 0 ? "deal-pill deal-bad" : "deal-pill");
+  const pill = el("span", [W("page.pill.passed", { count: passed }), failed > 0 ? W("page.pill.failed", { count: failed }) : "", rest > 0 ? W("page.pill.rest", { count: rest }) : ""].filter((t) => t !== "").join(" · "), failed > 0 ? "deal-pill deal-bad" : "deal-pill");
   sum.append(pill);
   stampBox.dataset.close = closeState;
-  stampBox.append(sum, el("div", "What is under it:", "deal-small"));
+  stampBox.append(sum, el("div", W("page.stamps.under"), "deal-small"));
   stamps.forEach(([word, text, detail]) => {
     const line = el("div", undefined, "deal-stamp");
     line.dataset.stamp = word;
-    line.append(el("b", word === "passed" ? "✓" : "—", "deal-mark " + (word === "passed" ? "deal-ok" : "deal-bad")), el("span", `${text} · ${word}${detail ? ` · ${detail}` : ""}`));
+    line.append(el("b", word === "passed" ? "✓" : "—", "deal-mark " + (word === "passed" ? "deal-ok" : "deal-bad")), el("span", `${text} · ${dealStampWord(word)}${detail ? ` · ${detail}` : ""}`));
     stampBox.append(line);
   });
   if (countersign) stampBox.append(el("div", countersign.text, countersign.flag === true ? "deal-small deal-bad" : "deal-small"));
-  stampBox.append(el("div", `Five words for any stamp: ${dealStampWords.join(" · ")}.`, "deal-small"));
+  stampBox.append(el("div", W("page.stamp.five", { words: dealStampWords.map(dealStampWord).join(" · ") }), "deal-small"));
   col.append(stampBox);
 
   // What this receipt proves, and what it does not: only what this page checked.
-  const proves = box("What this receipt proves", true);
+  const proves = box(W("page.proves.title"), true);
   const provesLines = [];
-  if (askedChecked && !shared) provesLines.push("The words you asked are sealed, exactly as said, and this page checked them against the record.");
-  if (allMatched) provesLines.push("Every step listed here is in this deal's log and unchanged since it was sealed.");
+  if (askedChecked && !shared) provesLines.push(W("page.proves.asked"));
+  if (allMatched) provesLines.push(W("page.proves.steps"));
   const authority = report.authority || [];
-  if (sealed && authority.length > 0 && authority.every((b) => b.covered)) provesLines.push("Each action recorded here has an approval or a rule recorded for it.");
-  if (theirArtifact && theirArtifact.state === "verified") provesLines.push(`Their record of ${sameWhat} is in this file, signed with their key and stamped into their book, and this page checked it.`);
-  if (provesLines.length === 0) provesLines.push("Nothing on this page is vouched for beyond the stamps above.");
+  if (sealed && authority.length > 0 && authority.every((b) => b.covered)) provesLines.push(W("page.proves.authority"));
+  if (theirArtifact && theirArtifact.state === "verified") provesLines.push(W("page.proves.theirs", { same: sameWhat }));
+  if (provesLines.length === 0) provesLines.push(W("page.proves.nothing"));
   proves.append(bullets(provesLines, true));
   col.append(proves);
-  const doesnt = box("What it doesn't", true);
+  const doesnt = box(W("page.doesnt.title"), true);
   const doesntLines = [
-    "That what the agent reported is true. It records what the agent reported.",
-    "Who made the records. It shows a change after they were sealed would show.",
-    "That the merchant shipped, delivered or refunded anything.",
+    W("page.doesnt.true"),
+    W("page.doesnt.who"),
+    W("page.doesnt.merchant"),
   ];
   if (typeof report.scope === "string" && report.scope) doesntLines.push(report.scope);
-  if (shared) doesntLines.push("Anything left out of this copy: the steps marked contents withheld are proven present, not shown.");
-  if (composed) doesntLines.push("Who the other side is. The key shown as theirs is the one the composer of this file named.");
+  if (shared) doesntLines.push(W("page.doesnt.withheld"));
+  if (composed) doesntLines.push(W("page.doesnt.other_side"));
   doesnt.append(bullets(doesntLines, false));
   col.append(doesnt);
 
   // Tell your agent: only what the deal skill does today.
   if (!shared) {
     const say = el("div", undefined, "deal-say");
-    say.append(el("div", "Tell your agent", "deal-caps"), el("b", "“Send me this receipt”"), el("b", "“Make a copy for the other side”"));
+    say.append(el("div", W("page.say.title"), "deal-caps"), el("b", W("page.say.send")), el("b", W("page.say.copy")));
     col.append(say);
   }
 
   // Everything else the receipt knows, behind one fold-out: its steps, authority, what was told, dates, anomalies.
   const more = el("details", undefined, "deal-more");
-  more.append(el("summary", "More on this deal: steps, authority, what was told, anomalies"));
+  more.append(el("summary", W("page.more.title")));
   col.append(more);
 
   if (typeof report.did_line === "string") more.append(el("p", report.did_line, "deal-note"));
-  more.append(el("h2", "What the agent did"));
+  more.append(el("h2", W("page.did.title")));
   more.append(
     el(
       "p",
       sealed
-        ? "The summary lines below, and each step's line, were written by capsulectl on this device and sealed with this page: " +
-            "this page checked they were not changed since, not that they are right. Open an item to see the steps it was read from; each step's sealed record is checked."
-        : "The summary lines below, and each step's line, are written by capsulectl on this device and are not checked by this page. " +
-            "Open an item to see the steps it was read from; each step's sealed record is checked, not its line.",
+        ? W("page.did.sealed")
+        : W("page.did.unchecked"),
       "deal-note",
     ),
   );
-  if (did.length === 0) more.append(el("p", "Nothing yet.", "deal-note"));
+  if (did.length === 0) more.append(el("p", W("page.did.nothing"), "deal-note"));
   listed = new Set();
   did.forEach((i) => more.append(item(typeof i.at === "string" && i.at ? `${local(i.at)} · ${i.text}` : i.text, i.steps, undefined, i.self)));
   listed = undefined;
-  more.append(el("h2", "What you asked"));
-  if (shared) more.append(el("p", "Withheld from this copy.", "deal-note"));
+  more.append(el("h2", W("page.asked.title")));
+  if (shared) more.append(el("p", W("page.asked.withheld"), "deal-note"));
   else if (askedChecked) more.append(item(`“${opening.text}”`, [report.asked_step]));
-  if (askedChecked && !shared) more.append(el("p", "✓ These are the exact words sealed when the deal opened, checked when this page was built.", "deal-note"));
+  if (askedChecked && !shared) more.append(el("p", W("page.asked.exact"), "deal-note"));
 
   const authorityBlocks = report.authority || [];
   if (authorityBlocks.length > 0) {
-    more.append(el("h2", "Authority"));
+    more.append(el("h2", W("page.authority.title")));
     if (typeof report.authority_order === "string") more.append(el("p", report.authority_order, "deal-note"));
     authorityBlocks.forEach((b) => {
       more.append(el("h3", `${b.covered ? "" : "⚠️ "}${b.action}`));
@@ -1257,9 +1275,9 @@ const dealViewRender = (model, regions) => {
   }
 
   if (life && typeof life.text === "string") {
-    more.append(el("h2", "Where this deal stands"), el("p", lifecycleText(life)));
-    (life.later || []).forEach((l) => more.append(item(`${local(l.at)} · confirms the close: ${l.text}`, [l.capsule_id])));
-    more.append(el("p", `${life.may_change} (as of ${local(life.as_of)})`, "deal-note"));
+    more.append(el("h2", W("page.life.title")), el("p", lifecycleText(life)));
+    (life.later || []).forEach((l) => more.append(item(`${local(l.at)} · ${W("page.life.later", { text: l.text })}`, [l.capsule_id])));
+    more.append(el("p", W("page.life.as_of", { text: life.may_change, when: local(life.as_of) }), "deal-note"));
     // A report off the deal's log (capsule-cli#294) states the deal as of
     // its checkpoint, the deal's last step. Where it stands today, the page
     // works out from the viewer's clock, apart, and says so: it is not part
@@ -1267,67 +1285,67 @@ const dealViewRender = (model, regions) => {
     if (model.standalone) {
       const today = localDay();
       const due = life.open && typeof life.open.expect_close_by === "string" ? life.open.expect_close_by : "";
-      const passedDue = life.state === "open" && due !== "" && due < today ? ` The expected close, ${readDay(due)}, has passed as of today.` : "";
-      more.append(el("p", `This report states the deal as of its checkpoint at ${local(life.as_of)} (the producer's time).`, "deal-note"));
-      more.append(el("p", `Not part of the report, worked out by this page when you opened it: today is ${readDay(today)}.${passedDue}`, "deal-note"));
+      const passedDue = life.state === "open" && due !== "" && due < today ? ` ${W("page.life.passed", { day: readDay(due) })}` : "";
+      more.append(el("p", W("page.life.checkpoint", { when: local(life.as_of) }), "deal-note"));
+      more.append(el("p", W("page.life.today", { day: readDay(today), passed: passedDue }), "deal-note"));
     }
   }
 
   // What this receipt can prove and how to check it.
   const header = el("section", undefined, "deal-assurance");
-  header.append(el("p", report.scope || "This receipt covers this one deal. It is not a record of everything the agent did.", "deal-scope"));
+  header.append(el("p", report.scope || W("page.scope.default"), "deal-scope"));
   // The countersign rung, as capsulectl checked it when it wrote this page
   // (a page cannot resolve a signer against a directory): "Not
   // countersigned" unless the bundle carried a countersignature that
   // verified, and a self-countersignature is NOT INDEPENDENT. The page
   // renders the line capsulectl wrote; it names no rung itself.
-  let rung = { text: "The countersign line could not be read from this file." };
+  let rung = { text: W("page.countersign.unread") };
   if (countersign) rung = countersign;
   header.append(el("p", rung.text, rung.flag === true ? "deal-rung deal-bad" : "deal-rung"));
   if (typeof rung.note === "string" && rung.note) header.append(el("p", rung.note, "deal-note"));
   const provenance = el("section", undefined, "deal-provenance");
   const builds = model.builds;
-  if (builds.length > 0) provenance.append(el("p", `Produced by ${builds.map((b) => b.name).join(", then ")}.`, "deal-note"));
+  if (builds.length > 0) provenance.append(el("p", W("page.produced", { builds: builds.map((b) => b.name).join(W("page.produced_then")) }), "deal-note"));
   if (typeof report.instructions === "string" && report.instructions) provenance.append(el("p", report.instructions, "deal-note"));
   const { releaseNotes, buildNote } = model;
   if (buildNote) {
-    const what = el("p", `${buildNote} What changed: `, "deal-note");
+    const what = el("p", W("page.release.changed", { note: buildNote }), "deal-note");
     const link = document.createElement("a");
     link.href = releaseNotes;
-    link.textContent = "the release notes";
+    link.textContent = W("page.release.notes");
     link.rel = "noopener";
     what.append(link);
     provenance.append(what);
   }
   const notClaimed = el("details", undefined, "deal-claims");
   notClaimed.open = true;
-  notClaimed.append(el("summary", "What this does not claim"));
+  notClaimed.append(el("summary", W("page.claims.title")));
   const claims = el("ul");
   [
-    "It is tamper-evident, not non-repudiation: it shows these records were not changed after they were sealed, not who made them.",
-    "It records what the agent reported. It does not show that what was reported was true.",
-    "It does not prove the merchant shipped, delivered or refunded anything.",
+    W("page.claims.tamper"),
+    W("page.claims.reported"),
+    W("page.claims.merchant"),
   ].forEach((t) => claims.append(el("li", t)));
   notClaimed.append(claims);
   header.append(notClaimed);
   if (shared) {
-    const who = report.audience === "counterparty" ? "the other party" : "an adjudicator";
-    header.append(el("p", `A shared copy for ${who}. Left out of this copy: ${(report.withheld || []).join(", ")}.`, "deal-note"));
+    const who = W(report.audience === "counterparty" ? "page.audience.counterparty" : "page.audience.adjudicator");
+    header.append(el("p", W("page.shared.note", { who, left_out: (report.withheld || []).join(", ") }), "deal-note"));
   }
   more.append(header, provenance);
 
   // What the agent told whom about the user: each telling, its time and the
   // approval that covered it, or that none did. Your own copy shows what was
   // given; a shared copy names only the kind of thing.
-  more.append(el("h2", "What your agent told whom"));
+  more.append(el("h2", W("page.told.title")));
   const told = report.told || [];
-  if (told.length === 0) more.append(el("p", "Nothing about you was recorded as shared.", "deal-note"));
+  if (told.length === 0) more.append(el("p", W("page.told.nothing"), "deal-note"));
   told.forEach((t) => {
     const flagged = t.authority === "none";
     const fields = (t.fields || []).map((f) => (typeof f.value === "string" ? `${f.label}: ${f.value}` : f.label)).join("; ");
     more.append(item(`${flagged ? "⚠️ " : ""}${t.text} · ${local(t.at)} · ${t.authority_text}${shared ? "" : ` (${fields})`}`, t.steps, flagged ? "deal-flag" : undefined));
   });
-  more.append(el("p", "Only what the agent sealed as shared is listed here; something it told without sealing it is not.", "deal-note"));
+  more.append(el("p", W("page.told.only_sealed"), "deal-note"));
 
   // Where the user sells: what their agent told the buyer, each claim's words
   // checked here against the commitment its sealed step carries, labelled by
@@ -1335,14 +1353,7 @@ const dealViewRender = (model, regions) => {
   // words do not match, is never shown as said.
   const said = report.representations || [];
   if (said.length > 0) {
-    const labels = {
-      price: "Price", condition: "Condition", features: "Features", authenticity: "Authenticity",
-      availability: "Availability", delivery_date: "Delivery date", service_scope: "Service scope",
-      warranty: "Warranty", refund_terms: "Refund terms", payment_methods: "Payment methods",
-      pickup: "Pickup", deadline: "Deadline", address: "Address", other: "Other",
-      delivery_promise: "Delivery promise", // a claim sealed before delivery_date
-    };
-    const heading = !shared ? "What your agent told the buyer" : report.audience === "counterparty" ? "What the seller's agent told you" : "What the seller's agent told the buyer";
+    const heading = !shared ? W("page.told_buyer.own") : report.audience === "counterparty" ? W("page.told_buyer.counterparty") : W("page.told_buyer.adjudicator");
     more.append(el("h2", heading));
     const checked = (page && page.openings && page.openings.representations) || [];
     for (const [i, r] of said.entries()) {
@@ -1350,20 +1361,20 @@ const dealViewRender = (model, regions) => {
       const claimClass = model.claimClasses[i];
       const ok = checked[i] === true && claimClass !== undefined && typeof r.text === "string";
       if (ok) {
-        const label = labels[claimClass];
+        const label = W("page.claim." + claimClass);
         more.append(item(`${label ? `${label}: ` : ""}“${r.text}” ✓`, [r.step]));
       } else {
-        more.append(item("⚠️ A statement here could not be checked against its sealed step.", [r.step], "deal-flag"));
+        more.append(item(W("page.told_buyer.unchecked"), [r.step], "deal-flag"));
       }
     }
-    more.append(el("p", "✓ These are the exact words sealed when the agent said them, checked when this page was built; this page does not check that they are true.", "deal-note"));
+    more.append(el("p", W("page.told_buyer.exact"), "deal-note"));
   }
 
   // Cancel-by dates (the point of no return is a date passing) and due
   // dates (what the user owes by a date). Recorded, never enforced.
   const deadlines = report.deadlines || [];
   if (deadlines.length > 0) {
-    more.append(el("h2", deadlines.some((d) => d.due_by) ? "Cancel-by and due dates" : "Cancel-by dates"));
+    more.append(el("h2", deadlines.some((d) => d.due_by) ? W("page.deadlines.both") : W("page.deadlines.cancel")));
     const list = el("ul", undefined, "deal-steps");
     deadlines.forEach((d) => {
       const live = d.status === "open" || d.status === "carried_at_close";
@@ -1374,7 +1385,7 @@ const dealViewRender = (model, regions) => {
       const date = d.cancel_by || d.due_by || "";
       const today = localDay();
       if (model.standalone && live && date !== "" && date < today) {
-        li.append(el("span", ` Not part of the report, worked out by this page when you opened it: this date has passed as of today, ${readDay(today)}.`, "deal-note"));
+        li.append(el("span", ` ${W("page.deadlines.passed_today", { day: readDay(today) })}`, "deal-note"));
       }
       list.append(li);
     });
@@ -1382,15 +1393,15 @@ const dealViewRender = (model, regions) => {
   }
   // A cancellation: exactly what is shown, and what is not.
   (report.cancellations || []).forEach((c) => {
-    more.append(el("h2", "Your cancellation"));
+    more.append(el("h2", W("page.cancel.title")));
     const shows = el("details", undefined, c.merchant === "confirmed" ? undefined : "deal-flag");
     shows.open = true;
-    shows.append(el("summary", "What this shows"));
+    shows.append(el("summary", W("page.cancel.shows")));
     const proven = el("ul");
     (c.proven || []).forEach((p) => proven.append(el("li", p)));
     const notProven = el("ul", undefined, "deal-note");
     (c.not_proven || []).forEach((p) => notProven.append(el("li", p)));
-    shows.append(proven, el("h3", "What this does not show"), notProven, steps(c.steps || []));
+    shows.append(proven, el("h3", W("page.cancel.not_shown")), notProven, steps(c.steps || []));
     more.append(shows);
   });
 
@@ -1398,14 +1409,11 @@ const dealViewRender = (model, regions) => {
   // DKIM signature (independent of the agent) and our seal (our own record).
   const merchant = report.merchant || [];
   if (merchant.length > 0) {
-    more.append(el("h2", "The merchant's own email"));
+    more.append(el("h2", W("page.merchant.title")));
     more.append(
       el(
         "p",
-        "Two different things stand behind each email. The signing domain's DKIM signature is checked against its published key, " +
-          "saved when the email was sealed; it shows what that domain signed, and it does not depend on the agent. " +
-          "Our seal shows this device held these exact bytes no later than the seal time; who signed them is checked by that DKIM signature, not by our seal. " +
-          "Amounts, dates and order numbers below are read from the email by capsulectl and may be misread.",
+        W("page.merchant.two"),
         "deal-note",
       ),
     );
@@ -1413,11 +1421,11 @@ const dealViewRender = (model, regions) => {
     merchant.forEach((m) => {
       const d = el("details", undefined, m.verified ? undefined : "deal-flag");
       d.open = true;
-      d.append(el("summary", m.order_id ? `Order ${m.order_id}` : "Merchant email"));
-      d.append(el("p", `DKIM signature: ${m.merchant_says}`, m.verified ? "deal-ok" : "deal-bad"));
-      d.append(el("p", `Our seal: ${m.we_say}`, "deal-note"));
+      d.append(el("summary", m.order_id ? W("page.merchant.order", { order: m.order_id }) : W("page.merchant.email")));
+      d.append(el("p", W("page.merchant.dkim", { says: m.merchant_says }), m.verified ? "deal-ok" : "deal-bad"));
+      d.append(el("p", W("page.merchant.seal", { says: m.we_say }), "deal-note"));
       if (m.key_source === "supplied") {
-        d.append(el("p", "The signing domain's key was supplied by hand, not read from its DNS.", "deal-bad"));
+        d.append(el("p", W("page.merchant.key_supplied"), "deal-bad"));
       }
       const table = el("table", undefined, "deal-merchant");
       const row = (label, value) => {
@@ -1426,39 +1434,35 @@ const dealViewRender = (model, regions) => {
         tr.append(el("th", label), el("td", value));
         table.append(tr);
       };
-      row(m.approved_basis ? `You approved (${m.approved_basis})` : "You approved", m.approved);
-      row("The agent reported paying", m.agent_reported);
-      row("The merchant's email says (read from the email)", m.charged);
-      row("Charged on (the email's date)", m.charged_on);
-      row("Cancel by (read from the email)", m.cancel_by);
-      row("Items (read from the email)", (m.items || []).join(" · "));
-      row("Signing domain", m.domains);
-      row("Signing domain's key", m.key_size ? `${m.key_size}, sealed when the email was sealed` : "");
+      row(m.approved_basis ? W("page.merchant.approved_basis", { basis: m.approved_basis }) : W("page.merchant.approved"), m.approved);
+      row(W("page.merchant.reported"), m.agent_reported);
+      row(W("page.merchant.charged"), m.charged);
+      row(W("page.merchant.charged_on"), m.charged_on);
+      row(W("page.merchant.cancel_by"), m.cancel_by);
+      row(W("page.merchant.items"), (m.items || []).join(" · "));
+      row(W("page.merchant.domain"), m.domains);
+      row(W("page.merchant.key"), m.key_size ? W("page.merchant.key_size", { size: m.key_size }) : "");
       d.append(table, steps(m.steps || []));
       more.append(d);
     });
   }
 
-  more.append(el("h2", "Anomalies"));
+  more.append(el("h2", W("page.anomalies.title")));
   const anomalies = report.anomalies || [];
   [
-    ["agent", "Agent side"],
-    ["counterparty", "Counterparty side"],
+    ["agent", W("page.anomalies.agent")],
+    ["counterparty", W("page.anomalies.counterparty")],
   ].forEach(([side, label]) => {
     const mine = anomalies.filter((a) => a.side === side);
     more.append(el("h3", label));
-    if (mine.length === 0) more.append(el("p", "None found.", "deal-note"));
+    if (mine.length === 0) more.append(el("p", W("page.anomalies.none"), "deal-note"));
     mine.forEach((a) => more.append(item(`⚠️ ${a.text}`, a.steps, "deal-flag")));
   });
 
   more.append(
     el(
       "p",
-      "This page checked each step's sealed record and its place in this deal's log; the verification below says what was and was not checked. " +
-        "The records carry fingerprints, not names or numbers; the words shown come from this device. " +
-        (shared ? "Steps marked contents withheld are proven present and unchanged; what they say is not in this copy. " : "") +
-        "The seal key is on the agent's machine, so this shows the record was not changed after it was made, not who made it. " +
-        "It covers this skill's own records only, never the agent host's own store.",
+      [W("page.end"), shared ? W("page.end.withheld") : "", W("page.end.key")].filter((t) => t !== "").join(" "),
       "deal-note",
     ),
   );

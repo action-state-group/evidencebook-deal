@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The deal view's words are a wording pack (F8.10, evidencebook-deal#97): the English
+  `deal-view.js` hardcoded is now the `page.*` entries of
+  `assets/wording/capsulectl-deal-en.json`, which every deal page carries in its
+  words. The page's text is unchanged (the presentation snapshots are identical);
+  a pack pinned on a deal profile must now hold the `page.*` keys too.
+
 - `counterparty_class` on a pay check (F4.5, evidencebook-deal#93, evidencebook#273): a
   `deal check` input for a `pay` may state `"counterparty_class"` (`person_agent`,
   `business_agent` or `shop_preauth`, SH §7), which is sealed as the pay check's
