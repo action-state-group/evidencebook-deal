@@ -29,6 +29,9 @@
   checkpoint, its final close). A deal without one stays `receipt_only` or `no_record`.
   Run `deal terms-result` and then `deal tick` before the card.
 
+- Builds against capsulectl `v0.1.0-rc31` (its profile names the countersigner directory,
+  capsule-cli#522), which pins capsule-viewer `v0.10.0`.
+
 - The owner's report states its grade, keeps countersignatures, and has a read that
   writes nothing (evidencebook-deal#64, actionstate-muse#311 §3.1, §3.3, §4):
   - `deal report` (the user's own copy) carries `grade`: the rung reached
