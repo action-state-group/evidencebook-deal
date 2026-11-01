@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -246,10 +247,21 @@ func TestDealReportReadOnlyWritesNothing(t *testing.T) {
 		assert.Contains(t, cli.SafeError(err), "--read-only writes nothing", extra)
 	}
 
-	// A deal this store holds no key for is unknown, as a writer says.
-	_, err := invoke(t, "", "--profile", "deal", "deal", "report", "--deal", "deal-0000000000000000", "--read-only")
+	// A deal with steps but no key row (an open that stopped) is unknown,
+	// as a writer says.
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	db, _, err := cli.SqliteConnection(p)
+	require.NoError(t, err)
+	var key []byte
+	require.NoError(t, db.QueryRow(`SELECT deal_key FROM deal_keys WHERE deal_id=?`, dealID).Scan(&key))
+	_, err = db.Exec(`DELETE FROM deal_keys WHERE deal_id=?`, dealID)
+	require.NoError(t, err)
+	_, err = invoke(t, "", "--profile", "deal", "deal", "report", "--deal", dealID, "--read-only")
 	require.ErrorIs(t, err, cli.ErrInput)
-	assert.Contains(t, cli.SafeError(err), "unknown deal")
+	assert.Contains(t, cli.SafeError(err), "unknown deal: "+dealID)
+	_, err = db.Exec(`INSERT INTO deal_keys (deal_id, deal_key) VALUES (?, ?)`, dealID, key)
+	require.NoError(t, errors.Join(err, db.Close()))
 
 	// deal countersign with no --directory and none in the profile says
 	// what to set.
