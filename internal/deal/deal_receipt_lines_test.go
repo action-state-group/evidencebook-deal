@@ -175,13 +175,13 @@ const dealViewFunctionsDriver = `
 const fs = require("fs");
 const vm = require("vm");
 const [scriptPath] = process.argv.slice(2);
-const context = vm.createContext({ console, EvidenceGraph: { registerPresentation: () => {} } });
+const context = vm.createContext({ console, EvidenceGraph: { registerPresentation: () => {} }, capsulectlDealPage: { words: JSON.parse(process.env.DEAL_PAGE_WORDS) } });
 vm.runInContext(fs.readFileSync(scriptPath, "utf8"), context);
 const cases = JSON.parse(fs.readFileSync(0, "utf8"));
 context.cases = cases;
 process.stdout.write(JSON.stringify(vm.runInContext(` + "`" + `({
   close: cases.close.map((c) => dealCloseStatus(c.close, c.records, c.book)),
-  band: cases.band.map((b) => dealBandLabel(b, {})),
+  band: cases.band.map((b) => dealBandLabel(b)),
   afterYes: cases.afterYes.map((steps) => { const r = dealAfterYes(steps); return r.state + (r.why ? ":" + r.why : "") + (r.act ? ":" + r.act.id : "") + (r.approvers && r.approvers.length ? " by " + r.approvers.join(",") : ""); }),
   settlement: cases.settlement.map((steps) => dealSettlement(steps)),
 })` + "`" + `, context)));
@@ -201,6 +201,7 @@ func runDealViewFunctions(t *testing.T, cases map[string]any) map[string]any {
 	in, err := json.Marshal(cases)
 	require.NoError(t, err)
 	cmd := exec.Command(node, driver, script)
+	cmd.Env = dealPageWordsEnv(t)
 	cmd.Stdin = strings.NewReader(string(in))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))

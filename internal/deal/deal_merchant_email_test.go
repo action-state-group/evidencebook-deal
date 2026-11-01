@@ -10,10 +10,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -620,7 +622,7 @@ func TestCaptureEmailSealsTheSameKeysFromParallelLookups(t *testing.T) {
 // the seal time, never that it kept them afterwards (capsule-cli#289): the
 // email's note and the deal view say so, and leave the sender to DKIM.
 func TestOurSealIsBoundedToTheSealTime(t *testing.T) {
-	for name, text := range map[string]string{"email": dealEmailMerchantNote, "deal view": DealViewJS} {
+	for name, text := range map[string]string{"email": dealEmailMerchantNote, "deal view": DealViewJS + strings.Join(slices.Collect(maps.Values(dealPageWords(cli.BuiltinWording()))), "\n")} {
 		assert.Contains(t, text, "held these exact bytes no later than the seal time", name)
 		assert.Contains(t, text, "checked by that DKIM signature", name)
 		assert.NotContains(t, text, "from that time on", name)

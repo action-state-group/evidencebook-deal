@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -71,4 +72,14 @@ func TestTheDealViewSpeaksWithThePackPageWords(t *testing.T) {
 		}
 		assert.True(t, used, "the pack's page word %s is never said by deal-view.js", k)
 	}
+}
+
+// dealPageWordsEnv is the environment a node driver of deal-view.js runs
+// with: the words a deal page carries (dealPageWords), which the driver
+// puts on capsulectlDealPage as the page's bootstrap does.
+func dealPageWordsEnv(t *testing.T) []string {
+	t.Helper()
+	raw, err := json.Marshal(dealPageWords(cli.BuiltinWording()))
+	require.NoError(t, err)
+	return append(os.Environ(), "DEAL_PAGE_WORDS="+string(raw))
 }

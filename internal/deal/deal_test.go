@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -653,7 +654,9 @@ func TestDealPickedItemIsNotAFalsePause(t *testing.T) {
 		shareRun(t, dealID, cli.DealAudienceCounterparty, shared)
 		// The module's own source holds words like "you asked for it": only
 		// what the page shows is checked.
+		// Nor are the words it carries for the module (page.*).
 		copyPage := strings.ReplaceAll(string(mustRead(t, shared)), DealViewJS, "")
+		copyPage = regexp.MustCompile(`"page\.[a-z_.0-9]+":"(?:[^"\\]|\\.)*"`).ReplaceAllString(copyPage, "")
 		assert.Contains(t, copyPage, "Checked before paying: flagged")
 		for _, words := range []string{"you asked for", "the agent picked", "size small"} {
 			assert.NotContains(t, strings.ToLower(copyPage), words)
