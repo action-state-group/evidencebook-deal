@@ -24,8 +24,11 @@
   `deal standard-history declare --holder-kind person|node` (declared once, and
   declaring again never turns answering back on; with no declaration there is
   no card), `policy [--months N | --all]` (its own file
-  beside the deal store, default the last 3 months, never part of the share
-  policy) and `card --out FILE [--shared]`, which seals the card as a Capsule
+  beside the deal store, never part of the share policy; the default
+  window is the last 3 months, as 9b frame 4 states it. rc28 shipped the card
+  with a 12-month default: a holder who set no policy (the default is never
+  written to the file) gets the 3-month window and a new policy digest from
+  the next card on, and `policy --months 12` keeps the old window) and `card --out FILE [--shared]`, which seals the card as a Capsule
   and writes the bundle with the `x-standard-history/v0` block (policy and
   `as_of`; the deal entries only in your own copy). The card is as of the
   newest finished cadence tick, never one deal book's checkpoint, and counts

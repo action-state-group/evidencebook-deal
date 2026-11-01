@@ -1,6 +1,8 @@
 package deal
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -398,6 +400,10 @@ func TestTheStandardHistoryGoldens(t *testing.T) {
 			assert.ElementsMatch(t, []string{"policy", "as_of"}, keysOf(block), name)
 		}
 		assert.ElementsMatch(t, []string{"anchor", "anchor_time", "first_checkpoint_time"}, keysOf(block["as_of"].(map[string]any)), name+": no checkpoint or receipts member")
+		policy, _ := block["policy"].(map[string]any)
+		assert.Equal(t, map[string]any{"months": float64(3)}, policy["window"], name+": the default window")
+		digest := sha256.Sum256([]byte(shDefaultPolicy))
+		assert.Equal(t, hex.EncodeToString(digest[:]), policy["digest"], name+": the default policy's digest")
 	}
 }
 
