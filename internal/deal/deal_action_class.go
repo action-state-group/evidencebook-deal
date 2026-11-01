@@ -2,7 +2,10 @@ package deal
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
+	"github.com/action-state-group/agent-action-capsule/go/standardhistory"
 	"github.com/action-state-group/capsule-cli/cli"
 )
 
@@ -226,4 +229,20 @@ func sealCancelAmount(m map[string]interface{}, direction string) {
 		m["cancelled_amount_minor"] = amount
 	}
 	m["direction"] = "in"
+}
+
+// checkCounterpartyClass refuses a counterparty_class the profile cannot
+// carry: only a pay check states how the deal was paid (x-deal-v0
+// PROFILE.md section 1), and only one of SH's three values means anything.
+func checkCounterpartyClass(snap dealSnapshot) error {
+	if snap.CounterpartyClass == "" {
+		return nil
+	}
+	if snap.Action != "pay" {
+		return cli.InputError(`"counterparty_class" is stated on a pay check only: it says what kind of party the payment goes to`)
+	}
+	if !slices.Contains(standardhistory.CounterpartyClasses, snap.CounterpartyClass) {
+		return cli.InputError(`"counterparty_class" must be one of ` + strings.Join(standardhistory.CounterpartyClasses, ", "))
+	}
+	return nil
 }
