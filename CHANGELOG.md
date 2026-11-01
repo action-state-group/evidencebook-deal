@@ -41,8 +41,8 @@
     (`deal_countersignatures`) with the exact bundle it covers. A later report states
     each against that stored bundle: through step k of n, the signer, its
     `recomputed_at`; it never attaches one to its own bundle. Signers resolve against
-    the profile's `countersign.directory` only (capsule-cli#522), which `--directory`
-    now defaults to; one not checked says why (`unchecked_reason`).
+    the profile's `countersign.directory` only (capsule-cli#522), which both commands'
+    `--directory` now defaults to; one not checked says why (`unchecked_reason`).
   - `deal report --read-only` reads a deal and writes nothing: no checkpoint is cut,
     nothing sealed, no file written, the store opened as `deal checkpoint status`
     opens it. A deal with no checkpoint over its last step states its witness

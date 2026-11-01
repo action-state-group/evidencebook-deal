@@ -166,6 +166,9 @@ func TestDealCountersignatureIsStoredWithItsBundle(t *testing.T) {
 		assert.Equal(t, "countersigned_in_part", g.Rung, args)
 		assert.Equal(t, "countersigned_in_part", g.Countersign.Rung, args)
 		assert.True(t, cli.IsRungValue(g.Rung), "a ladder rung in part")
+		assert.Equal(t, "Example Countersigner", g.Countersign.Signer, args)
+		assert.Equal(t, entry.Statement.RecomputedAt, g.Countersign.RecomputedAt, args)
+		assert.Equal(t, g.Countersign.Steps-1, g.Countersign.ThroughStep, args)
 		assert.Equal(t, directory, g.Countersign.Directory, args)
 		require.Len(t, g.Countersign.Entries, 1, args)
 		e := g.Countersign.Entries[0]

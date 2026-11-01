@@ -67,7 +67,14 @@ type dealGradeWitness struct {
 // unchecked: the strongest entry decides, as dealCountersignVerify ranks
 // them).
 type dealGradeCountersign struct {
-	Rung      string                       `json:"rung,omitempty"`
+	Rung string `json:"rung,omitempty"`
+	// With a rung, the entry that decides the stamp: the resolved one that
+	// reaches furthest into the deal, the latest recomputed_at among those.
+	Signer       string `json:"signer,omitempty"`
+	RecomputedAt string `json:"recomputed_at,omitempty"`
+	ThroughStep  int    `json:"through_step,omitempty"`
+	Steps        int    `json:"steps,omitempty"`
+
 	Finding   string                       `json:"finding,omitempty"`
 	Directory string                       `json:"directory,omitempty"`
 	Entries   []dealStoredCountersignature `json:"entries,omitempty"`
@@ -84,13 +91,13 @@ type dealGradeCountersign struct {
 type dealStoredCountersignature struct {
 	State           string `json:"state"`
 	UncheckedReason string `json:"unchecked_reason,omitempty"`
-	Signer       string `json:"signer,omitempty"`
-	KeyID        string `json:"key_id,omitempty"`
-	RecomputedAt string `json:"recomputed_at,omitempty"`
-	Receipt      string `json:"receipt,omitempty"`
-	ThroughStep  int    `json:"through_step,omitempty"`
-	Steps        int    `json:"steps"`
-	BundleDigest string `json:"bundle_digest"`
+	Signer          string `json:"signer,omitempty"`
+	KeyID           string `json:"key_id,omitempty"`
+	RecomputedAt    string `json:"recomputed_at,omitempty"`
+	Receipt         string `json:"receipt,omitempty"`
+	ThroughStep     int    `json:"through_step,omitempty"`
+	Steps           int    `json:"steps"`
+	BundleDigest    string `json:"bundle_digest"`
 }
 
 // profileCountersignDirectory is the countersigner directory the profile
@@ -103,6 +110,17 @@ func profileCountersignDirectory(p cli.Profile) string {
 		return d
 	}
 	return ""
+}
+
+// laterTime reports whether RFC 3339 time a is after b; a time that does not
+// parse is never later.
+func laterTime(a, b string) bool {
+	ta, err := time.Parse(time.RFC3339Nano, a)
+	if err != nil {
+		return false
+	}
+	tb, err := time.Parse(time.RFC3339Nano, b)
+	return err != nil || ta.After(tb)
 }
 
 // dealWitnessGrade is the witness part of a report bundle's grade: the rung
@@ -200,13 +218,14 @@ ON CONFLICT(deal_id, bundle_digest) DO UPDATE SET bundle=excluded.bundle`,
 // profile's countersigner directory only, so the rung never depends on who
 // asks. Nothing is attached to any other bundle.
 func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEvent) (dealGradeCountersign, error) {
-	out := dealGradeCountersign{Finding: "not_countersigned", Directory: profileCountersignDirectory(s.p)}
+	out := dealGradeCountersign{Directory: profileCountersignDirectory(s.p)}
 	dealID := events[0].Event.DealID
 	rows, err := s.db.QueryContext(ctx, `SELECT bundle_digest, bundle FROM deal_countersignatures WHERE deal_id=? ORDER BY stored_at, bundle_digest`, dealID)
 	if err != nil {
 		// A store no writer has opened since this build has no such table,
 		// and so nothing stored.
 		if s.shared && strings.Contains(err.Error(), "no such table") {
+			out.Finding = "not_countersigned"
 			return out, nil
 		}
 		return out, err
@@ -280,24 +299,28 @@ func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEven
 	// The strongest entry decides, as capsule-cli ranks a bundle's entries.
 	rank := map[string]int{"invalid": 1, "unverified": 1, "unchecked": 2, "unresolved_signer": 3, "not_independent": 4, "resolved": 5}
 	finding := map[string]string{"invalid": "unverified", "unverified": "unverified", "unchecked": "unchecked", "unresolved_signer": "unresolved_signer", "not_independent": "self_countersigned"}
-	best, reach := "", 0
-	for _, e := range out.Entries {
+	best := ""
+	var decides *dealStoredCountersignature
+	for i, e := range out.Entries {
 		if rank[e.State] > rank[best] {
 			best = e.State
 		}
-		if e.State == "resolved" {
-			reach = max(reach, e.ThroughStep)
+		if e.State == "resolved" && (decides == nil || e.ThroughStep > decides.ThroughStep ||
+			(e.ThroughStep == decides.ThroughStep && laterTime(e.RecomputedAt, decides.RecomputedAt))) {
+			decides = &out.Entries[i]
 		}
 	}
 	switch best {
 	case "":
+		out.Finding = "not_countersigned"
 	case "resolved":
 		// Countersigned in part, like witnessed in part, when the deal has
 		// steps after every resolved countersignature's bundle.
-		out.Rung, out.Finding = "countersigned", ""
-		if reach < len(events) {
+		out.Rung = "countersigned"
+		if decides.ThroughStep < len(events) {
 			out.Rung = "countersigned_in_part"
 		}
+		out.Signer, out.RecomputedAt, out.ThroughStep, out.Steps = decides.Signer, decides.RecomputedAt, decides.ThroughStep, decides.Steps
 	default:
 		out.Finding = finding[best]
 	}

@@ -64,7 +64,15 @@ as `witnessed_in_part` is for a witness. An entry that could not be checked
 is `unchecked` and fills no rung, with `unchecked_reason`: `no_directory`
 (the profile names none, or names a file by a relative path),
 `directory_unreadable`, or `bundle_does_not_check`. Covering the steps after
-it needs a new countersignature over a new bundle.
+it needs a new countersignature over a new bundle. With a rung,
+`grade.countersign` also names the entry that decides it: the resolved one
+reaching furthest into the deal (the latest `recomputed_at` among equals),
+as `signer`, `recomputed_at`, `through_step` and `steps`.
+
+A countersignature `deal countersign` showed as resolved under a
+`--directory` you passed can read `unresolved_signer` or `unchecked` in the
+next report: the grade resolves signers against the profile's directory only.
+Set the profile's directory to the one you trust.
 
 ## What each value says
 

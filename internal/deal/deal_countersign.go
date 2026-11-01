@@ -287,6 +287,6 @@ func dealCountersignCommand() *cobra.Command {
 	cmd.Flags().String("deal", "", "Deal ID from `deal open`")
 	cmd.Flags().String("bundle", "", "This deal's report bundle file (from `deal report --bundle`)")
 	cmd.Flags().String("entry", "", "A countersign/v1 entry (or an array of them) to attach to the bundle once it verifies")
-	cmd.Flags().String("directory", "", "Countersigner directory (HTTPS URL or file) that resolves signers; default: the profile's countersign.directory. No list is privileged")
+	cmd.Flags().String("directory", "", "Countersigner directory (HTTPS URL or file) used to identify who signed; default: the profile's countersign.directory")
 	return cmd
 }
