@@ -566,3 +566,37 @@ func TestATypedDealRefusesACounterpartyClass(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error()+out, "typed action records")
 }
+
+// Only one check of a deal states the class (two carriers read as none, SH
+// §7): a re-check that states it again is refused, one that leaves it out is
+// not, and the card still leaves the shop_preauth deal out of its counts.
+func TestACounterpartyClassIsStatedOnceAcrossReChecks(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	raw, err := os.ReadFile(filepath.Join(retailDemo, "check-pay.json"))
+	require.NoError(t, err)
+	var check map[string]any
+	require.NoError(t, json.Unmarshal(raw, &check))
+	check["counterparty_class"] = "shop_preauth"
+	withClass, err := json.Marshal(check)
+	require.NoError(t, err)
+	stated := filepath.Join(t.TempDir(), "stated.json")
+	require.NoError(t, os.WriteFile(stated, withClass, 0o600))
+
+	dealID := dealRun(t, "open", "--input", filepath.Join(retailDemo, "open.json"))["deal_id"].(string)
+	dealRun(t, "check", "--deal", dealID, "--input", stated)
+	out, err := invoke(t, "", "--profile", "deal", "deal", "check", "--deal", dealID, "--input", stated)
+	require.Error(t, err)
+	assert.Contains(t, err.Error()+out, "state it once")
+	dealRun(t, "check", "--deal", dealID, "--input", filepath.Join(retailDemo, "check-pay.json"))
+	dealRun(t, "note", "--deal", dealID, "--kind", "act", "--input", filepath.Join(retailDemo, "act-pay.json"))
+
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	reply := respondCard(t, cardRequest(t, fullHistory))
+	require.NotNil(t, reply.Envelope)
+	var card map[string]any
+	require.NoError(t, json.Unmarshal(reply.Envelope.Artifact, &card))
+	assert.Equal(t, map[string]any{"counted": float64(0), "not_counted": float64(1), "of": float64(1)}, card["in_window"])
+}

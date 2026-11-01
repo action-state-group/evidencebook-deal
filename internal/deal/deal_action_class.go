@@ -233,8 +233,9 @@ func sealCancelAmount(m map[string]interface{}, direction string) {
 
 // checkCounterpartyClass refuses a counterparty_class the profile cannot
 // carry: only a pay check states how the deal was paid (x-deal-v0
-// PROFILE.md section 1), and only one of SH's three values means anything.
-func checkCounterpartyClass(snap dealSnapshot) error {
+// PROFILE.md section 1), only one of SH's three values means anything, and
+// only one check of a deal states it.
+func checkCounterpartyClass(snap dealSnapshot, events []sealedEvent) error {
 	if snap.CounterpartyClass == "" {
 		return nil
 	}
@@ -243,6 +244,13 @@ func checkCounterpartyClass(snap dealSnapshot) error {
 	}
 	if !slices.Contains(standardhistory.CounterpartyClasses, snap.CounterpartyClass) {
 		return cli.InputError(`"counterparty_class" must be one of ` + strings.Join(standardhistory.CounterpartyClasses, ", "))
+	}
+	// SH §7: a deal whose records carry the member on two or more records
+	// lacks it, so a second statement would unsay the first.
+	for _, e := range events {
+		if e.Event.Kind == "snapshot" && e.Event.Snapshot != nil && e.Event.Snapshot.CounterpartyClass != "" {
+			return cli.InputError(`"counterparty_class" is already stated on an earlier check of this deal (` + e.CapsuleID + `): state it once, on the first pay check, and leave it out of later ones`)
+		}
 	}
 	return nil
 }
