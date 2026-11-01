@@ -124,7 +124,7 @@ func TestPresentationReceiptWithTheirHalf(t *testing.T) {
 		assert.Contains(t, got.Stamps[2], "passed | ✓Their record and yours are about the same deal")
 		assert.Contains(t, got.Stamps[2], "both records name the same deal; neither points at the other")
 		assert.Contains(t, got.Stamps[3], "missing | —The payment is settled on its rail · missing · no settlement record is in this file")
-		assert.Contains(t, got.Stamps[4], "missing | —They agreed with how the deal closed · missing · closed by your side only: their record does not point at your close",
+		assert.Contains(t, got.Stamps[4], "missing | —Their agreement with how the deal closed · missing · closed by your side only: their record is here, and it does not point at your close",
 			"no deal verb seals an acknowledgement yet (evidencebook-deal#95), so the close reads unilateral")
 		assert.Contains(t, got.Stamps[5], "An outside witness recorded both books' snapshots")
 		assert.Contains(t, got.Private, "This page is your private copy", "the page says on its face that it carries the keep copy")

@@ -1075,7 +1075,7 @@ const dealViewRender = (model, regions) => {
   if (!mineLines && !(composed && !composed.mine)) {
     // A copy whose steps have no place in a book: none of these lines is read.
     const why = "this copy's steps were sealed before they had a place in a book";
-    recordLines.push(["not checked", `Each act came after ${who} yes`, why], ["not checked", "The payment is settled on its rail", why], ["not checked", "They agreed with how the deal closed", why]);
+    recordLines.push(["not checked", `Each act came after ${who} yes`, why], ["not checked", "The payment is settled on its rail", why], ["not checked", "Their agreement with how the deal closed", why]);
   } else if (!mineLines) {
     recordLines.push(["missing", `Each act came after ${who} yes`, "your record is not in this file"]);
   } else if (mineLines.afterYes.state !== "none") {
@@ -1115,19 +1115,19 @@ const dealViewRender = (model, regions) => {
   const closed = mineLines && mineLines.close;
   let closeState = "none";
   let closeLine;
-  if (!closed) closeLine = ["not checked", "They agreed with how the deal closed", mineLines ? "the deal is not closed in this copy" : "your record is not in this file"];
-  else if (closed.withheld) closeLine = ["not checked", "They agreed with how the deal closed", "steps are withheld from this copy"];
-  else if (theirArtifact && theirArtifact.mesh) closeLine = ["not checked", "They agreed with how the deal closed", `their record is of the exchange, not of ${who} close`];
-  else if (theirArtifact && theirArtifact.state !== "verified") closeLine = ["not checked", "They agreed with how the deal closed", "their record did not check"];
-  else if (!theirArtifact) closeLine = ["missing", "They agreed with how the deal closed", shared ? "no record from the other side" : "no record from their side"];
+  if (!closed) closeLine = ["not checked", "Their agreement with how the deal closed", mineLines ? "the deal is not closed in this copy" : "your record is not in this file"];
+  else if (closed.withheld) closeLine = ["not checked", "Their agreement with how the deal closed", "steps are withheld from this copy"];
+  else if (theirArtifact && theirArtifact.mesh) closeLine = ["not checked", "Their agreement with how the deal closed", `their record is of the exchange, not of ${who} close`];
+  else if (theirArtifact && theirArtifact.state !== "verified") closeLine = ["not checked", "Their agreement with how the deal closed", "their record did not check"];
+  else if (!theirArtifact) closeLine = ["missing", "Their agreement with how the deal closed", shared ? "no record from the other side" : "no record from their side"];
   else {
     closeState = dealCloseStatus(closed.id, theirArtifact.records, theirArtifact.book);
     closeLine =
       closeState === "agreed"
-        ? ["passed", "They agreed with how the deal closed", `agreed: their record points at ${who} close`]
+        ? ["passed", "Their agreement with how the deal closed", `agreed: their record points at ${who} close`]
         : closeState === "contested"
-          ? ["failed", "They agreed with how the deal closed", `contested: their record disputes ${who} close`]
-          : ["missing", "They agreed with how the deal closed", `closed by ${who} side only: their record does not point at ${who} close`];
+          ? ["failed", "Their agreement with how the deal closed", `contested: their record disputes ${who} close`]
+          : ["missing", "Their agreement with how the deal closed", `closed by ${who} side only: their record is here, and it does not point at ${who} close`];
   }
   if (mineLines || (composed && !composed.mine)) recordLines.push(closeLine);
   const stamps = composed ? [
