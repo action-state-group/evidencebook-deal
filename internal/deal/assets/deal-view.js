@@ -301,10 +301,13 @@ const dealAfterYes = (steps) => {
 // (agent-action-capsule spec/adapters; Mesh-LLM/capsules-plugin
 // adapters/lightning-v0.md): the settled payee-observed legs in this log.
 // The page holds no check of a rail's proof (a preimage is a digest, which
-// only the runtime may compute), so nothing here says passed. The band is
+// only the runtime may compute): a Lightning leg's proof is passed only when
+// the runtime's paymentPreimageCheck (viewer 0.10.0, capsule-viewer#214)
+// answers PASS for every settled leg; any other answer, or a runtime without
+// the check, leaves the line as it was. The band is
 // lightning-v0's "Band": the side's settled amounts summed, as
 // (currency, decade), decade = digits - assetScale - 1, never converted.
-const dealSettlement = (steps) => {
+const dealSettlement = async (steps) => {
   const legs = steps.filter((s) => s.settlement && s.settlement.leg === "payee_observed" && s.settlement.status === "settled");
   if (legs.length === 0) {
     // No leg: the rail a paying act names, so the line can say whose report is not here.
@@ -323,8 +326,37 @@ const dealSettlement = (steps) => {
     const sum = amounts.reduce((acc, a) => acc + BigInt(String(a.value)), 0n);
     band = { currency, decade: sum === 0n ? null : String(sum).length - scale - 1 };
   }
-  return { rail, legs: true, preimage, band };
+  let proof = false;
+  if (rail === "lightning" && preimage === true && typeof EvidenceGraph.paymentPreimageCheck === "function") {
+    try {
+      const answers = await Promise.all(legs.map((s) => EvidenceGraph.paymentPreimageCheck(s.settlement.payment_ref, s.body.preimage)));
+      proof = answers.every((a) => a === "PASS");
+    } catch (e) {
+      proof = false;
+    }
+  }
+  return { rail, legs: true, preimage, proof, band };
 };
+
+// The cadence witness (F8.1): the runtime walks the bundle's
+// x-cadence-witness/v0 chain from the context's own checkpoint and checks its
+// receipts under the reader's witness list (readerCadenceWitness, viewer
+// 0.10.0, capsule-viewer#214). Undefined when the runtime has no such check.
+const dealWitnessOf = async (context) => {
+  if (typeof EvidenceGraph.readerCadenceWitness !== "function") return undefined;
+  try {
+    const w = await EvidenceGraph.readerCadenceWitness(context);
+    return w && typeof w.status === "string" ? w : undefined;
+  } catch (e) {
+    return undefined;
+  }
+};
+// "recorded by <witness> at <time>": only a PASS carries a witness to name.
+const dealWitnessText = (w) => {
+  const at = typeof w.witnessed_time === "number" ? new Date(w.witnessed_time * 1000) : undefined;
+  return `recorded by ${w.witness}` + (at && !Number.isNaN(at.getTime()) ? ` at ${at.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "");
+};
+const dealWitnessPassed = (w) => w !== undefined && w.status === "PASS" && typeof w.witness === "string" && w.witness !== "";
 
 // The band's words, as the History card names a size (capsule-viewer
 // static/standard_history_card.js bandLabel, from the same strings,
@@ -476,9 +508,10 @@ const dealViewModel = async (context) => {
     claimClasses,
     dealId: logId.startsWith("deal/") ? logId.slice(5) : reportDealId,
     witnessed: (bundle.extensions || {})["x-cadence-witness/v0"] !== undefined,
+    cadence: await dealWitnessOf(context),
     // Steps sealed before the deal store was a book (capsule-cli#242) have
     // no place in one: their lines are not read.
-    lines: logSteps.length > 0 ? { afterYes: dealAfterYes(logSteps), settlement: dealSettlement(logSteps), close: dealCloseOf(logSteps) } : undefined,
+    lines: logSteps.length > 0 ? { afterYes: dealAfterYes(logSteps), settlement: await dealSettlement(logSteps), close: dealCloseOf(logSteps) } : undefined,
   };
 };
 
@@ -562,14 +595,14 @@ const dealTheirArtifact = async (member, dealID, mine, meshOwn, payerRecords) =>
     // V4 for Mesh: the same exchange as the payer's own half.
     const nonce = dealExchangeNonce(root);
     if (!meshOwn || nonce === undefined || nonce !== dealExchangeNonce(meshOwn) || dealRequestDigest(root) === undefined || dealRequestDigest(root) !== dealRequestDigest(meshOwn)) return failed("V4");
-    return { state: "verified", mesh: true, at: root.timestamp, stamped: at, key: member.observer, witnessed };
+    return { state: "verified", mesh: true, at: root.timestamp, stamped: at, key: member.observer, witnessed, cadence: await dealWitnessOf(ctx) };
   }
   // V4 for a deal copy: their copy of this deal, its text checked as a
   // single-book page checks it.
   const theirs = await dealViewModel(ctx);
   if (theirs.refusal !== undefined) return failed("V1");
   if (theirs.dealId !== dealID || (mine && mine.dealId !== dealID)) return failed("V4");
-  return { state: "verified", mesh: false, report: theirs.report, stamped: at, key: member.observer, witnessed, lines: theirs.lines, records: ctx.records, book: ((ctx.bundle.completeness_certificate || {}).log_id) || "" };
+  return { state: "verified", mesh: false, report: theirs.report, stamped: at, key: member.observer, witnessed, cadence: theirs.cadence, lines: theirs.lines, records: ctx.records, book: ((ctx.bundle.completeness_certificate || {}).log_id) || "" };
 };
 
 const dealComposedModel = async (context) => {
@@ -1050,6 +1083,29 @@ const dealViewRender = (model, regions) => {
   const theirArtifact = composed && composed.shown && (composed.shown.state === "verified" || composed.shown.state === "failed") ? composed.shown : undefined;
   const sameWhat = theirArtifact && theirArtifact.mesh ? "the same exchange" : "the same deal";
   const anyWitness = model.witnessed || (composed && [composed.shown, ...composed.also].some((t) => t && t.witnessed));
+  // The witness line (F8.1): passed only from the runtime's check of the
+  // cadence chain (readerCadenceWitness); no receipt at all is missing; a
+  // receipt the page could not check, or no check in this runtime, is as it was.
+  const theirWitness = theirArtifact && theirArtifact.state === "verified" ? theirArtifact.cadence : undefined;
+  const witnessLine = (label, mineWitness, theirWitnessToo) => {
+    const mineOk = dealWitnessPassed(mineWitness);
+    // No receipt in your book means no outside witness recorded it, whoever's the other side is.
+    if (mineWitness && mineWitness.status === "NOT_PRESENT") return ["missing", label, ""];
+    if (!theirWitnessToo) {
+      if (mineOk) return ["passed", label, dealWitnessText(mineWitness)];
+    } else if (mineOk) {
+      if (dealWitnessPassed(theirWitness)) return ["passed", label, `yours ${dealWitnessText(mineWitness)}; theirs ${dealWitnessText(theirWitness)}`];
+      const other = !theirArtifact
+        ? "no record of the other side's is here"
+        : theirArtifact.state !== "verified"
+          ? "the other side's record did not check"
+          : theirWitness && theirWitness.status === "NOT_PRESENT"
+            ? "the other side's has no witness receipt"
+            : "the other side's is not checked";
+      return [theirWitness && theirWitness.status === "NOT_PRESENT" ? "missing" : "not checked", label, `your book is ${dealWitnessText(mineWitness)}; ${other}`];
+    }
+    return [anyWitness ? "not checked" : "missing", label, anyWitness ? "this page can't check the witness's signature" : ""];
+  };
   // Frame 8's record lines (evidencebook-deal#94): your approval, its order,
   // the settlement and the close, each from its record; your side's copy
   // is the one they are read from.
@@ -1101,6 +1157,8 @@ const dealViewRender = (model, regions) => {
     : settled.rail === "lightning"
       ? settled.preimage === "withheld"
         ? "Lightning; this copy does not show its proof"
+        : settled.proof
+        ? "Lightning; the payment's proof matches its invoice"
         : settled.preimage
         ? "Lightning; its proof is sealed here, and this page can't check it yet"
         : `Lightning; ${legOf(mineLines) ? who : "their"} wallet reported it final`
@@ -1109,7 +1167,7 @@ const dealViewRender = (model, regions) => {
         : "this page checks no settlement";
   if (mineLines || (composed && !composed.mine)) recordLines.push(
     settled
-      ? ["not checked", "The payment is settled on its rail", settledWhose + railText + (settled.band ? ` · size ${dealBandLabel(settled.band, words)}` : "")]
+      ? [settled.proof ? "passed" : "not checked", "The payment is settled on its rail", settledWhose + railText + (settled.band ? ` · size ${dealBandLabel(settled.band, words)}` : "")]
       : ["missing", "The payment is settled on its rail", !unsettled ? "no settlement record is in this file" : unsettled.rail === "card" ? "a card payment; the card processor's report is not in this file" : `a ${String(unsettled.rail).replace(/_/g, " ")} payment; no settlement record is in this file`],
   );
   const closed = mineLines && mineLines.close;
@@ -1149,7 +1207,7 @@ const dealViewRender = (model, regions) => {
         ? ["passed", `Their record and yours are about ${sameWhat}`, theirArtifact.mesh ? "both records name the same request; neither points at the other" : "both records name the same deal; neither points at the other"]
         : ["failed", `Their record and yours are about ${sameWhat}`, "their record did not check"],
     ...recordLines,
-    [anyWitness ? "not checked" : "missing", "An outside witness recorded both books' snapshots", anyWitness ? "this page can't check the witness's signature" : ""],
+    witnessLine("An outside witness recorded both books' snapshots", model.cadence, true),
   ] : [
     shared
       ? ["not checked", "The words asked are withheld from this copy", ""]
@@ -1162,7 +1220,7 @@ const dealViewRender = (model, regions) => {
         ? ["passed", shared ? "Each step's record is in the holder's book, and a change after would show" : "Each step's record is in your book, and a change after would show", ""]
         : ["failed", "A step's record could not be found in this deal's log", "see More on this deal"],
     ...recordLines,
-    [model.witnessed ? "not checked" : "missing", shared ? "An outside witness saw the holder's book" : "An outside witness saw your book", model.witnessed ? "this page can't check the witness's signature" : ""],
+    witnessLine(shared ? "An outside witness saw the holder's book" : "An outside witness saw your book", model.cadence),
     ["missing", "Nothing points back from the other side's book", "it is not in this file"],
     ["not checked", "\"It happened\" rests on what the agent reported", "no one else has checked it"],
   ];
