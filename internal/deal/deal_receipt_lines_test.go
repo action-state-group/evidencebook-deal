@@ -182,7 +182,7 @@ context.cases = cases;
 process.stdout.write(JSON.stringify(vm.runInContext(` + "`" + `({
   close: cases.close.map((c) => dealCloseStatus(c.close, c.records, c.book)),
   band: cases.band.map((b) => dealBandLabel(b, {})),
-  afterYes: cases.afterYes.map((steps) => { const r = dealAfterYes(steps, false); return r.state + (r.why ? ":" + r.why : "") + (r.act ? ":" + r.act.id : "") + (r.approvers && r.approvers.length ? " by " + r.approvers.join(",") : ""); }),
+  afterYes: cases.afterYes.map((steps) => { const r = dealAfterYes(steps); return r.state + (r.why ? ":" + r.why : "") + (r.act ? ":" + r.act.id : "") + (r.approvers && r.approvers.length ? " by " + r.approvers.join(",") : ""); }),
   settlement: cases.settlement.map((steps) => dealSettlement(steps)),
 })` + "`" + `, context)));
 `
@@ -243,7 +243,7 @@ func TestTheSettlementBandIsWordedAsTheHistoryCardWordsIt(t *testing.T) {
 		"close": []any{}, "afterYes": []any{}, "settlement": []any{},
 		"band": []any{band("USD", 0), band("USD", nil), band("USD", 1), band("USD", 3), band("USD", 16), band("USD", 17), band("BTC", -6), band("BTC", 0), band("BTC", nil), band("USDC", -2)},
 	})
-	assert.Equal(t, []any{"under $10", "under $10", "$10 – $99", "$1,000 – $9,999", "$10,000,000,000,000,000 – $99,999,999,999,999,999", "100000000000000000 to under 1000000000000000000 USD", "0.000001 to under 0.00001 BTC", "1 to under 10 BTC", "zero amount, BTC", "0.01 to under 0.1 USDC"}, got["band"])
+	assert.Equal(t, []any{"under $10", "under $10", "$10 – $99", "$1,000 – $9,999", "$10,000,000,000,000,000 – $99,999,999,999,999,999", "$100,000,000,000,000,000 – $999,999,999,999,999,999", "0.000001 to under 0.00001 BTC", "1 to under 10 BTC", "zero amount, BTC", "0.01 to under 0.1 USDC"}, got["band"])
 }
 
 // "After your yes", recomputed over a deal's steps: the approval, its

@@ -238,7 +238,7 @@ const dealRefTo = (deal, rel) => ((deal && Array.isArray(deal.refs) ? deal.refs 
 const dealApprovalTypes = ["approval", "action-approval/v0"];
 const dealEvaluationTypes = ["verdict", "action-evaluation/v0"];
 const dealCheckTypes = ["check", "proposed-action/v0"];
-const dealAfterYes = (steps, shared) => {
+const dealAfterYes = (steps) => {
   const byDigest = new Map(steps.filter((s) => typeof s.digest === "string").map((s) => [s.digest, s]));
   const earlier = (digest, than, types) => {
     const s = byDigest.get(digest);
@@ -340,8 +340,7 @@ const dealBandLabel = (shown, words) => {
   const band = { ...shown, currency: Object.prototype.hasOwnProperty.call(dealAssetCodes, shown.currency) ? dealAssetCodes[shown.currency] : shown.currency };
   const fill = (key, fallback, vars) => (typeof words[key] === "string" ? words[key] : fallback).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
   const sym = Object.prototype.hasOwnProperty.call(dealBandSymbols, band.currency) ? dealBandSymbols[band.currency] : undefined;
-  // Up to decade 16: the high bound's nines need power(decade + 1) in digits.
-  if (sym && (band.decade === null || band.decade <= 16)) {
+  if (sym && (band.decade === null || band.decade <= 17)) {
     if (band.decade === null || band.decade <= 0) return fill("size.under", "under {amount}", { amount: sym + "10" });
     return fill("size.between", "{low} – {high}", { low: sym + dealGrouped(dealPower(band.decade)), high: sym + dealGrouped(dealPower(band.decade + 1).slice(1).replace(/0/g, "9")) });
   }
@@ -479,7 +478,7 @@ const dealViewModel = async (context) => {
     witnessed: (bundle.extensions || {})["x-cadence-witness/v0"] !== undefined,
     // Steps sealed before the deal store was a book (capsule-cli#242) have
     // no place in one: their lines are not read.
-    lines: logSteps.length > 0 ? { afterYes: dealAfterYes(logSteps, shared), settlement: dealSettlement(logSteps), close: dealCloseOf(logSteps) } : undefined,
+    lines: logSteps.length > 0 ? { afterYes: dealAfterYes(logSteps), settlement: dealSettlement(logSteps), close: dealCloseOf(logSteps) } : undefined,
   };
 };
 
