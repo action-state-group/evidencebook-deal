@@ -24,7 +24,7 @@
   `deal standard-history declare --holder-kind person|node` (declared once, and
   declaring again never turns answering back on; with no declaration there is
   no card), `policy [--months N | --all]` (its own file
-  beside the deal store, default the last 12 months, never part of the share
+  beside the deal store, default the last 3 months, never part of the share
   policy) and `card --out FILE [--shared]`, which seals the card as a Capsule
   and writes the bundle with the `x-standard-history/v0` block (policy and
   `as_of`; the deal entries only in your own copy). The card is as of the
