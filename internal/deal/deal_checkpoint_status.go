@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -118,7 +119,11 @@ func runDealRead(c *cobra.Command, _ bool, fn func(ctx context.Context, s *dealS
 		return err
 	}
 	defer func() { err = errors.Join(err, s.close()) }()
-	if err = s.db.QueryRowContext(ctx, `SELECT deal_key FROM deal_keys WHERE deal_id=?`, dealID).Scan(&s.dkey); err != nil {
+	err = s.db.QueryRowContext(ctx, `SELECT deal_key FROM deal_keys WHERE deal_id=?`, dealID).Scan(&s.dkey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return cli.InputError("unknown deal: " + dealID)
+	}
+	if err != nil {
 		return err
 	}
 	events, err := s.load(ctx, dealID)

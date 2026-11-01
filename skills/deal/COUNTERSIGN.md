@@ -58,9 +58,13 @@ one: a later report never attaches it to its own bundle. It states it in
 the steps it covers (`through_step` of `steps`), the signer resolved against
 the profile's `countersign.directory` only (never a `--directory` given to
 the report, so who asks never changes it), its `recomputed_at` (the signer's
-own clock) and the stored bundle's digest. With no directory in the profile,
-or one that cannot be read, each entry is `unchecked` and fills no rung.
-Covering the steps after it needs a new countersignature over a new bundle.
+own clock) and the stored bundle's digest. When the deal has steps after
+every resolved countersignature's bundle, the rung is `countersigned_in_part`,
+as `witnessed_in_part` is for a witness. An entry that could not be checked
+is `unchecked` and fills no rung, with `unchecked_reason`: `no_directory`
+(the profile names none, or names a file by a relative path),
+`directory_unreadable`, or `bundle_does_not_check`. Covering the steps after
+it needs a new countersignature over a new bundle.
 
 ## What each value says
 
@@ -88,8 +92,8 @@ not checked when the page was written). The page shows the `text` and
 | `unverified` | a countersignature type capsulectl does not check | Attached, not counted. |
 
 The user's own report also carries `grade`: `rung`, the highest rung the
-deal reached (`countersigned` when a stored countersignature resolves, else
-the witness's); `witness`, where its witnessing stands (`state`, and once
+deal reached (`countersigned` or `countersigned_in_part` when a stored
+countersignature resolves, else the witness's); `witness`, where its witnessing stands (`state`, and once
 witnessed the `witness`, `at`, the time of the checkpoint the witness signed,
 and in part `steps_witnessed` of `steps`); and `countersign`, above. A shared
 copy carries no grade.

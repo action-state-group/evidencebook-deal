@@ -25,6 +25,27 @@ func asGrade(t *testing.T, v any) dealGrade {
 	return g
 }
 
+// readOnly runs `deal report --read-only` and requires that it changed no
+// byte of the store's directory.
+func readOnly(t *testing.T, storeDir, dealID string) map[string]any {
+	t.Helper()
+	snapshot := func() map[string][32]byte {
+		out := map[string][32]byte{}
+		entries, err := os.ReadDir(storeDir)
+		require.NoError(t, err)
+		for _, e := range entries {
+			if !e.IsDir() {
+				out[e.Name()] = sha256.Sum256(mustRead(t, filepath.Join(storeDir, e.Name())))
+			}
+		}
+		return out
+	}
+	before := snapshot()
+	out := dealRun(t, "report", "--deal", dealID, "--read-only")
+	require.Equal(t, before, snapshot(), "a read writes nothing")
+	return out
+}
+
 func setCountersignDirectory(t *testing.T, directory string) {
 	t.Helper()
 	_, err := invoke(t, "", "profile", "update", "--profile", "deal", "--countersign-directory", directory)
@@ -35,11 +56,11 @@ func setCountersignDirectory(t *testing.T, directory string) {
 // grade is self-attested, the witness not configured and the deal not
 // countersigned, in every form of the user's own report.
 func TestDealReportGradeSelfAttested(t *testing.T) {
-	dealFixture(t)
+	dir := dealFixture(t)
 	dealID := openJetSki(t)
 	for _, out := range []map[string]any{
 		dealRun(t, "report", "--deal", dealID),
-		dealRun(t, "report", "--deal", dealID, "--read-only"),
+		readOnly(t, dir, dealID),
 	} {
 		g := asGrade(t, out["grade"])
 		assert.Equal(t, "self_attested", g.Rung)
@@ -73,18 +94,19 @@ func TestDealReportGradeCarriesTheWitnessTime(t *testing.T) {
 
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 	deliver(t, p, cadenceSize(t, p), key)
-	for _, args := range [][]string{{"report", "--deal", dealID}, {"report", "--deal", dealID, "--read-only"}} {
-		g = asGrade(t, dealRun(t, args...)["grade"])
-		assert.Equal(t, "witnessed", g.Rung, args)
-		assert.Equal(t, "witnessed", g.Witness.State, args)
-		assert.Equal(t, "2026-10-04T09:00:00Z", g.Witness.At, args)
-		assert.NotEmpty(t, g.Witness.Witness, args)
-		assert.Zero(t, g.Witness.StepsWitnessed, args)
+	storeDir := filepath.Dir(p.Connection.Database)
+	for _, out := range []map[string]any{dealRun(t, "report", "--deal", dealID), readOnly(t, storeDir, dealID)} {
+		g = asGrade(t, out["grade"])
+		assert.Equal(t, "witnessed", g.Rung)
+		assert.Equal(t, "witnessed", g.Witness.State)
+		assert.Equal(t, "2026-10-04T09:00:00Z", g.Witness.At)
+		assert.NotEmpty(t, g.Witness.Witness)
+		assert.Zero(t, g.Witness.StepsWitnessed)
 	}
 
 	*now = now.Add(10 * time.Minute)
 	dealRun(t, "note", "--deal", dealID, "--kind", "message", "--input", writeJSON(t, `{"from":"counterparty","text":"Your order has shipped."}`))
-	g = asGrade(t, dealRun(t, "report", "--deal", dealID, "--read-only")["grade"])
+	g = asGrade(t, readOnly(t, storeDir, dealID)["grade"])
 	assert.Equal(t, "witnessed_in_part", g.Rung)
 	assert.Equal(t, "2026-10-04T09:00:00Z", g.Witness.At)
 	assert.Equal(t, g.Witness.StepsWitnessed+1, g.Witness.Steps)
@@ -97,7 +119,7 @@ func TestDealReportGradeCarriesTheWitnessTime(t *testing.T) {
 // recomputed_at) and never attaches it to its own bundle; the directory a
 // caller passes does not change it.
 func TestDealCountersignatureIsStoredWithItsBundle(t *testing.T) {
-	dealFixture(t)
+	dir := dealFixture(t)
 	dealID := openJetSki(t)
 	_, bundlePath, _, _ := dealReportFiles(t, dealID)
 	covered := readBundleFile(t, bundlePath)
@@ -114,19 +136,36 @@ func TestDealCountersignatureIsStoredWithItsBundle(t *testing.T) {
 	assert.Equal(t, "unchecked", before.Countersign.Finding)
 	require.Len(t, before.Countersign.Entries, 1)
 	assert.Equal(t, "unchecked", before.Countersign.Entries[0].State)
+	assert.Equal(t, "no_directory", before.Countersign.Entries[0].UncheckedReason)
 
+	// Its bundle holds every step so far: countersigned.
 	setCountersignDirectory(t, directory)
+	full := asGrade(t, readOnly(t, dir, dealID)["grade"])
+	assert.Equal(t, "countersigned", full.Rung)
+	require.Len(t, full.Countersign.Entries, 1)
+	assert.Equal(t, full.Countersign.Entries[0].Steps, full.Countersign.Entries[0].ThroughStep)
+
+	// A directory that cannot be read is said so.
+	setCountersignDirectory(t, filepath.Join(t.TempDir(), "missing.json"))
+	gone := asGrade(t, readOnly(t, dir, dealID)["grade"])
+	assert.Equal(t, "unchecked", gone.Countersign.Finding)
+	assert.Equal(t, "directory_unreadable", gone.Countersign.Entries[0].UncheckedReason)
+	setCountersignDirectory(t, directory)
+
 	dealRun(t, "note", "--deal", dealID, "--kind", "message", "--input", writeJSON(t, `{"from":"counterparty","text":"Your order has shipped."}`))
 
 	other := countersignerDirectoryFile(t, "Someone Else", signerKey)
-	for _, args := range [][]string{
-		{"report", "--deal", dealID},
-		{"report", "--deal", dealID, "--read-only"},
-		{"report", "--deal", dealID, "--from-bundle", bundlePath, "--directory", other},
+	for i, out := range []map[string]any{
+		dealRun(t, "report", "--deal", dealID),
+		readOnly(t, dir, dealID),
+		dealRun(t, "report", "--deal", dealID, "--from-bundle", bundlePath, "--directory", other),
 	} {
-		g := asGrade(t, dealRun(t, args...)["grade"])
-		assert.Equal(t, "countersigned", g.Rung, args)
-		assert.Equal(t, "countersigned", g.Countersign.Rung, args)
+		args := i
+		g := asGrade(t, out["grade"])
+		// The step after its bundle is not countersigned.
+		assert.Equal(t, "countersigned_in_part", g.Rung, args)
+		assert.Equal(t, "countersigned_in_part", g.Countersign.Rung, args)
+		assert.True(t, cli.IsRungValue(g.Rung), "a ladder rung in part")
 		assert.Equal(t, directory, g.Countersign.Directory, args)
 		require.Len(t, g.Countersign.Entries, 1, args)
 		e := g.Countersign.Entries[0]
@@ -144,8 +183,10 @@ func TestDealCountersignatureIsStoredWithItsBundle(t *testing.T) {
 	p.Countersign.Directory = filepath.Base(directory)
 	require.NoError(t, cli.SaveProfile(p, true))
 	t.Chdir(filepath.Dir(directory))
-	g := asGrade(t, dealRun(t, "report", "--deal", dealID, "--read-only")["grade"])
+	g := asGrade(t, readOnly(t, dir, dealID)["grade"])
 	assert.Equal(t, "unchecked", g.Countersign.Finding)
+	assert.Equal(t, "no_directory", g.Countersign.Entries[0].UncheckedReason)
+	assert.Empty(t, g.Countersign.Directory)
 	setCountersignDirectory(t, directory)
 
 	// A later bundle carries no countersignature: it is never re-attached.
@@ -174,6 +215,7 @@ func TestDealStoredCountersignaturesMerge(t *testing.T) {
 	dealRun(t, "countersign", "--deal", dealID, "--bundle", fresh, "--entry", writeEntry(t, second))
 
 	g := asGrade(t, dealRun(t, "report", "--deal", dealID, "--read-only")["grade"])
+	assert.Equal(t, "countersigned", g.Rung)
 	require.Len(t, g.Countersign.Entries, 2)
 	var signers []string
 	for _, e := range g.Countersign.Entries {
@@ -187,22 +229,7 @@ func TestDealStoredCountersignaturesMerge(t *testing.T) {
 func TestDealReportReadOnlyWritesNothing(t *testing.T) {
 	dir := dealFixture(t)
 	dealID := openJetSki(t)
-	snapshot := func() map[string][32]byte {
-		out := map[string][32]byte{}
-		entries, err := os.ReadDir(dir)
-		require.NoError(t, err)
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			out[e.Name()] = sha256.Sum256(mustRead(t, filepath.Join(dir, e.Name())))
-		}
-		return out
-	}
-	before := snapshot()
-	out := dealRun(t, "report", "--deal", dealID, "--read-only")
-	assert.Equal(t, dealID, out["deal_id"])
-	assert.Equal(t, before, snapshot(), "a read writes nothing")
+	assert.Equal(t, dealID, readOnly(t, dir, dealID)["deal_id"])
 
 	for _, extra := range [][]string{
 		{"--html", filepath.Join(t.TempDir(), "r.html")},
@@ -215,6 +242,17 @@ func TestDealReportReadOnlyWritesNothing(t *testing.T) {
 		require.ErrorIs(t, err, cli.ErrInput, extra)
 		assert.Contains(t, cli.SafeError(err), "--read-only writes nothing", extra)
 	}
+
+	// A deal this store holds no key for is unknown, as a writer says.
+	_, err := invoke(t, "", "--profile", "deal", "deal", "report", "--deal", "deal-0000000000000000", "--read-only")
+	require.ErrorIs(t, err, cli.ErrInput)
+	assert.Contains(t, cli.SafeError(err), "unknown deal")
+
+	// deal countersign with no --directory and none in the profile says
+	// what to set.
+	_, err = invoke(t, "", "--profile", "deal", "deal", "countersign", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))
+	require.ErrorIs(t, err, cli.ErrInput)
+	assert.Contains(t, cli.SafeError(err), "--directory is required when the profile names no countersigner directory")
 }
 
 // TestDealReportReadOnlyOnALogDeal: a deal whose reports are sealed on its
@@ -225,12 +263,12 @@ func TestDealReportReadOnlyOnALogDeal(t *testing.T) {
 	old := dealReportsOffLog
 	dealReportsOffLog = false
 	t.Cleanup(func() { dealReportsOffLog = old })
-	dealFixture(t)
+	dir := dealFixture(t)
 	dealID := openJetSki(t)
 	dealRun(t, "report", "--deal", dealID, "--html", filepath.Join(t.TempDir(), "r.html"))
 	dealRun(t, "note", "--deal", dealID, "--kind", "message", "--input", writeJSON(t, `{"from":"counterparty","text":"Your order has shipped."}`))
 
-	read := dealRun(t, "report", "--deal", dealID, "--read-only")
+	read := readOnly(t, dir, dealID)
 	g := asGrade(t, read["grade"])
 	assert.Equal(t, "unchecked", g.Witness.State)
 	assert.Equal(t, "self_attested", g.Rung)

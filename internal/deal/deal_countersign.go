@@ -239,7 +239,7 @@ func dealCountersignCommand() *cobra.Command {
 		}
 		return runDeal(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
 			if directory == "" {
-				directory = s.p.Countersign.Directory
+				directory = profileCountersignDirectory(s.p)
 			}
 			if directory == "" {
 				return cli.InputError("--directory is required when the profile names no countersigner directory (profile update --countersign-directory): a countersigner directory URL or file you choose, to resolve who signed")

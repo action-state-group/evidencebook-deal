@@ -37,7 +37,8 @@ var dealCountersignaturesSchema = `CREATE TABLE IF NOT EXISTS deal_countersignat
 )`
 
 // dealGrade is the report's grade block. Rung is the highest rung reached:
-// countersigned when a stored countersignature resolves, else the witness's.
+// the countersign rung when a stored countersignature resolves, else the
+// witness's.
 type dealGrade struct {
 	Rung        string               `json:"rung"`
 	Witness     dealGradeWitness     `json:"witness"`
@@ -60,7 +61,8 @@ type dealGradeWitness struct {
 
 // dealGradeCountersign is the countersign stamp from the stored
 // countersignatures: Rung countersigned when one resolves against the
-// profile's directory, else Finding names why none counts
+// profile's directory (countersigned_in_part when the deal has steps after
+// every resolved one's bundle), else Finding names why none counts
 // (not_countersigned, self_countersigned, unresolved_signer, unverified,
 // unchecked: the strongest entry decides, as dealCountersignVerify ranks
 // them).
@@ -75,11 +77,13 @@ type dealGradeCountersign struct {
 // against the stored bundle it covers: that bundle's digest, and how far
 // into the deal it reaches (through step ThroughStep of Steps). State is
 // capsule-cli's (resolved, not_independent, unresolved_signer, unverified,
-// invalid), or unchecked when it could not be checked here: no directory in
-// the profile, a directory that could not be read, or a stored bundle that no
-// longer checks as this deal's.
+// invalid), or unchecked when it could not be checked here, UncheckedReason
+// saying why: no_directory (the profile names none, or names a file by a
+// relative path), directory_unreadable, or bundle_does_not_check (the stored
+// bundle no longer checks as this deal's).
 type dealStoredCountersignature struct {
-	State        string `json:"state"`
+	State           string `json:"state"`
+	UncheckedReason string `json:"unchecked_reason,omitempty"`
 	Signer       string `json:"signer,omitempty"`
 	KeyID        string `json:"key_id,omitempty"`
 	RecomputedAt string `json:"recomputed_at,omitempty"`
@@ -87,6 +91,18 @@ type dealStoredCountersignature struct {
 	ThroughStep  int    `json:"through_step,omitempty"`
 	Steps        int    `json:"steps"`
 	BundleDigest string `json:"bundle_digest"`
+}
+
+// profileCountersignDirectory is the countersigner directory the profile
+// names, or "" for none. A file named by a relative path (written by hand:
+// capsulectl stores an absolute one) would resolve against wherever the
+// command runs, so it names none.
+func profileCountersignDirectory(p cli.Profile) string {
+	d := p.Countersign.Directory
+	if strings.Contains(d, "://") || filepath.IsAbs(d) {
+		return d
+	}
+	return ""
 }
 
 // dealWitnessGrade is the witness part of a report bundle's grade: the rung
@@ -184,11 +200,7 @@ ON CONFLICT(deal_id, bundle_digest) DO UPDATE SET bundle=excluded.bundle`,
 // profile's countersigner directory only, so the rung never depends on who
 // asks. Nothing is attached to any other bundle.
 func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEvent) (dealGradeCountersign, error) {
-	out := dealGradeCountersign{Finding: "not_countersigned", Directory: s.p.Countersign.Directory}
-	// A file the profile names by a relative path (written by hand: capsulectl
-	// stores an absolute one) would resolve against wherever the report runs,
-	// so it resolves nothing: every stored countersignature is unchecked.
-	resolvable := out.Directory != "" && (strings.Contains(out.Directory, "://") || filepath.IsAbs(out.Directory))
+	out := dealGradeCountersign{Finding: "not_countersigned", Directory: profileCountersignDirectory(s.p)}
 	dealID := events[0].Event.DealID
 	rows, err := s.db.QueryContext(ctx, `SELECT bundle_digest, bundle FROM deal_countersignatures WHERE deal_id=? ORDER BY stored_at, bundle_digest`, dealID)
 	if err != nil {
@@ -223,17 +235,30 @@ func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEven
 	for i, se := range events {
 		steps[se.CapsuleID] = i + 1
 	}
+	// Once the directory could not be read, it is not read again for the
+	// next stored bundle: each attempt can wait out the client's timeout
+	// while the store's lock is held.
+	unreadable := false
 	for _, r := range held {
 		b, err := s.dealBundleCheck(r.raw, dealID, events)
-		through := 0
+		through, reason := 0, ""
+		var reports []cli.CountersignatureReport
+		switch {
+		case err != nil:
+			reason = "bundle_does_not_check"
+		case out.Directory == "":
+			reason = "no_directory"
+		case unreadable:
+			reason = "directory_unreadable"
+		default:
+			if _, reports, _, err = cli.VerifyCountersignatures(ctx, client, out.Directory, b, trusted); err != nil {
+				unreadable, reason = true, "directory_unreadable"
+			}
+		}
 		if err == nil {
 			through = steps[fmt.Sprint(b["root"])]
 		}
-		var reports []cli.CountersignatureReport
-		if err == nil && resolvable {
-			_, reports, _, err = cli.VerifyCountersignatures(ctx, client, out.Directory, b, trusted)
-		}
-		if err != nil || !resolvable {
+		if reason != "" {
 			// Not checked here: the entries are named, never counted.
 			unchecked, _ := cli.DecodeBundleJSON(r.raw)
 			entries, _ := unchecked["countersignatures"].([]interface{})
@@ -241,7 +266,7 @@ func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEven
 				m, _ := e.(map[string]interface{})
 				signer, _ := m["signer"].(map[string]interface{})
 				keyID, _ := signer["key_id"].(string)
-				out.Entries = append(out.Entries, dealStoredCountersignature{State: "unchecked", KeyID: keyID, ThroughStep: through, Steps: len(events), BundleDigest: r.digest})
+				out.Entries = append(out.Entries, dealStoredCountersignature{State: "unchecked", UncheckedReason: reason, KeyID: keyID, ThroughStep: through, Steps: len(events), BundleDigest: r.digest})
 			}
 			continue
 		}
@@ -255,16 +280,24 @@ func (s *dealSession) storedCountersign(ctx context.Context, events []sealedEven
 	// The strongest entry decides, as capsule-cli ranks a bundle's entries.
 	rank := map[string]int{"invalid": 1, "unverified": 1, "unchecked": 2, "unresolved_signer": 3, "not_independent": 4, "resolved": 5}
 	finding := map[string]string{"invalid": "unverified", "unverified": "unverified", "unchecked": "unchecked", "unresolved_signer": "unresolved_signer", "not_independent": "self_countersigned"}
-	best := ""
+	best, reach := "", 0
 	for _, e := range out.Entries {
 		if rank[e.State] > rank[best] {
 			best = e.State
+		}
+		if e.State == "resolved" {
+			reach = max(reach, e.ThroughStep)
 		}
 	}
 	switch best {
 	case "":
 	case "resolved":
+		// Countersigned in part, like witnessed in part, when the deal has
+		// steps after every resolved countersignature's bundle.
 		out.Rung, out.Finding = "countersigned", ""
+		if reach < len(events) {
+			out.Rung = "countersigned_in_part"
+		}
 	default:
 		out.Finding = finding[best]
 	}

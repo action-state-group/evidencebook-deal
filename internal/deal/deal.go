@@ -2511,7 +2511,7 @@ func dealReportCommand() *cobra.Command {
 		}
 		return run(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
 			if directory == "" {
-				directory = s.p.Countersign.Directory
+				directory = profileCountersignDirectory(s.p)
 			}
 			report, reportErr := s.dealReportFor(ctx, events)
 			if reportErr != nil {
