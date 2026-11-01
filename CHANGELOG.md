@@ -16,7 +16,7 @@
 
 - The History card's `happened` reads `stamped_by_both` (evidencebook-deal#85): a deal
   whose sealed `deal terms-result` Result, under the card's anchor, names the
-  counterparty's admitted half beside your own (the half `terms-result` checked: signed
+  counterparty's admitted half beside your own in the Result's period (the half `terms-result` checked: signed
   under the key the response pinned, a step of this deal, under the copy's verified
   checkpoint, its final close). A deal without one stays `receipt_only` or `no_record`.
   Run `deal terms-result` and then `deal tick` before the card.

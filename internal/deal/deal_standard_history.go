@@ -639,8 +639,9 @@ func readSetting(path string) ([]byte, error) {
 // holder's own final close and, once admitPeerHalf has checked it (signed
 // under the key the response pinned, a step of this deal, under the copy's
 // verified checkpoint, its final close), the counterparty's. Each claim's
-// evidence is the digest of every admitted half (DR section 7.3), so two
-// distinct digests mean the counterparty's half was received and verified,
+// evidence is the digest of every admitted half in the Result's period (DR
+// section 7.3; a period narrowed to one half cites one digest, and the card
+// then reads receipt_only, the safe side), so two distinct digests mean the counterparty's half was received and verified,
 // and the sealed Result on the results book is under the anchor.
 func citesTwoHalves(result []byte) bool {
 	var doc struct {
