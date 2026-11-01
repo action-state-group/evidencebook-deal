@@ -175,7 +175,7 @@ const dealViewFunctionsDriver = `
 const fs = require("fs");
 const vm = require("vm");
 const [scriptPath] = process.argv.slice(2);
-const context = vm.createContext({ console, EvidenceGraph: { registerPresentation: () => {} }, capsulectlDealPage: { words: JSON.parse(process.env.DEAL_PAGE_WORDS) } });
+const context = vm.createContext({ console, EvidenceGraph: { registerPresentation: () => {} } });
 vm.runInContext(fs.readFileSync(scriptPath, "utf8"), context);
 const cases = JSON.parse(fs.readFileSync(0, "utf8"));
 context.cases = cases;
@@ -201,7 +201,6 @@ func runDealViewFunctions(t *testing.T, cases map[string]any) map[string]any {
 	in, err := json.Marshal(cases)
 	require.NoError(t, err)
 	cmd := exec.Command(node, driver, script)
-	cmd.Env = dealPageWordsEnv(t)
 	cmd.Stdin = strings.NewReader(string(in))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
@@ -233,6 +232,8 @@ func TestTheCloseStatusIsReadFromTheirLinks(t *testing.T) {
 	assert.Equal(t, []any{"unilateral", "agreed", "contested", "unilateral", "unilateral", "unilateral"}, got["close"])
 }
 
+// A viewer opens a bundle with no capsulectlDealPage: the drivers here run
+// the module without one, so its built-in words are what is checked.
 // The band's words are the History card's (capsule-viewer
 // standard_history_card.js bandLabel): a symbol's sub-ten bands are one
 // "under $10", others keep their decade in their own units.

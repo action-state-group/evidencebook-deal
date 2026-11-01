@@ -414,16 +414,19 @@ func witnessCoverage(events []sealedEvent, cadence map[string]interface{}) map[s
 // History card's size strings the receipt names a settlement's band with
 // (capsule-viewer's consumer pack, evidencebook-deal#94). The page's own
 // words are this plugin's page.* entries (assets/wording/capsulectl-deal-en.json,
-// evidencebook-deal#97): every one rides on the page, and deal-view.js
-// words nothing of its own.
+// evidencebook-deal#97), which deal-view.js holds built in.
 var pageWords = []string{"report.title", "size.between", "size.range", "size.under", "size.zero"}
 
-// dealPageWords are the entries of w the page speaks with (pageWords and the
-// page.* words).
+// dealPageWords are the entries of w the page speaks with: pageWords, and the
+// page.* words that differ from this plugin's built-in pack. The built-in
+// ones are the module's own (DEAL_VIEW_WORDS), so a viewer that opens the
+// bundle itself speaks the same words and a page carries only a pinned pack's
+// changes.
 func dealPageWords(w cli.Wording) map[string]string {
 	words := map[string]string{}
+	builtin := cli.BuiltinWording().Entries
 	for k, v := range w.Entries {
-		if slices.Contains(pageWords, k) || strings.HasPrefix(k, pagePrefix) {
+		if slices.Contains(pageWords, k) || (strings.HasPrefix(k, pagePrefix) && builtin[k] != v) {
 			words[k] = v
 		}
 	}

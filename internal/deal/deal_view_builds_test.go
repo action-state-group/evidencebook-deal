@@ -18,7 +18,7 @@ import (
 const dealBuildsDriver = `
 const fs = require("fs");
 const vm = require("vm");
-const context = vm.createContext({ EvidenceGraph: { registerPresentation() {} }, capsulectlDealPage: { words: JSON.parse(process.env.DEAL_PAGE_WORDS) } });
+const context = vm.createContext({ EvidenceGraph: { registerPresentation() {} } });
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), context);
 const cases = JSON.parse(fs.readFileSync(0, "utf8"));
 const compare = vm.runInContext("dealBuildsCompared", context);
@@ -75,7 +75,6 @@ func TestDealViewComparesBuildsByName(t *testing.T) {
 	in, err := json.Marshal(cases)
 	require.NoError(t, err)
 	cmd := exec.Command(node, driver, script)
-	cmd.Env = dealPageWordsEnv(t)
 	cmd.Stdin = bytes.NewReader(in)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
