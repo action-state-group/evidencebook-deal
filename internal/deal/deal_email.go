@@ -29,25 +29,21 @@ import (
 // heldWitnessReceipt returns the checkpoint.witnesses entry for the witness
 // receipt this device holds for the signed checkpoint statement, or nil when
 // no witness is configured, none was received, or it does not verify under
-// the profile's pinned witness key. unverified is true for the last: a
-// receipt is held but fails the check, which is not the same as none held.
-func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) (entry map[string]interface{}, unverified bool, err error) {
+// the profile's pinned witness key.
+func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) (map[string]interface{}, error) {
 	service, err := cli.ServiceID(s.dp)
 	if err != nil || service == "" {
-		return nil, false, err
+		return nil, err
 	}
 	record, err := cli.VerifyCheckpoint(s.dp, statement)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	state, err := s.t.Log.GetWitness(ctx, service, record.MMRSize)
-	if err != nil || state.Receipt == nil {
-		return nil, false, nil
+	if err != nil || state.Receipt == nil || cli.VerifyWitness(s.dp, state) != nil {
+		return nil, nil
 	}
-	if cli.VerifyWitness(s.dp, state) != nil {
-		return nil, true, nil
-	}
-	entry = map[string]interface{}{
+	entry := map[string]interface{}{
 		"ts_url":      strings.TrimRight(s.dp.Checkpoint.Endpoint, "/"),
 		"entry_hash":  state.Receipt.EntryHash,
 		"receipt_b64": base64.StdEncoding.EncodeToString(state.Receipt.Bytes),
@@ -58,7 +54,7 @@ func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) 
 	if state.Receipt.TreeSize != nil {
 		entry["tree_size"] = cli.Integer(uint64(*state.Receipt.TreeSize))
 	}
-	return entry, false, nil
+	return entry, nil
 }
 
 // dealScopeLine is printed on the face of every receipt, report page and
@@ -201,8 +197,11 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 		out["rung"] = "witnessed_in_part"
 		out["steps_witnessed"], out["steps"] = k, n
 		rest := "Witness pending for the rest. "
-		if r, _ := cadence["rest"].(map[string]interface{}); r["state"] == "scheduled" {
+		switch r, _ := cadence["rest"].(map[string]interface{}); r["state"] {
+		case "scheduled":
 			rest = "Witness pending for the rest: the current checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(r) + ". "
+		case "unverified":
+			rest = "The rest could not be checked here: a receipt for the current checkpoint is held but does not verify under the witness this profile names now. "
 		}
 		out["text"] = fmt.Sprintf(
 			"Witnessed in part: %s, an independent log, signed a receipt for %s, covering steps 1 to %d of %d: those existed, unchanged, by then. Steps %d to %d are sealed by my agent on this device only. %s%sIt does not confirm what the agent did. The receipt is in the attached bundle; check it with capsulectl verify --bundle bundle.json --witness-directory DIRECTORY.json, using a witness directory you trust. %s",

@@ -225,7 +225,7 @@ func (s *dealSession) dealAssembleAtCheckpoint(ctx context.Context, events []sea
 	// where `capsulectl verify --bundle --witness-directory` checks it. The
 	// report itself never contacts the witness. It carries nothing private,
 	// so a shared copy keeps it too.
-	entry, heldUnverified, err := s.heldWitnessReceipt(ctx, statement)
+	entry, err := s.heldWitnessReceipt(ctx, statement)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -238,11 +238,6 @@ func (s *dealSession) dealAssembleAtCheckpoint(ctx context.Context, events []sea
 	cadence, err := s.dealWitnessState(ctx, events[0].Event.DealID, statement)
 	if err != nil {
 		return nil, nil, err
-	}
-	// A held receipt that fails the check is stated as such, never as a
-	// witness not yet reached; a verifying chain still says witnessed.
-	if heldUnverified && cadence["state"] != "witnessed" {
-		cadence = witnessUnverified()
 	}
 	return b, cadence, nil
 }

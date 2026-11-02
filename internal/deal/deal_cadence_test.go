@@ -284,6 +284,8 @@ func TestDealChangedWitnessKeyIsUnverified(t *testing.T) {
 	report := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))
 	assert.Equal(t, "unverified", report["assurance"].(map[string]any)["witness_state"])
 	assert.Equal(t, "unverified", asGrade(t, report["grade"]).Witness.State)
+	status := dealRun(t, "checkpoint", "status", "--deal", dealID)
+	assert.Equal(t, "unverified", status["witness"].(map[string]any)["state"])
 }
 
 func TestDealTamperedReceiptIsUnverified(t *testing.T) {
@@ -314,6 +316,30 @@ func TestDealTamperedReceiptIsUnverified(t *testing.T) {
 	report := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))
 	assert.Equal(t, "unverified", report["assurance"].(map[string]any)["witness_state"])
 	assert.Equal(t, "unverified", asGrade(t, report["grade"]).Witness.State)
+}
+
+// Witnessed in part with a later tick whose receipt fails: the rest reads as
+// a failed check, never as pending.
+func TestDealWitnessedInPartWithAnUnverifiedRest(t *testing.T) {
+	public, key, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	_, stranger, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	endpoint, _ := countingWitness(t)
+	p := cadenceFixture(t, endpoint, public, "1h", "0s", 0)
+	now := clockAt(t, time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC))
+	dealID := retailDeal(t)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	deliver(t, p, cadenceSize(t, p), key)
+	*now = now.Add(10 * time.Minute)
+	dealRun(t, "note", "--deal", dealID, "--kind", "message", "--input", writeJSON(t, `{"from":"counterparty","text":"Your order has shipped."}`))
+	*now = now.Add(2 * time.Hour)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	deliver(t, p, cadenceSize(t, p), stranger)
+	a := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))["assurance"].(map[string]any)
+	assert.Equal(t, "witnessed_in_part", a["rung"])
+	assert.Contains(t, a["text"], "The rest could not be checked here")
+	assert.NotContains(t, a["text"], "Witness pending for the rest")
 }
 
 // A deal never sent to the witness is not a failed check.
