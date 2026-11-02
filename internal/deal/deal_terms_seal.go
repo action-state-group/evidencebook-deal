@@ -31,9 +31,12 @@ import (
 
 // Witness states of a sealed Result (7.2): signed and under the results
 // book's local checkpoint, its time the producer's own clock; in a tick the
-// witness has not yet answered for; or covered by a witnessed tick.
+// witness has not yet answered for; covered by a witnessed tick; or with a
+// witness receipt held that did not verify (a failed check, never reported as
+// pending).
 const (
 	termsSealed         = "sealed"
+	termsUnverified     = "unverified"
 	termsPendingWitness = "pending_witness"
 	termsWitnessed      = "witnessed"
 )
@@ -233,9 +236,12 @@ func (s *dealSession) sealTermsResult(ctx context.Context, dealID string, result
 // termsWitnessState names a results book checkpoint's witness state for a
 // sealed Result.
 func termsWitnessState(cadence map[string]interface{}) string {
+	rest, _ := cadence["rest"].(map[string]interface{})
 	switch {
 	case cadence["state"] == "not_configured":
 		return termsSealed
+	case cadence["state"] == "unverified", rest["state"] == "unverified":
+		return termsUnverified
 	case cadence["extent"] == "all":
 		return termsWitnessed
 	}
