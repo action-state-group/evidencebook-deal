@@ -289,7 +289,7 @@
     "page.detail.not_in_file": "it is not in this file",
     "page.detail.order": "{act} does not follow its approval in this log",
     "page.detail.points_acknowledges": "their record acknowledges yours",
-    "page.detail.points_exchange": "their record is of the exchange, not of a deal record yours can point to",
+    "page.detail.points_exchange": "their record is of the exchange, not a deal record that can point at yours",
     "page.detail.points_none": "no record in their half links to yours",
     "page.detail.points_other": "their record links to yours",
     "page.detail.points_rebuts": "their record disputes yours",
