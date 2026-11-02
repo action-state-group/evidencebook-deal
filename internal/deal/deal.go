@@ -2389,6 +2389,15 @@ func dealCloseCommand() *cobra.Command {
 				return err
 			}
 			if dealFinallyClosed(events) {
+				// A close that sealed but whose sale close did not (a crash
+				// between the two) is finished by the retry.
+				if sale := soldSale(events); sale != "" {
+					if closed, err := s.closeSaleOnce(ctx, sale); err != nil {
+						return err
+					} else if closed {
+						return cli.Output(c, map[string]any{"deal_id": dealID, "sale_closed": sale})
+					}
+				}
 				return cli.InputError("this deal is closed and takes no more steps; start a new one with `deal open`")
 			}
 			state, err := foldDeal(events)
@@ -2459,15 +2468,18 @@ func dealCloseCommand() *cobra.Command {
 			} else {
 				s.stepReport(ctx, out, all, htmlPath, cli.VoiceLine, func(w cli.Wording) []string { return []string{w.Line("say.close.open", nil)} })
 			}
-			// A sale holds one item: once a buyer's thread completes it, the
-			// sale takes no new buyer, so its log closes with the thread
-			// rather than staying an open deal in the seller's store (#127).
-			// A thread of another buyer already open goes on.
-			if open := events[0].Event.Open; result.Outcome == "completed" && open != nil && open.Sale != "" {
-				if err = s.closeSaleOnce(ctx, open.Sale); err != nil {
+			// A sale holds one item: once a buyer's thread ends with the item
+			// handed over, the sale takes no new buyer, so its log closes with
+			// the thread rather than staying an open deal in the seller's
+			// store (#127). A thread of another buyer already open goes on.
+			if sale := soldSale(all); sale != "" {
+				closed, err := s.closeSaleOnce(ctx, sale)
+				if err != nil {
 					return err
 				}
-				out["sale_closed"] = open.Sale
+				if closed {
+					out["sale_closed"] = sale
+				}
 			}
 			return cli.Output(c, out)
 		})

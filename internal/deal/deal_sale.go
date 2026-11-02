@@ -191,21 +191,38 @@ func (s *dealSession) closeSale(ctx context.Context, saleID string) (sealedEvent
 	return se, cp, open, nil
 }
 
+// soldSale is the sale a buyer's thread belongs to once the thread has
+// finally closed with the item handed over (completed, or received with
+// differences), and "" otherwise.
+func soldSale(events []sealedEvent) string {
+	i := finalClose(events)
+	if i < 0 || len(events) == 0 || events[0].Event.Open == nil {
+		return ""
+	}
+	if c := events[i].Event.Close; c == nil || (c.Outcome != "completed" && c.Outcome != "mismatch") {
+		return ""
+	}
+	return events[0].Event.Open.Sale
+}
+
 // closeSaleOnce closes a sale unless it is already closed, and leaves the
-// session on the sale's log.
-func (s *dealSession) closeSaleOnce(ctx context.Context, saleID string) error {
+// session on the sale's log. It reports whether it sealed the close.
+func (s *dealSession) closeSaleOnce(ctx context.Context, saleID string) (bool, error) {
 	if err := s.useDeal(ctx, saleID, false); err != nil {
-		return err
+		return false, err
 	}
 	events, err := s.load(ctx, saleID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if saleClosed(events) {
-		return nil
+		return false, nil
+	}
+	if err = dealSaleCloseStops(); err != nil {
+		return false, err
 	}
 	_, _, _, err = s.closeSale(ctx, saleID)
-	return err
+	return err == nil, err
 }
 
 // threadState is whether a buyer's thread has opened (its task authority
@@ -472,6 +489,10 @@ func (s *dealSession) threadSteps(ctx context.Context, threadID string) (int, bo
 // ("keyed": the deal's key row is written; "baseline": the baseline is
 // sealed), standing in for a crash there.
 var dealOpenStopsAt = func(stage string) error { return nil }
+
+// dealSaleCloseStops is a test hook: the sale close that follows a sold
+// thread's close stops with its error, standing in for a crash between them.
+var dealSaleCloseStops = func() error { return nil }
 
 // dealThreadOpened is a sale's evidence that a registered thread opened.
 type dealThreadOpened struct {

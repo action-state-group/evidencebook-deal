@@ -2,6 +2,7 @@ package deal
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -324,4 +325,45 @@ func TestACompletedSaleLeavesNoOpenDeal(t *testing.T) {
 	require.Equal(t, "completed", closed["outcome"], closed)
 	assert.Equal(t, saleID, closed["sale_closed"])
 	assert.Empty(t, openDeals())
+}
+
+// A thread closed received with differences (mismatch) still hands the item
+// over, so it closes the sale too; a sale closed by hand first is not
+// reported as closed again.
+func TestAHandedOverThreadClosesItsSaleOnce(t *testing.T) {
+	t.Run("mismatch", func(t *testing.T) {
+		dealFixture(t)
+		saleID, _ := newSale(t)
+		thread := buyerThread(t, saleID, "buyer-a.example")
+		closed := dealRun(t, "close", "--deal", thread, "--input", writeJSON(t, `{"status":"received","delivered":{"item":"other thing"}}`))
+		require.Equal(t, "mismatch", closed["outcome"], closed)
+		assert.Equal(t, saleID, closed["sale_closed"])
+	})
+	t.Run("sale already closed", func(t *testing.T) {
+		dealFixture(t)
+		saleID, _ := newSale(t)
+		thread := buyerThread(t, saleID, "buyer-a.example")
+		dealRun(t, "sale", "close", "--sale", saleID)
+		closed := dealRun(t, "close", "--deal", thread, "--input", writeJSON(t, received))
+		assert.NotContains(t, closed, "sale_closed")
+	})
+}
+
+// A crash between the thread's close and the sale's: the thread is closed
+// and the sale open; the retried close finishes the sale instead of
+// refusing, and a second retry is refused as before.
+func TestARetriedCloseFinishesTheSaleACrashLeftOpen(t *testing.T) {
+	dealFixture(t)
+	saleID, _ := newSale(t)
+	thread := buyerThread(t, saleID, "buyer-a.example")
+	saved := dealSaleCloseStops
+	dealSaleCloseStops = func() error { return errors.New("stopped before the sale close") }
+	_, err := invoke(t, "", "--profile", "deal", "deal", "close", "--deal", thread, "--input", writeJSON(t, received))
+	dealSaleCloseStops = saved
+	require.Error(t, err)
+
+	closed := dealRun(t, "close", "--deal", thread, "--input", writeJSON(t, received))
+	assert.Equal(t, saleID, closed["sale_closed"])
+	_, err = invoke(t, "", "--profile", "deal", "deal", "close", "--deal", thread, "--input", writeJSON(t, received))
+	require.ErrorIs(t, err, cli.ErrInput)
 }

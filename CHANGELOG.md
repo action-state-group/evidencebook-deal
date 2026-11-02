@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- A buyer thread closed `received` (outcome completed) now closes its sale too, so a completed
+- A buyer thread closed `received` (outcome completed or mismatch) now closes its sale too, so a completed
   sale leaves no open `sale-…` deal in the seller's store (evidencebook-deal#127); `deal close`
-  prints `sale_closed`. A thread that did not complete leaves the sale open for the next buyer.
+  prints `sale_closed` when it closed the sale, and a retried close finishes a sale a crash left open.
+  A thread that did not end with the item handed over leaves the sale open for the next buyer.
 
 - The rules checker's `channel` input comes from the latest counterparty message only
   (evidencebook-deal#24; needs an evidencebook that accepts `rule_inputs_version` 4,
