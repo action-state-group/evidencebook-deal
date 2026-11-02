@@ -143,7 +143,7 @@ func TestTheRuleInputsFollowTheDeal(t *testing.T) {
 // message only (evidencebook-deal#24): the user's and the agent's messages
 // do not move it; under "3" any latest message does.
 func TestTheChannelFollowsTheLatestCounterpartyMessage(t *testing.T) {
-	const pay = `{"action":"pay","amount_minor":454,"authorized_max_minor":454,"terms":{"item":"otter sticker","price_minor":454},"recourse":{"rail":"card","refundable":true}}`
+	const pay = stickerPay
 	open := func(t *testing.T) string {
 		dealFixture(t)
 		return dealRun(t, "open", "--input", writeJSON(t, `{"type":"purchase","channel":"marketplace",
@@ -186,6 +186,10 @@ func TestTheChannelFollowsTheLatestCounterpartyMessage(t *testing.T) {
 		sealed, _, _ := ruleInputs(t, id, pay)
 		assert.Equal(t, "email", sealed["channel"])
 		assert.Equal(t, float64(3), sealed["rule_inputs_version"])
+		// Re-derived by a build at "4": the sealed version still governs.
+		dealRuleInputsVersion = "4"
+		_, export := exportRecords(t, id)
+		checkProfile(t, export)
 	})
 }
 

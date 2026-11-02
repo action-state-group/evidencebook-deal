@@ -235,6 +235,7 @@ func sealRuleInputs(body map[string]interface{}, events []sealedEvent, sn *dealS
 	body["material_fields_basis"] = materialFieldsBasis
 	if adoptsNamedTermsOnly(version) {
 		// Which rule an approval of this check adopts by (foldDeal).
+		// Versions are numeric constants, so the parse cannot fail.
 		n, _ := strconv.Atoi(version)
 		body["rule_inputs_version"] = n
 	}
