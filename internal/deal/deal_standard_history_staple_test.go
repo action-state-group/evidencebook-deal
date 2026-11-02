@@ -2,6 +2,7 @@ package deal
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func stapleFixture(t *testing.T) string {
 
 // The contract's refusals are exit 2 with nothing on stdout.
 func TestStapleRefusesBadInputWithExit2(t *testing.T) {
-	id := stapleFixture(t)
+	stapleFixture(t)
 	for name, args := range map[string][]string{
 		"no derivation":    {},
 		"a third":          {"--derivation", "deal_ledger/1"},
@@ -45,7 +46,6 @@ func TestStapleRefusesBadInputWithExit2(t *testing.T) {
 		assert.Equal(t, 2, cli.ExitCode(err), name)
 		assert.Empty(t, out, name)
 	}
-	_ = id
 }
 
 func TestStapleNeedsADeclaredHolderThatAnswers(t *testing.T) {
@@ -149,4 +149,49 @@ func TestStapleHistoryCardPassesCheckStaple(t *testing.T) {
 	check, err := evidencebook.CheckStaple(s, s.Reply.Envelope.Responder)
 	require.NoError(t, err)
 	assert.Equal(t, "history_card/1", check.Derivation)
+}
+
+// answeredRows is the deal's sealed exchange rows in the store.
+func answeredRows(t *testing.T, dealID string) int {
+	t.Helper()
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	db, err := sql.Open("sqlite", "file:"+p.Connection.Database+"?mode=ro")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	var n int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM deal_requests WHERE deal_id=? AND kind=?`, dealID, dealExchangeAnswered).Scan(&n))
+	return n
+}
+
+// Only a standard_history/1 staple seals a record, one, naming the deal; a
+// history_card/1 staple and a refused one seal none. Both kinds are signed by
+// the profile's own key.
+func TestStapleSealsOnlyTheStandardHistoryRecord(t *testing.T) {
+	id := stapleFixture(t)
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	key, err := cli.PrivateKey(p.Signing)
+	require.NoError(t, err)
+	signer, err := evidencebook.NewEd25519Signer(key)
+	require.NoError(t, err)
+	holder := evidencebook.KeyID(signer)
+
+	out, err := stapleRun(t, "--derivation", "history_card/1", "--deal", id)
+	require.NoError(t, err, out)
+	assert.Equal(t, 0, answeredRows(t, id))
+	_, card := readStaple(t, out)
+	_, err = evidencebook.CheckStaple(card, holder)
+	require.NoError(t, err, "the history card is signed by the profile's key")
+
+	out, err = stapleRun(t, "--derivation", "standard_history/1", "--deal", id)
+	require.NoError(t, err, out)
+	assert.Equal(t, 1, answeredRows(t, id))
+	_, std := readStaple(t, out)
+	_, err = evidencebook.CheckStaple(std, holder)
+	require.NoError(t, err, "the standard card is signed by the profile's key")
+
+	_, err = stapleRun(t, "--derivation", "standard_history/1", "--deal", "deal-00000000000000000000000000000000")
+	require.Error(t, err)
+	assert.Equal(t, 1, answeredRows(t, id), "a refused staple seals nothing")
 }

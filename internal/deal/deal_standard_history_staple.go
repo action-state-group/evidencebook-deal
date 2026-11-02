@@ -100,7 +100,7 @@ func (s *dealSession) stapleStandardHistory(ctx context.Context, dealID string) 
 	if err != nil {
 		return stapleMessages{}, err
 	}
-	pin, err := stapleAnchor(ctx, cadence)
+	pin, tickN, err := stapleAnchor(ctx, cadence)
 	if err != nil {
 		return stapleMessages{}, err
 	}
@@ -121,8 +121,13 @@ func (s *dealSession) stapleStandardHistory(ctx context.Context, dealID string) 
 		return stapleMessages{}, err
 	}
 	if answered["outcome"] != evidencebook.OutcomeArtifact {
+		// The pin is the newest checkpoint, so the card itself is what cannot be
+		// built (an unpriced or legacy deal): name that, not a tick.
+		if _, herr := s.standardHistory(ctx, tickN); herr != nil {
+			return stapleMessages{}, fmt.Errorf("the standard card cannot be built: %w", herr)
+		}
 		reason, _ := answered["reason"].(string)
-		return stapleMessages{}, errors.New("the book refused its own standard_history/1 request (" + reason + "): run `deal tick`, then staple again")
+		return stapleMessages{}, errors.New("the book refused its own standard_history/1 request (" + reason + ")")
 	}
 	if _, err = s.recordExchange(ctx, dealID, dealExchangeAnswered, "", answered); err != nil {
 		return stapleMessages{}, err
@@ -149,11 +154,11 @@ func (s *dealSession) stapleHistoryCard(ctx context.Context) (stapleMessages, er
 }
 
 // stapleAnchor is the digest of the newest finished cadence tick's checkpoint,
-// the staple's as-of.
-func stapleAnchor(ctx context.Context, cadence *evidencebook.Cadence) (string, error) {
+// the staple's as-of, and that tick's number.
+func stapleAnchor(ctx context.Context, cadence *evidencebook.Cadence) (string, uint64, error) {
 	tick, ok, err := cadence.Last(ctx)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	for n := tick.N; ok && n >= 1; n-- {
 		t, err := cadence.Get(ctx, n)
@@ -161,13 +166,13 @@ func stapleAnchor(ctx context.Context, cadence *evidencebook.Cadence) (string, e
 			continue
 		}
 		if err != nil {
-			return "", err
+			return "", 0, err
 		}
 		if t.CheckpointSize > 0 {
-			return evidencerequest.Digest(t.Checkpoint), nil
+			return evidencerequest.Digest(t.Checkpoint), n, nil
 		}
 	}
-	return "", fmt.Errorf("%w (run `deal tick` first)", errNoTick)
+	return "", 0, fmt.Errorf("%w (run `deal tick` first)", errNoTick)
 }
 
 // stapleRequest is the holder's request for its own card: the derivation over
