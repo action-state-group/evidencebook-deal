@@ -150,7 +150,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 			sealed += "Witness pending. A deal is not witnessed at the moment it happens: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(cadence) + ", and only then can it be witnessed. Until then it is sealed on this device only. "
 		case "unverified":
 			out["witness_state"] = "unverified"
-			sealed += "Witness receipt could not be checked here: a receipt for this deal is held, but it does not verify under the witness this profile names now, so the record is sealed on this device only and is not shown as witnessed. "
+			sealed += "Witness receipt did not verify: a receipt for this deal is held, but the check against the witness this profile names now failed, so the record is sealed on this device only and is not shown as witnessed. "
 		case "pending":
 			out["witness_state"] = "pending"
 			// The cadence's text says whether and why it is retried; a
@@ -201,7 +201,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 		case "scheduled":
 			rest = "Witness pending for the rest: the current checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(r) + ". "
 		case "unverified":
-			rest = "The rest could not be checked here: a receipt for the current checkpoint is held but does not verify under the witness this profile names now. "
+			rest = "The rest did not verify: a receipt for the current checkpoint is held, but the check against the witness this profile names now failed. "
 		}
 		out["text"] = fmt.Sprintf(
 			"Witnessed in part: %s, an independent log, signed a receipt for %s, covering steps 1 to %d of %d: those existed, unchanged, by then. Steps %d to %d are sealed by my agent on this device only. %s%sIt does not confirm what the agent did. The receipt is in the attached bundle; check it with capsulectl verify --bundle bundle.json --witness-directory DIRECTORY.json, using a witness directory you trust. %s",

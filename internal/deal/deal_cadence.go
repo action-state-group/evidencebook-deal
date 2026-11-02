@@ -245,10 +245,12 @@ func (s *dealSession) dealWitnessState(ctx context.Context, dealID string, state
 	// only if it still verifies for the witness this profile names now (a
 	// changed endpoint or key leaves the witness unverified: a check that
 	// failed, which is not a check not yet made).
-	if ok, err := chainVerifiesNow(ctx, p, service, chain); err != nil {
+	if ok, held, err := chainVerifiesNow(ctx, p, service, chain); err != nil {
 		return nil, err
-	} else if !ok {
+	} else if !ok && held {
 		return witnessUnverified(), nil
+	} else if !ok {
+		return s.notYetWitnessed(ctx, c, p, service, dealID, current)
 	}
 	if chain["extent"] != "part" {
 		return chain, nil
@@ -277,39 +279,43 @@ func (s *dealSession) dealWitnessState(ctx context.Context, dealID string, state
 // is held but does not verify under the profile's witness (a tampered
 // receipt, a changed witness key or endpoint): the check failed, so it is
 // neither not-yet-witnessed nor witnessed (actionstate-muse#311 §3.3,
-// "Unknown or failed": couldn't be checked here).
+// "Unknown or failed": the check ran and failed).
 func witnessUnverified() map[string]interface{} {
 	return map[string]interface{}{"state": "unverified"}
 }
 
 // chainVerifiesNow reports whether the cadence checkpoint a chain names has
 // a receipt, on the cadence log, that verifies for the profile's current
-// witness service and key.
-func chainVerifiesNow(ctx context.Context, p cli.Profile, service string, chain map[string]interface{}) (ok bool, err error) {
+// witness service and key. held says a receipt is on the log at all: held and
+// not ok is a check that failed; not held is a check with nothing to run.
+func chainVerifiesNow(ctx context.Context, p cli.Profile, service string, chain map[string]interface{}) (ok, held bool, err error) {
 	cadence, _ := chain["cadence"].(map[string]interface{})
 	cp, _ := cadence["checkpoint"].(map[string]interface{})
 	cose, _ := cp["cose"].(string)
 	statement, err := base64.RawURLEncoding.DecodeString(cose)
 	if err != nil {
-		return false, nil
+		return false, false, nil
 	}
 	record, err := checkpoint.ParseRecord(statement)
 	if err != nil {
-		return false, nil
+		return false, false, nil
 	}
 	t, err := cli.OpenTarget(ctx, p, cli.UseCLLRead)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	defer func() { err = errors.Join(err, t.Close()) }()
 	state, err := t.Log.GetWitness(ctx, service, record.MMRSize)
 	if errors.Is(err, cll.ErrNotFound) {
-		return false, nil
+		return false, false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return state.Receipt != nil && cli.VerifyWitness(p, state) == nil, nil
+	if state.Receipt == nil {
+		return false, false, nil
+	}
+	return cli.VerifyWitness(p, state) == nil, true, nil
 }
 
 // bundleValue is v as a bundle's members hold JSON: decoded objects, with

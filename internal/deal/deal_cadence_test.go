@@ -263,11 +263,13 @@ func TestDealReceiptUnderAnotherKeyIsUnverified(t *testing.T) {
 	assurance := report["assurance"].(map[string]any)
 	assert.Equal(t, "unverified", assurance["witness_state"])
 	assert.Equal(t, "self_attested", assurance["rung"])
-	assert.Contains(t, assurance["text"], "could not be checked here")
+	assert.Contains(t, assurance["text"], "Witness receipt did not verify")
 	assert.Equal(t, "unverified", asGrade(t, report["grade"]).Witness.State)
 }
 
-func TestDealChangedWitnessKeyIsUnverified(t *testing.T) {
+// A changed witness key or endpoint names another witness service, under
+// which no receipt is held: nothing was checked, so it is not unverified.
+func TestDealChangedWitnessKeyHoldsNoReceipt(t *testing.T) {
 	public, key, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	other, _, err := ed25519.GenerateKey(rand.Reader)
@@ -282,10 +284,11 @@ func TestDealChangedWitnessKeyIsUnverified(t *testing.T) {
 	p.Checkpoint.PublicKey = hex.EncodeToString(other)
 	require.NoError(t, cli.SaveProfile(p, true))
 	report := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))
-	assert.Equal(t, "unverified", report["assurance"].(map[string]any)["witness_state"])
-	assert.Equal(t, "unverified", asGrade(t, report["grade"]).Witness.State)
+	a := report["assurance"].(map[string]any)
+	assert.NotEqual(t, "unverified", a["witness_state"])
+	assert.NotContains(t, a["text"], "did not verify")
 	status := dealRun(t, "checkpoint", "status", "--deal", dealID)
-	assert.Equal(t, "unverified", status["witness"].(map[string]any)["state"])
+	assert.NotEqual(t, "unverified", status["witness"].(map[string]any)["state"])
 }
 
 func TestDealTamperedReceiptIsUnverified(t *testing.T) {
@@ -338,7 +341,7 @@ func TestDealWitnessedInPartWithAnUnverifiedRest(t *testing.T) {
 	deliver(t, p, cadenceSize(t, p), stranger)
 	a := dealRun(t, "report", "--deal", dealID, "--bundle", filepath.Join(t.TempDir(), "b.json"))["assurance"].(map[string]any)
 	assert.Equal(t, "witnessed_in_part", a["rung"])
-	assert.Contains(t, a["text"], "The rest could not be checked here")
+	assert.Contains(t, a["text"], "The rest did not verify")
 	assert.NotContains(t, a["text"], "Witness pending for the rest")
 }
 

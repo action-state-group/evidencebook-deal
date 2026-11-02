@@ -319,10 +319,12 @@ func (s *dealSession) logWitnessState(ctx context.Context, logID string, stateme
 	if err != nil {
 		return nil, err
 	}
-	if ok, err := chainVerifiesNow(ctx, p, service, chain); err != nil {
+	if ok, held, err := chainVerifiesNow(ctx, p, service, chain); err != nil {
 		return nil, err
-	} else if !ok {
+	} else if !ok && held {
 		return witnessUnverified(), nil
+	} else if !ok {
+		return notYet()
 	}
 	if chain["extent"] == "part" {
 		if chain["rest"], err = notYet(); err != nil {
