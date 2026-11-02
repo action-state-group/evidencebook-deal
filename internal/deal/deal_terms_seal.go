@@ -281,7 +281,8 @@ func (s *dealSession) resultsBundle(ctx context.Context, dealID, root string, wi
 // logWitnessState is where a checkpoint of one of the profile's logs stands
 // with the witness, through the cadence log: dealWitnessState for a log that
 // is not a deal, so with no step counts. not_configured, scheduled, pending,
-// or the cadence chain a verifier needs; a chain whose extent is "part"
+// unverified (a receipt is held but does not verify; it can also be the rest
+// of a partly witnessed chain), or the cadence chain a verifier needs; a chain whose extent is "part"
 // covers an earlier checkpoint, and carries what is not yet witnessed as
 // rest.
 func (s *dealSession) logWitnessState(ctx context.Context, logID string, statement []byte) (map[string]interface{}, error) {
