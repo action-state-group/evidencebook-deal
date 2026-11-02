@@ -159,7 +159,7 @@ const DEAL_VIEW_WORDS = {
   "page.did.unchecked": "The summary lines below, and each step's line, are written by capsulectl on this device and are not checked by this page. Open an item to see the steps it was read from; each step's sealed record is checked, not its line.",
   "page.doesnt.merchant": "That the merchant shipped, delivered or refunded anything.",
   "page.doesnt.other_side": "Who the other side is. The key shown as theirs is the one the composer of this file named.",
-  "page.doesnt.referee": "That the referee is a person both sides chose. \"Both chose\" means both sides named the same string, not the same verified person.",
+  "page.doesnt.referee": "That the other side named the same referee, or that the name belongs to a verified person. Only a check of both copies compares names, and a match means the same name as written, not the same person.",
   "page.doesnt.title": "What it doesn't",
   "page.doesnt.true": "That what the agent reported is true. It records what the agent reported.",
   "page.doesnt.who": "Who made the records. It shows a change after they were sealed would show.",

@@ -316,7 +316,7 @@ func TestAnAdjudicatorCopyShowsTheRefereeThisSideNamed(t *testing.T) {
 	require.Empty(t, got["refusal"])
 	text, _ := got["pageText"].(string)
 	assert.Contains(t, text, "The referee this side named: the platform")
-	assert.Contains(t, text, `"Both chose" means both sides named the same string, not the same verified person.`)
+	assert.Contains(t, text, "a match means the same name as written, not the same person.")
 	assert.NotContains(t, text, "a referee you both chose")
 
 	counterparty := renderJourney(t, id, true)

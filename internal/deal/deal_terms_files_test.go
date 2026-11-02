@@ -396,21 +396,21 @@ func TestTheCheckSaysWhetherBothSidesChoseTheReferee(t *testing.T) {
 		out, err := asAdjudicator(t, a.args()...)
 		require.NoError(t, err, out)
 		assert.Equal(t, termsCheckEqual, out["check"])
-		assert.Equal(t, "a referee you both chose: the platform", out["referee"])
+		assert.Equal(t, "both sides named the same referee: the platform (the same name as written, not a verified person)", out["referee"])
 	})
 	t.Run("different names", func(t *testing.T) {
 		a := adjudicateTo(t, received, received, "the platform", "the card issuer")
 		out, err := asAdjudicator(t, a.args()...)
 		require.NoError(t, err, out)
 		assert.Equal(t, termsCheckEqual, out["check"], "the check still runs")
-		assert.Equal(t, "not a referee you both chose: one side named the platform, the other named the card issuer", out["referee"])
+		assert.Equal(t, "the sides named different referees: "+a.buyerFile+" named the platform, "+a.sellerFile+" named the card issuer", out["referee"])
 	})
 	t.Run("one copy only", func(t *testing.T) {
 		a := adjudicate(t, received, received)
 		out, err := asAdjudicator(t, "--check", a.result, "--copy", a.buyerFile, "--party-key", a.buyerKeys)
 		require.Error(t, err)
 		assert.Equal(t, termsCheckCannotReproduce, out["check"])
-		assert.Contains(t, out["referee"], "not a referee you both chose")
+		assert.Equal(t, "one copy cannot show that both sides named the same referee", out["referee"])
 	})
 	t.Run("a missing name", func(t *testing.T) {
 		a := adjudicate(t, received, received)
@@ -430,9 +430,9 @@ func TestTheCheckSaysWhetherBothSidesChoseTheReferee(t *testing.T) {
 			require.NoError(t, err)
 			files[i].side.book = []string{a.pair.buyer.signer, a.pair.seller.signer}[i]
 		}
-		chosen, line := sharedReferee(files)
+		chosen, line := sharedReferee(files, [2]string{"buyer.json", "seller.json"})
 		assert.False(t, chosen)
-		assert.Equal(t, "a copy names no referee", line)
+		assert.Equal(t, "seller.json names no referee", line)
 	})
 }
 
@@ -441,4 +441,25 @@ func TestOnlyAnAdjudicatorsCopyNamesAReferee(t *testing.T) {
 	assert.Equal(t, "x", dealRefereeOf(cli.DealAudienceAdjudicator, "x"))
 	assert.Empty(t, dealRefereeOf(cli.DealAudienceCounterparty, "x"))
 	assert.Empty(t, dealRefereeOf(cli.DealAudienceKeep, ""))
+}
+
+// A copy cut for another audience is named as such, not as a raw error.
+func TestTheCheckNamesACopyThatIsNotAnAdjudicators(t *testing.T) {
+	a := adjudicate(t, received, received)
+	var files [2]fileCopy
+	for i, path := range []string{a.buyerFile, a.sellerFile} {
+		bundle, err := cli.DecodeBundleJSON(mustRead(t, path))
+		require.NoError(t, err)
+		var input map[string]any
+		require.NoError(t, json.Unmarshal(sealedReportPayload(bundle), &input))
+		if i == 0 {
+			input["audience"] = "counterparty"
+		}
+		files[i].report, err = json.Marshal(input)
+		require.NoError(t, err)
+		files[i].side.book = []string{a.pair.buyer.signer, a.pair.seller.signer}[i]
+	}
+	chosen, line := sharedReferee(files, [2]string{"a", "b"})
+	assert.False(t, chosen)
+	assert.Equal(t, "a copy is not an adjudicator's copy, so it names no referee", line)
 }

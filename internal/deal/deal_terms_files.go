@@ -73,24 +73,38 @@ func sealedReportPayload(b map[string]interface{}) []byte {
 }
 
 // sharedReferee says whether the two admitted copies name one referee, in
-// the words the check reports (note §10, "a referee both chose"): both sides
-// naming the same string, never the same verified person.
-func sharedReferee(files [2]fileCopy) (chosen bool, line string) {
+// the words the check reports (note §10): a match is the same name as written
+// on both sides, never a verified person. names label the copies, in order.
+func sharedReferee(files [2]fileCopy, names [2]string) (chosen bool, line string) {
 	name, err := dealprofile.SharedReferee(
 		dealprofile.ReportCopy{Payload: files[0].report, Party: files[0].side.book},
 		dealprofile.ReportCopy{Payload: files[1].report, Party: files[1].side.book})
 	var refErr *dealprofile.RefereeError
-	switch {
-	case err == nil:
-		return true, "a referee you both chose: " + name
-	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeNotNamed:
-		return false, "a copy names no referee"
-	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeDifferent && len(refErr.Named) == 2:
-		return false, "not a referee you both chose: one side named " + refErr.Named[0] + ", the other named " + refErr.Named[1]
-	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeMalformed:
+	if err == nil {
+		return true, "both sides named the same referee: " + name + " (the same name as written, not a verified person)"
+	}
+	if !errors.As(err, &refErr) {
+		return false, "the copies' referees could not be compared"
+	}
+	switch refErr.Reason {
+	case dealprofile.RefereeNotNamed:
+		var without []string
+		for i, f := range files {
+			if r, e := dealprofile.ReportReferee(f.report); e != nil || r == "" {
+				without = append(without, names[i])
+			}
+		}
+		return false, strings.Join(without, " and ") + " names no referee"
+	case dealprofile.RefereeDifferent:
+		if len(refErr.Named) == 2 {
+			return false, "the sides named different referees: " + names[0] + " named " + refErr.Named[0] + ", " + names[1] + " named " + refErr.Named[1]
+		}
+	case dealprofile.RefereeNotAdjudicator:
+		return false, "a copy is not an adjudicator's copy, so it names no referee"
+	case dealprofile.RefereeMalformed:
 		return false, "a copy carries no sealed report that names a referee"
 	}
-	return false, "not a referee you both chose: " + err.Error()
+	return false, "the copies' referees could not be compared"
 }
 
 // admitFileCopy verifies one party's adjudicator file and admits its half:
@@ -203,7 +217,7 @@ func checkTermsFiles(c *cobra.Command, checkPath string, copies, partyKeyFlags [
 		}
 	}
 	if len(copies) == 1 {
-		referee = "not a referee you both chose: one side's copy cannot name a referee for both"
+		referee = "one copy cannot show that both sides named the same referee"
 		return report(termsCheckCannotReproduce, "one side cannot be checked alone: a party that declines to disclose leaves the adjudicator one file")
 	}
 	var files [2]fileCopy
@@ -225,7 +239,7 @@ func checkTermsFiles(c *cobra.Command, checkPath string, copies, partyKeyFlags [
 	if files[0].side.book == files[1].side.book {
 		return cli.InputError("the two --copy files are one party's: each party's own file is needed")
 	}
-	_, referee = sharedReferee(files)
+	_, referee = sharedReferee(files, [2]string{copies[0], copies[1]})
 	if !reproducible {
 		return report(termsCheckCannotReproduce, "a --copy carries no openings of its party's close, or not both fields")
 	}
