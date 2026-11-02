@@ -277,7 +277,7 @@ func (s *dealSession) dealWitnessState(ctx context.Context, dealID string, state
 
 // witnessUnverified is the state of a deal checkpoint whose witness receipt
 // is held but does not verify under the profile's witness (a tampered
-// receipt, a changed witness key or endpoint): the check failed, so it is
+// receipt, or one signed by a key other than the profile's): the check failed, so it is
 // neither not-yet-witnessed nor witnessed (actionstate-muse#311 §3.3,
 // "Unknown or failed": the check ran and failed).
 func witnessUnverified() map[string]interface{} {
