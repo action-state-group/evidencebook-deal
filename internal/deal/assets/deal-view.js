@@ -145,6 +145,7 @@ const DEAL_VIEW_WORDS = {
   "page.detail.not_in_file": "it is not in this file",
   "page.detail.order": "{act} does not follow its approval in this log",
   "page.detail.points_acknowledges": "their record acknowledges yours",
+  "page.detail.points_exchange": "their record is of the exchange, not of a deal record yours can point to",
   "page.detail.points_none": "no record in their half links to yours",
   "page.detail.points_other": "their record links to yours",
   "page.detail.points_rebuts": "their record disputes yours",
@@ -1487,10 +1488,12 @@ const dealViewRender = (model, regions) => {
       ? ["missing", W("page.stamp_line.points_at"), W("page.detail.no_own_record")]
       : !theirArtifact
       ? ["missing", W("page.stamp_line.points_at"), W("page.detail.theirs_missing")]
-      : theirArtifact.state !== "verified" || theirArtifact.mesh
-        ? ["not checked", W("page.stamp_line.points_at"), W("page.close.unchecked")]
+      : theirArtifact.state !== "verified"
+      ? ["not checked", W("page.stamp_line.points_at"), W("page.close.unchecked")]
+      : theirArtifact.mesh
+        ? ["not checked", W("page.stamp_line.points_at"), W("page.detail.points_exchange")]
         : (() => {
-            const pointer = dealPointerTo(stepsAll.map((st) => st.capsule_id), theirArtifact.records, theirArtifact.book);
+            const pointer = dealPointerTo(stepsAll.filter((st) => matched.has(st.capsule_id) || (shared && st.withheld && recordOk(st.capsule_id))).map((st) => st.capsule_id), theirArtifact.records, theirArtifact.book);
             return pointer
               ? ["passed", W("page.stamp_line.points_at"), pointer === "acknowledges" ? W("page.detail.points_acknowledges") : pointer === "rebuts" ? W("page.detail.points_rebuts") : W("page.detail.points_other")]
               : ["missing", W("page.stamp_line.points_at"), W("page.detail.points_none")];
