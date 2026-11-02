@@ -2459,6 +2459,16 @@ func dealCloseCommand() *cobra.Command {
 			} else {
 				s.stepReport(ctx, out, all, htmlPath, cli.VoiceLine, func(w cli.Wording) []string { return []string{w.Line("say.close.open", nil)} })
 			}
+			// A sale holds one item: once a buyer's thread completes it, the
+			// sale takes no new buyer, so its log closes with the thread
+			// rather than staying an open deal in the seller's store (#127).
+			// A thread of another buyer already open goes on.
+			if open := events[0].Event.Open; result.Outcome == "completed" && open != nil && open.Sale != "" {
+				if err = s.closeSaleOnce(ctx, open.Sale); err != nil {
+					return err
+				}
+				out["sale_closed"] = open.Sale
+			}
 			return cli.Output(c, out)
 		})
 	}}

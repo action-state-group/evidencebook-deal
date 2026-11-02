@@ -288,3 +288,40 @@ func TestTheProfileCheckerHoldsASalesLog(t *testing.T) {
 		})
 	}
 }
+
+// A completed sale leaves no open deal in the seller's store: the thread's
+// completed close takes the sale's own log with it (#127). A sale whose
+// thread did not complete stays open for the next buyer.
+func TestACompletedSaleLeavesNoOpenDeal(t *testing.T) {
+	dealFixture(t)
+	saleID, _ := newSale(t)
+	other := buyerThread(t, saleID, "buyer-b.example")
+	thread := buyerThread(t, saleID, "buyer-a.example")
+
+	openDeals := func() []string {
+		t.Helper()
+		out, err := invoke(t, "", "--profile", "deal", "deal", "list", "--json")
+		require.NoError(t, err, out)
+		var list []struct {
+			DealID string `json:"deal_id"`
+			State  string `json:"state"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(out), &list), out)
+		var open []string
+		for _, l := range list {
+			if l.State == "open" {
+				open = append(open, l.DealID)
+			}
+		}
+		return open
+	}
+
+	closed := dealRun(t, "close", "--deal", other, "--input", writeJSON(t, `{"status":"not_selected"}`))
+	assert.NotContains(t, closed, "sale_closed")
+	assert.Contains(t, openDeals(), saleID)
+
+	closed = dealRun(t, "close", "--deal", thread, "--input", writeJSON(t, `{"status":"received"}`))
+	require.Equal(t, "completed", closed["outcome"], closed)
+	assert.Equal(t, saleID, closed["sale_closed"])
+	assert.Empty(t, openDeals())
+}

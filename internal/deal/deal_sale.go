@@ -191,6 +191,23 @@ func (s *dealSession) closeSale(ctx context.Context, saleID string) (sealedEvent
 	return se, cp, open, nil
 }
 
+// closeSaleOnce closes a sale unless it is already closed, and leaves the
+// session on the sale's log.
+func (s *dealSession) closeSaleOnce(ctx context.Context, saleID string) error {
+	if err := s.useDeal(ctx, saleID, false); err != nil {
+		return err
+	}
+	events, err := s.load(ctx, saleID)
+	if err != nil {
+		return err
+	}
+	if saleClosed(events) {
+		return nil
+	}
+	_, _, _, err = s.closeSale(ctx, saleID)
+	return err
+}
+
 // threadState is whether a buyer's thread has opened (its task authority
 // is sealed), and whether it is still open: opened, with no final close.
 // Both are read from its sealed steps; "final close" is finalClose's rule
