@@ -12,7 +12,7 @@
   different referees: A named X, B named Y" (A and B are the `--copy` files), or "A names
   no referee". The check itself still runs. One adjudicator copy's deal view shows "The
   referee this side named: X", and its "What it doesn't" box says only a check of both
-  copies compares names and a match is not a verified person.
+  copies compares names and a match is not any particular person.
 
 - The deal view's words are a wording pack (F8.10, evidencebook-deal#97): the English
   `deal-view.js` hardcoded is now the `page.*` entries of
