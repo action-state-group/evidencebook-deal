@@ -205,18 +205,27 @@ func soldSale(events []sealedEvent) string {
 	return events[0].Event.Open.Sale
 }
 
-// closeSaleOnce closes a sale unless it is already closed, and leaves the
-// session on the sale's log. It reports whether it sealed the close.
-func (s *dealSession) closeSaleOnce(ctx context.Context, saleID string) (bool, error) {
-	if err := s.useDeal(ctx, saleID, false); err != nil {
-		return false, err
-	}
-	events, err := s.load(ctx, saleID)
+// closeSoldSale closes a sold thread's sale in a session of its own and
+// reports whether it sealed the close.
+func closeSoldSale(c *cobra.Command, saleID string) (closed bool, err error) {
+	p, err := cli.Selected(c)
 	if err != nil {
 		return false, err
 	}
-	if saleClosed(events) {
-		return false, nil
+	s, err := openDealSession(c.Context(), p)
+	if err != nil {
+		return false, err
+	}
+	defer func() { err = errors.Join(err, s.close()) }()
+	return s.closeSaleOnce(c.Context(), saleID)
+}
+
+// closeSaleOnce closes a sale unless it is already closed, and leaves the
+// session on the sale's log. It reports whether it sealed the close.
+func (s *dealSession) closeSaleOnce(ctx context.Context, saleID string) (bool, error) {
+	closed, err := s.index.steps(ctx, stepFilter{DealID: saleID, Kinds: []string{"sale_close"}})
+	if err != nil || len(closed) > 0 {
+		return false, err
 	}
 	if err = dealSaleCloseStops(); err != nil {
 		return false, err

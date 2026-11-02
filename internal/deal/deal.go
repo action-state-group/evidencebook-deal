@@ -2384,19 +2384,21 @@ func dealCloseCommand() *cobra.Command {
 		if err = normalizeTerms(in.Delivered); err != nil {
 			return err
 		}
-		return runDeal(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
+		// The sale a sold thread belongs to closes in a session of its own,
+		// after the thread's session has ended, as `deal sale close` would.
+		var sale string
+		var retried bool
+		var printed map[string]any
+		err = runDeal(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
 			if err := sellersHandover(dealRole(events), false, in.Delivered); err != nil {
 				return err
 			}
 			if dealFinallyClosed(events) {
 				// A close that sealed but whose sale close did not (a crash
 				// between the two) is finished by the retry.
-				if sale := soldSale(events); sale != "" {
-					if closed, err := s.closeSaleOnce(ctx, sale); err != nil {
-						return err
-					} else if closed {
-						return cli.Output(c, map[string]any{"deal_id": dealID, "sale_closed": sale})
-					}
+				if sale = soldSale(events); sale != "" {
+					retried, printed = true, map[string]any{"deal_id": dealID}
+					return nil
 				}
 				return cli.InputError("this deal is closed and takes no more steps; start a new one with `deal open`")
 			}
@@ -2472,17 +2474,24 @@ func dealCloseCommand() *cobra.Command {
 			// handed over, the sale takes no new buyer, so its log closes with
 			// the thread rather than staying an open deal in the seller's
 			// store (#127). A thread of another buyer already open goes on.
-			if sale := soldSale(all); sale != "" {
-				closed, err := s.closeSaleOnce(ctx, sale)
-				if err != nil {
-					return err
-				}
-				if closed {
-					out["sale_closed"] = sale
-				}
-			}
-			return cli.Output(c, out)
+			sale, printed = soldSale(all), out
+			return nil
 		})
+		if err != nil {
+			return err
+		}
+		if sale != "" {
+			closed, err := closeSoldSale(c, sale)
+			if err != nil {
+				return err
+			}
+			if closed {
+				printed["sale_closed"] = sale
+			} else if retried {
+				return cli.InputError("this deal is closed and takes no more steps; start a new one with `deal open`")
+			}
+		}
+		return cli.Output(c, printed)
 	}}
 	cmd.Flags().String("deal", "", "Deal ID from `deal open`")
 	cmd.Flags().String("input", "", "Close JSON: status and what was delivered")
