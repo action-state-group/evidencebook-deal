@@ -29,21 +29,25 @@ import (
 // heldWitnessReceipt returns the checkpoint.witnesses entry for the witness
 // receipt this device holds for the signed checkpoint statement, or nil when
 // no witness is configured, none was received, or it does not verify under
-// the profile's pinned witness key.
-func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) (map[string]interface{}, error) {
+// the profile's pinned witness key. unverified is true for the last: a
+// receipt is held but fails the check, which is not the same as none held.
+func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) (entry map[string]interface{}, unverified bool, err error) {
 	service, err := cli.ServiceID(s.dp)
 	if err != nil || service == "" {
-		return nil, err
+		return nil, false, err
 	}
 	record, err := cli.VerifyCheckpoint(s.dp, statement)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	state, err := s.t.Log.GetWitness(ctx, service, record.MMRSize)
-	if err != nil || state.Receipt == nil || cli.VerifyWitness(s.dp, state) != nil {
-		return nil, nil
+	if err != nil || state.Receipt == nil {
+		return nil, false, nil
 	}
-	entry := map[string]interface{}{
+	if cli.VerifyWitness(s.dp, state) != nil {
+		return nil, true, nil
+	}
+	entry = map[string]interface{}{
 		"ts_url":      strings.TrimRight(s.dp.Checkpoint.Endpoint, "/"),
 		"entry_hash":  state.Receipt.EntryHash,
 		"receipt_b64": base64.StdEncoding.EncodeToString(state.Receipt.Bytes),
@@ -54,7 +58,7 @@ func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) 
 	if state.Receipt.TreeSize != nil {
 		entry["tree_size"] = cli.Integer(uint64(*state.Receipt.TreeSize))
 	}
-	return entry, nil
+	return entry, false, nil
 }
 
 // dealScopeLine is printed on the face of every receipt, report page and
@@ -148,6 +152,9 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 		case "scheduled":
 			out["witness_state"] = "scheduled"
 			sealed += "Witness pending. A deal is not witnessed at the moment it happens: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(cadence) + ", and only then can it be witnessed. Until then it is sealed on this device only. "
+		case "unverified":
+			out["witness_state"] = "unverified"
+			sealed += "Witness receipt could not be checked here: a receipt for this deal is held, but it does not verify under the witness this profile names now, so the record is sealed on this device only and is not shown as witnessed. "
 		case "pending":
 			out["witness_state"] = "pending"
 			// The cadence's text says whether and why it is retried; a

@@ -208,7 +208,8 @@ func tickAtSize(ctx context.Context, c *evidencebook.Cadence, size uint64) (uint
 // dealWitnessState says, for the deal checkpoint a report carries, where it
 // stands with the witness, truthfully: not_configured, scheduled (not yet in
 // a tick), pending (in a tick whose delivery has not completed) or witnessed
-// (with the whole chain a verifier needs).
+// (with the whole chain a verifier needs), or unverified (a receipt is held
+// but no longer verifies for the profile's witness).
 //
 // Witnessed comes in two extents (evidencebook's Cadence.Chain, which is
 // capsule-cli's cadenceChain member for member). "all": a witnessed tick
@@ -242,11 +243,12 @@ func (s *dealSession) dealWitnessState(ctx context.Context, dealID string, state
 	}
 	// The cadence recorded the receipt when it verified; the chain counts
 	// only if it still verifies for the witness this profile names now (a
-	// changed endpoint or key leaves the deal unwitnessed, as before).
+	// changed endpoint or key leaves the witness unverified: a check that
+	// failed, which is not a check not yet made).
 	if ok, err := chainVerifiesNow(ctx, p, service, chain); err != nil {
 		return nil, err
 	} else if !ok {
-		return s.notYetWitnessed(ctx, c, p, service, dealID, current)
+		return witnessUnverified(), nil
 	}
 	if chain["extent"] != "part" {
 		return chain, nil
@@ -269,6 +271,15 @@ func (s *dealSession) dealWitnessState(ctx context.Context, dealID string, state
 		return nil, err
 	}
 	return chain, nil
+}
+
+// witnessUnverified is the state of a deal checkpoint whose witness receipt
+// is held but does not verify under the profile's witness (a tampered
+// receipt, a changed witness key or endpoint): the check failed, so it is
+// neither not-yet-witnessed nor witnessed (actionstate-muse#311 §3.3,
+// "Unknown or failed": couldn't be checked here).
+func witnessUnverified() map[string]interface{} {
+	return map[string]interface{}{"state": "unverified"}
 }
 
 // chainVerifiesNow reports whether the cadence checkpoint a chain names has
@@ -359,6 +370,11 @@ func (s *dealSession) notYetWitnessed(ctx context.Context, c *evidencebook.Caden
 	// witnessed (only sealed reports since) waits for the next tick.
 	if err == nil && state.Receipt != nil && cli.VerifyWitness(p, state) == nil {
 		return rest, nil
+	}
+	// A receipt that came back but does not verify is a failed check, not a
+	// delivery still pending.
+	if err == nil && state.Receipt != nil {
+		return witnessUnverified(), nil
 	}
 	reason, text := cli.WitnessPendingReason(state, p.Checkpoint.Endpoint)
 	return map[string]interface{}{"state": "pending", "tick": cli.Integer(last.N), "reason": reason, "text": text, "cadence": s.cadenceWords()}, nil
