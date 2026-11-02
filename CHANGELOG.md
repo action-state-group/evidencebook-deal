@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- An adjudicator's copy seals its referee (F8.3, evidencebook-deal#107; needs
+  evidencebook v0.13.1): `disclose --deal ID --share adjudicator --to WHO` and
+  `deal report --share adjudicator --to WHO` seal `WHO` as the report's `referee`
+  (NFC, trimmed), which evidencebook's `dealprofile.ReportPayload` now requires.
+  `deal terms-result --check` with two `--copy` files reads
+  `dealprofile.SharedReferee` and adds `referee` to its output: "a referee you both
+  chose: X" only when both copies name the same string; otherwise "not a referee you
+  both chose: one side named X, the other named Y" or "a copy names no referee". The
+  check itself still runs. One adjudicator copy's deal view shows "The referee this
+  side named: X", and its "What it doesn't" box says "both chose" means the same
+  string, not the same verified person.
+
 - The deal view's words are a wording pack (F8.10, evidencebook-deal#97): the English
   `deal-view.js` hardcoded is now the `page.*` entries of
   `assets/wording/capsulectl-deal-en.json`. The module holds them built in (a table the

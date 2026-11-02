@@ -2,10 +2,12 @@ package deal
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook"
+	"github.com/action-state-group/evidencebook/dealprofile"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +43,54 @@ type fileCopy struct {
 	side     reconcileSide
 	logID    string
 	openings map[string]evidencebook.Opening
+	// report is the copy's sealed report payload, which names the referee
+	// the copy was handed to; nil when the file carries none.
+	report []byte
+}
+
+// sealedReportPayload is the payload of the deal_report a copy points at,
+// as the file discloses it (standalone, or on the log), or nil.
+func sealedReportPayload(b map[string]interface{}) []byte {
+	exts, _ := b["extensions"].(map[string]interface{})
+	deal, _ := exts[cli.DealProfile].(map[string]interface{})
+	id, _ := deal[cli.DealReportPointer].(string)
+	var input map[string]interface{}
+	if x, ok := exts[cli.DealReportExtension].(map[string]interface{}); ok {
+		input, _ = x["agent_input"].(map[string]interface{})
+	} else {
+		disclosures, _ := b["disclosures"].(map[string]interface{})
+		d, _ := disclosures[id].(map[string]interface{})
+		input, _ = d["agent_input"].(map[string]interface{})
+	}
+	if input == nil {
+		return nil
+	}
+	payload, err := json.Marshal(input)
+	if err != nil {
+		return nil
+	}
+	return payload
+}
+
+// sharedReferee says whether the two admitted copies name one referee, in
+// the words the check reports (note §10, "a referee both chose"): both sides
+// naming the same string, never the same verified person.
+func sharedReferee(files [2]fileCopy) (chosen bool, line string) {
+	name, err := dealprofile.SharedReferee(
+		dealprofile.ReportCopy{Payload: files[0].report, Party: files[0].side.book},
+		dealprofile.ReportCopy{Payload: files[1].report, Party: files[1].side.book})
+	var refErr *dealprofile.RefereeError
+	switch {
+	case err == nil:
+		return true, "a referee you both chose: " + name
+	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeNotNamed:
+		return false, "a copy names no referee"
+	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeDifferent && len(refErr.Named) == 2:
+		return false, "not a referee you both chose: one side named " + refErr.Named[0] + ", the other named " + refErr.Named[1]
+	case errors.As(err, &refErr) && refErr.Reason == dealprofile.RefereeMalformed:
+		return false, "a copy carries no sealed report that names a referee"
+	}
+	return false, "not a referee you both chose: " + err.Error()
 }
 
 // admitFileCopy verifies one party's adjudicator file and admits its half:
@@ -79,7 +129,7 @@ func admitFileCopy(raw []byte, keys []partyKeys) (copyOf fileCopy, ok bool, err 
 	if !isDeal || !cli.DealIDPattern.MatchString(dealID) {
 		return fileCopy{}, false, cli.InputError("a --copy is not of a deal's log")
 	}
-	copyOf = fileCopy{logID: logID, side: reconcileSide{book: pinned.signer}}
+	copyOf = fileCopy{logID: logID, side: reconcileSide{book: pinned.signer}, report: sealedReportPayload(bundle)}
 	openings, err := dealOpeningsFile(raw)
 	if err != nil {
 		return fileCopy{}, false, err
@@ -99,8 +149,14 @@ func admitFileCopy(raw []byte, keys []partyKeys) (copyOf fileCopy, ok bool, err 
 // checkTermsFiles is the adjudicator's check, from files and pinned keys
 // only.
 func checkTermsFiles(c *cobra.Command, checkPath string, copies, partyKeyFlags []string) error {
+	// referee is what the two copies say about the referee, set once both
+	// are read: the check runs whether or not they name one both chose.
+	var referee string
 	report := func(outcome, detail string) error {
 		out := map[string]any{"check": outcome, "detail": detail}
+		if referee != "" {
+			out["referee"] = referee
+		}
 		if err := cli.Output(c, out); err != nil {
 			return err
 		}
@@ -147,6 +203,7 @@ func checkTermsFiles(c *cobra.Command, checkPath string, copies, partyKeyFlags [
 		}
 	}
 	if len(copies) == 1 {
+		referee = "not a referee you both chose: one side's copy cannot name a referee for both"
 		return report(termsCheckCannotReproduce, "one side cannot be checked alone: a party that declines to disclose leaves the adjudicator one file")
 	}
 	var files [2]fileCopy
@@ -168,6 +225,7 @@ func checkTermsFiles(c *cobra.Command, checkPath string, copies, partyKeyFlags [
 	if files[0].side.book == files[1].side.book {
 		return cli.InputError("the two --copy files are one party's: each party's own file is needed")
 	}
+	_, referee = sharedReferee(files)
 	if !reproducible {
 		return report(termsCheckCannotReproduce, "a --copy carries no openings of its party's close, or not both fields")
 	}
