@@ -274,8 +274,10 @@ explained once where they are defined; this is the order to follow.
     the user dropped. Send the thread's receipt as "What you say" describes.
 12. **Close the sale** with `deal sale close --sale SALE_ID` when the user
     stops selling. A thread closed `received` (outcome `completed` or `mismatch`) closes
-    its sale on its own, since the one item is gone: do not close it again, and open no
-    other deal for the sale. It takes no new buyer; a thread already
+    its sale on its own, since the one item is gone: do not close the sale again,
+    and open no other deal for it. If the close reports that closing the sale
+    failed, run the same `deal close` again: it finishes the sale and prints
+    `sale_closed`. It takes no new buyer; a thread already
     open goes on, and its result says how many are. `deal sale bundle --sale
     SALE_ID --out FILE` writes the user's own copy of the whole sale;
     `deal sale export --sale SALE_ID --output FILE` writes its records.

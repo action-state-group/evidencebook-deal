@@ -2483,7 +2483,7 @@ func dealCloseCommand() *cobra.Command {
 		if sale != "" {
 			closed, err := closeSoldSale(c, sale)
 			if err != nil {
-				return err
+				return fmt.Errorf("the deal is closed, but closing its sale failed; run this `deal close` again to finish the sale: %w", err)
 			}
 			if closed {
 				printed["sale_closed"] = sale
