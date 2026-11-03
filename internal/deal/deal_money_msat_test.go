@@ -1,6 +1,8 @@
 package deal
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,4 +71,45 @@ func TestTheSellersReportStatesTheLightningLegInMsat(t *testing.T) {
 	money, _ := report["money"].(map[string]any)
 	require.NotNil(t, money, report)
 	assert.Equal(t, "Received 495000 msat, receive fee 5000 msat.", money["text"])
+}
+
+func TestReceivedTextEdgeCases(t *testing.T) {
+	usdc := func(v string, scale int) sealedEvent {
+		leg := `{"leg":"payee_observed","status":"settled","received":{"value":"` + v + `","assetCode":"eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913","assetScale":` + fmt.Sprint(scale) + `}}`
+		return sealedEvent{Event: dealEvent{Kind: "evidence", Evidence: &dealEvidence{Settlement: []byte(leg)}}}
+	}
+	// A USDC leg reads at its own scale, and a fee-less leg states a zero fee.
+	assert.Equal(t, "Received 1.50 USDC, receive fee 0.00 USDC.", buildDealMoney([]sealedEvent{usdc("1500000", 6)}, "USD").Text)
+	assert.Equal(t, "1.50 USDC", receivedAmount([]byte(`{"received":{"value":"150000000","assetCode":"eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913","assetScale":8}}`)))
+	// A leg in another asset or scale than the first is left out.
+	m := buildDealMoney([]sealedEvent{settledLeg("400", "100"), usdc("1500000", 6)}, "BTC")
+	assert.Equal(t, "Received 400 msat, receive fee 100 msat.", m.Text)
+	// A malformed value is skipped, never a panic.
+	bad := settledLeg("not-a-number", "0")
+	assert.Nil(t, buildDealMoney([]sealedEvent{bad}, "BTC"))
+	assert.Equal(t, "", receivedAmount([]byte(`{"received":{"value":"","assetCode":"`+lightningBTC+`","assetScale":11}}`)))
+}
+
+func TestPayeeOnlyMoneyStatesNoPaidFigures(t *testing.T) {
+	m := buildDealMoney([]sealedEvent{settledLeg("400", "100")}, "BTC")
+	raw, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"currency":"BTC","received":"Received 400 msat, receive fee 100 msat.","text":"Received 400 msat, receive fee 100 msat."}`, string(raw))
+	paid, err := json.Marshal(buildDealMoney([]sealedEvent{msatPay(500, "out")}, "BTC"))
+	require.NoError(t, err)
+	assert.Contains(t, string(paid), `"net_minor":500`)
+}
+
+func TestAShareKeepsAnMsatAmount(t *testing.T) {
+	assert.Empty(t, codeLocs("limit 40000 msat, asked 50000 msat"))
+}
+
+func TestAPayeeOnlyDealKeepsItsOpeningTermsInTheList(t *testing.T) {
+	price := int64(500)
+	open := sealedEvent{Event: dealEvent{Kind: "open", Open: &dealOpen{Terms: dealTerms{PriceMinor: &price, Currency: "BTC"}}}}
+	sum := dealSummaryOf([]sealedEvent{open, settledLeg("400", "100")})
+	if assert.NotNil(t, sum.Amount) {
+		assert.Equal(t, "opening_terms", sum.Amount.Basis)
+		assert.EqualValues(t, 500, sum.Amount.AmountMinor)
+	}
 }

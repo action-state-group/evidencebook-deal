@@ -2255,6 +2255,23 @@ type dealMoney struct {
 	// read from the legs and never from a paying act.
 	Received string `json:"received,omitempty"`
 	Text     string `json:"text"`
+	// payeeOnly marks a payee's copy: no paying act, so no paid, returned or
+	// net figure to state.
+	payeeOnly bool
+}
+
+// MarshalJSON leaves the paid, returned and net figures out of a payee-only
+// record: a seller who was paid must not read as net 0.
+func (m dealMoney) MarshalJSON() ([]byte, error) {
+	if m.payeeOnly {
+		return json.Marshal(struct {
+			Currency string `json:"currency"`
+			Received string `json:"received"`
+			Text     string `json:"text"`
+		}{m.Currency, m.Received, m.Text})
+	}
+	type plain dealMoney
+	return json.Marshal(plain(m))
 }
 
 func buildDealMoney(events []sealedEvent, currency string) *dealMoney {
@@ -2286,7 +2303,7 @@ func buildDealMoney(events []sealedEvent, currency string) *dealMoney {
 	}
 	if m == nil {
 		// A payee's copy: no paying act, only what its legs saw arrive.
-		return &dealMoney{Currency: strings.ToUpper(currency), Received: received, Text: received}
+		return &dealMoney{Currency: strings.ToUpper(currency), Received: received, Text: received, payeeOnly: true}
 	}
 	m.NetMinor = m.PaidMinor - m.ReturnedMinor
 	m.Text = fmt.Sprintf("Paid %s, returned %s: net %s.", formatMoney(m.PaidMinor, m.Currency), formatMoney(m.ReturnedMinor, m.Currency), formatMoney(m.NetMinor, m.Currency))
@@ -2299,10 +2316,11 @@ func buildDealMoney(events []sealedEvent, currency string) *dealMoney {
 
 // receivedText states what the settled payee_observed legs of a deal say
 // arrived: "Received 400 msat, receive fee 100 msat." Legs in another asset
-// than the first are left out, as the paid line leaves out another currency.
+// (or scale) than the first are left out, as the paid line leaves out
+// another currency.
 func receivedText(events []sealedEvent) string {
-	var got, fee, name string
-	var gotSum, feeSum *big.Int
+	var first *settlementAmount
+	gotSum, feeSum := new(big.Int), new(big.Int)
 	for _, se := range events {
 		ev := se.Event.Evidence
 		if ev == nil || len(ev.Settlement) == 0 {
@@ -2317,26 +2335,27 @@ func receivedText(events []sealedEvent) string {
 		if json.Unmarshal(ev.Settlement, &leg) != nil || leg.Leg != "payee_observed" || leg.Status != "settled" || leg.Received == nil {
 			continue
 		}
-		n, ok := leg.Received.name()
-		if !ok || (name != "" && n != name) {
+		got, ok := leg.Received.units()
+		if _, named := leg.Received.name(); !ok || !named {
 			continue
 		}
-		name = n
-		if gotSum == nil {
-			gotSum, feeSum = new(big.Int), new(big.Int)
+		if first == nil {
+			first = leg.Received
+		} else if leg.Received.AssetCode != first.AssetCode || leg.Received.AssetScale != first.AssetScale {
+			continue
 		}
-		v, _ := leg.Received.units()
-		gotSum.Add(gotSum, v)
+		gotSum.Add(gotSum, got)
 		if leg.ReceiveFee != nil {
 			if fv, ok := leg.ReceiveFee.units(); ok {
 				feeSum.Add(feeSum, fv)
 			}
 		}
 	}
-	if gotSum == nil {
+	if first == nil {
 		return ""
 	}
-	got, fee = settlementText(gotSum, name), settlementText(feeSum, name)
+	got, _ := first.text(gotSum)
+	fee, _ := first.text(feeSum)
 	return fmt.Sprintf("Received %s, receive fee %s.", got, fee)
 }
 

@@ -40,11 +40,17 @@ func (a settlementAmount) units() (*big.Int, bool) {
 	return new(big.Int).SetString(a.Value, 10)
 }
 
-// settlementText reads atomic units of the named asset: whole msat, or a
-// decimal amount at the asset's two display places.
-func settlementText(v *big.Int, name string) string {
-	if name == "msat" {
-		return v.String() + " msat"
+// text reads atomic units of the amount's asset: whole msat, or a decimal
+// amount at the asset's own scale, at most two places ("450.00 USDC").
+func (a settlementAmount) text(v *big.Int) (string, bool) {
+	name, ok := a.name()
+	scale, sok := a.scale()
+	if !ok || !sok {
+		return "", false
 	}
-	return new(big.Rat).SetFrac(v, big.NewInt(1_000_000)).FloatString(2) + " " + name
+	if name == "msat" {
+		return v.String() + " msat", true
+	}
+	amount := new(big.Rat).SetFrac(v, new(big.Int).Exp(big.NewInt(10), big.NewInt(scale), nil))
+	return amount.FloatString(int(min(scale, 2))) + " " + name, true
 }

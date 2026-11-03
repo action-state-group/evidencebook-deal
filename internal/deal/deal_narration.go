@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"regexp"
 	"strings"
 	"time"
@@ -550,24 +549,15 @@ func receivedAmount(leg json.RawMessage) string {
 	var m struct {
 		Received settlementAmount `json:"received"`
 	}
-	if json.Unmarshal(leg, &m) != nil || m.Received.Value == "" {
+	if json.Unmarshal(leg, &m) != nil {
 		return ""
 	}
-	name, ok := m.Received.name()
-	value, vok := m.Received.units()
-	scale, sok := m.Received.scale()
-	if !ok || !vok || !sok {
+	v, ok := m.Received.units()
+	if !ok {
 		return ""
 	}
-	if name == "msat" {
-		return settlementText(value, name)
-	}
-	amount := new(big.Rat).SetFrac(value, new(big.Int).Exp(big.NewInt(10), big.NewInt(scale), nil))
-	places := int(scale)
-	if places > 2 {
-		places = 2
-	}
-	return amount.FloatString(places) + " " + name
+	text, _ := m.Received.text(v)
+	return text
 }
 
 // capitalize starts a sentence with a capital letter.
