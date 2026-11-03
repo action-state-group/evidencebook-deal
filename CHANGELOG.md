@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.1.0-rc33
+
+This release pairs with capsulectl `v0.1.0-rc33` (go.mod requires it).
+
+- Builds against capsule-viewer `v0.18.1` (was `v0.12.0`), which reads a BTC amount as "N msat"; the presentation goldens, including the two monthly pages that capsulectl-book `v0.1.0-rc33` writes, are rebuilt on it.
+
 - A Lightning deal is priced and reported in msat (evidencebook-deal#133): terms currency `BTC`
   with `amount_minor` counting millisatoshi (10^-11 BTC, the scale of the settlement legs' asset).
   The receipt's money line reads "Paid 500 msat, returned 0 msat: net 500 msat." and a payee's
