@@ -3,6 +3,7 @@ package deal
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1425,11 +1426,20 @@ var (
 
 var currencySymbols = map[string]string{"USD": "$", "EUR": "€", "GBP": "£", "CAD": "CA$", "AUD": "A$", "JPY": "¥"}
 
+// msatCurrency is the terms currency of a Lightning deal: BTC counted in
+// millisatoshi, the scale (11) of the lightningBTC asset the settlement legs
+// name. Its minor unit is the msat, not the satoshi, so a Lightning price is
+// stated in what actually moves.
+const msatCurrency = "BTC"
+
 func formatMoney(minor int64, currency string) string {
 	cur := strings.ToUpper(currency)
 	sign := ""
 	if minor < 0 {
 		sign, minor = "-", -minor
+	}
+	if cur == msatCurrency {
+		return fmt.Sprintf("%s%d msat", sign, minor)
 	}
 	if cur == "JPY" {
 		return fmt.Sprintf("%s¥%d", sign, minor)
@@ -2240,7 +2250,11 @@ type dealMoney struct {
 	ReturnedMinor int64  `json:"returned_minor"`
 	NetMinor      int64  `json:"net_minor"`
 	Other         int    `json:"other_currency_acts,omitempty"`
-	Text          string `json:"text"`
+	// Received is what a payee's sealed settlement legs say arrived, with the
+	// fee the wallet deducted ("Received 400 msat, receive fee 100 msat."),
+	// read from the legs and never from a paying act.
+	Received string `json:"received,omitempty"`
+	Text     string `json:"text"`
 }
 
 func buildDealMoney(events []sealedEvent, currency string) *dealMoney {
@@ -2266,12 +2280,64 @@ func buildDealMoney(events []sealedEvent, currency string) *dealMoney {
 			m.PaidMinor += *a.AmountMinor
 		}
 	}
-	if m == nil {
+	received := receivedText(events)
+	if m == nil && received == "" {
 		return nil
+	}
+	if m == nil {
+		// A payee's copy: no paying act, only what its legs saw arrive.
+		return &dealMoney{Currency: strings.ToUpper(currency), Received: received, Text: received}
 	}
 	m.NetMinor = m.PaidMinor - m.ReturnedMinor
 	m.Text = fmt.Sprintf("Paid %s, returned %s: net %s.", formatMoney(m.PaidMinor, m.Currency), formatMoney(m.ReturnedMinor, m.Currency), formatMoney(m.NetMinor, m.Currency))
+	if received != "" {
+		m.Received = received
+		m.Text += " " + received
+	}
 	return m
+}
+
+// receivedText states what the settled payee_observed legs of a deal say
+// arrived: "Received 400 msat, receive fee 100 msat." Legs in another asset
+// than the first are left out, as the paid line leaves out another currency.
+func receivedText(events []sealedEvent) string {
+	var got, fee, name string
+	var gotSum, feeSum *big.Int
+	for _, se := range events {
+		ev := se.Event.Evidence
+		if ev == nil || len(ev.Settlement) == 0 {
+			continue
+		}
+		var leg struct {
+			Leg        string            `json:"leg"`
+			Status     string            `json:"status"`
+			Received   *settlementAmount `json:"received"`
+			ReceiveFee *settlementAmount `json:"receive_fee"`
+		}
+		if json.Unmarshal(ev.Settlement, &leg) != nil || leg.Leg != "payee_observed" || leg.Status != "settled" || leg.Received == nil {
+			continue
+		}
+		n, ok := leg.Received.name()
+		if !ok || (name != "" && n != name) {
+			continue
+		}
+		name = n
+		if gotSum == nil {
+			gotSum, feeSum = new(big.Int), new(big.Int)
+		}
+		v, _ := leg.Received.units()
+		gotSum.Add(gotSum, v)
+		if leg.ReceiveFee != nil {
+			if fv, ok := leg.ReceiveFee.units(); ok {
+				feeSum.Add(feeSum, fv)
+			}
+		}
+	}
+	if gotSum == nil {
+		return ""
+	}
+	got, fee = settlementText(gotSum, name), settlementText(feeSum, name)
+	return fmt.Sprintf("Received %s, receive fee %s.", got, fee)
 }
 
 func actText(a dealAct, currency string) string {
