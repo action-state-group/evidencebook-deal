@@ -6,7 +6,9 @@
 
 This release pairs with capsulectl `v0.1.0-rc33` (go.mod requires it).
 
-- Builds against capsule-viewer `v0.18.1` (was `v0.12.0`), which reads a BTC amount as "N msat"; the presentation goldens, including the two monthly pages that capsulectl-book `v0.1.0-rc33` writes, are rebuilt on it.
+This release carries what merged since `v0.1.0-rc32`: a Lightning deal priced and reported in msat (#134), a runtime FAIL of the settlement or witness check reading failed (#132), and the refreshed monthly fixtures (#126).
+
+- Builds against capsule-viewer `v0.18.1` (rc32 shipped `v0.10.0`), which reads a BTC amount as "N msat". The presentation goldens are rebuilt on it; the two monthly pages are written by capsulectl-book built from evidencebook#387 (the source of capsulectl-book `v0.1.0-rc33`), so they match what that release writes.
 
 - A Lightning deal is priced and reported in msat (evidencebook-deal#133): terms currency `BTC`
   with `amount_minor` counting millisatoshi (10^-11 BTC, the scale of the settlement legs' asset).
