@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `deal standard-history card` and `staple` say why a deal cannot be on the History card (a deal with no priced amount or a currency without ISO 4217 minor units, no finished checkpoint, a declaration or policy changed after the checkpoint, a deal on the old index) instead of the generic masked "operation failed". The message names the deal id and nothing else from the records; every other failure stays masked (#139).
+
 ## v0.1.0-rc33
 
 This release pairs with capsulectl `v0.1.0-rc33` (go.mod requires it).

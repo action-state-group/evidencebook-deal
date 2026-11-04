@@ -7,15 +7,19 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/action-state-group/agent-action-capsule/go/evidencerequest"
 	"github.com/action-state-group/agent-action-capsule/go/standardhistory"
 	"github.com/action-state-group/agent-action-capsule/go/witness"
+	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook"
+	"github.com/action-state-group/evidencebook/dealprofile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -779,4 +783,56 @@ func TestCitesTwoHalves(t *testing.T) {
 	assert.False(t, citesTwoHalves(claims("a")))
 	assert.False(t, citesTwoHalves(claims()))
 	assert.False(t, citesTwoHalves([]byte("not json")))
+}
+
+// A deal the card cannot count says why, with its id and nothing the records
+// hold; every other failure stays masked (evidencebook-deal#139).
+func TestAnUnpricedDealSaysWhyItIsNotOnTheCard(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	// A code with no ISO 4217 minor units, so the check has no amount to count.
+	xts := func(name string) string {
+		b, err := os.ReadFile(filepath.Join(retailDemo, name))
+		require.NoError(t, err)
+		return writeJSON(t, strings.ReplaceAll(string(b), "USD", "XTS"))
+	}
+	dealID := dealRun(t, "open", "--input", xts("open.json"))["deal_id"].(string)
+	dealRun(t, "check", "--deal", dealID, "--input", xts("check-pay.json"))
+	dealRun(t, "note", "--deal", dealID, "--kind", "act", "--input", xts("act-pay.json"))
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+
+	out := filepath.Join(t.TempDir(), "card.json")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", out)
+	require.Error(t, err)
+	shown := cli.SafeError(err)
+	assert.Contains(t, shown, "deal "+dealID+" cannot be on the History card yet")
+	assert.NotContains(t, shown, "XTS")
+	assert.NotContains(t, shown, "627")
+	assert.NotContains(t, shown, "suppressed")
+	assert.Equal(t, 5, cli.ExitCode(err))
+	assert.ErrorIs(t, err, dealprofile.ErrUnpriced, "deal respond still refuses on the cause")
+
+	// A deal respond serves the same refusal, as before.
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--answer")
+	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, cardRequest(t, fullHistory))))
+
+	// The staple says it too, not only the card command.
+	_, err = invoke(t, "", "--profile", "deal", "deal", "standard-history", "staple", "--derivation", "standard_history/1")
+	require.Error(t, err)
+	assert.Contains(t, cli.SafeError(err), "deal "+dealID+" cannot be on the History card yet")
+}
+
+func TestNoCardWithoutATickSaysSo(t *testing.T) {
+	dealFixture(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
+	require.Error(t, err)
+	assert.Equal(t, "stored state conflicts with the selected target or identity: no finished checkpoint yet: run `deal tick` first", cli.SafeError(err))
+	assert.ErrorIs(t, err, errNoTick)
+}
+
+func TestAnUnrelatedCardFailureStaysMasked(t *testing.T) {
+	assert.Contains(t, cli.SafeError(errors.New("sql: secret-dsn failed")), "sensitive details suppressed")
 }
