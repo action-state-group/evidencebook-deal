@@ -3,7 +3,7 @@
 # sticker-trades.json, scripts/studio-replay.sh) lands in fresh seller and buyer
 # stores as ten closed deals each, the buyer's half under the seller's deal id,
 # and a recomputed "price as offered" fold over the seller's exported records finds
-# nine met and the one trade whose commit moved after the buyer accepted.
+# nine met and the one trade whose price changed after the commit (a detail_change to 175).
 #
 #   scripts/check-studio-replay.sh            # uses CAPSULECTL if set, else builds
 #
