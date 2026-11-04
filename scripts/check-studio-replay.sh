@@ -63,9 +63,9 @@ while read -r line; do
       "$(jq '([.[] | select(.type == "action-record/v0" and .body.action == "offer") | .body.amount_minor] == [150])
             and ([.[] | select(.type == "action-approval/v0")] | length == 1)
             and ([.[] | select(.type == "action-record/v0" and .body.action == "commit")] | length == 0)
-            and ([.[] | select(.type == "action-outcome/v0" and .body.status == "unchecked_action")
-                  | select(.body.outcome == "mismatch" and .body.attempted.action == "commit" and .body.attempted.amount_minor == 175
-                           and .body.findings[0].rule == "changed_after_acceptance")] | length == 1)' "$work/seller-$deal.json")"
+            and ([.[] | select(.type == "action-outcome/v0" and .body.status == "unchecked_action")] as $u
+                 | ($u | length) == 1 and ($u[0].body.outcome == "mismatch" and $u[0].body.attempted.action == "commit"
+                   and $u[0].body.attempted.amount_minor == 175 and $u[0].body.findings[0].rule == "changed_after_acceptance"))' "$work/seller-$deal.json")"
   fi
   check "trade $(jq -r .trade <<<"$line"): the buyer's half pays what the buyer was asked" "$(jq -r .paid_minor <<<"$line")" \
     "$(jq '[.[] | select(.type == "action-record/v0" and .body.action == "pay") | .body.amount_minor] | first' "$work/buyer-$deal.json")"
