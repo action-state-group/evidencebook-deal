@@ -807,7 +807,7 @@ func TestAnUnpricedDealSaysWhyItIsNotOnTheCard(t *testing.T) {
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", out)
 	require.Error(t, err)
 	shown := cli.SafeError(err)
-	assert.Contains(t, shown, "deal "+dealID+" cannot be on the History card yet")
+	assert.Contains(t, shown, "deal "+dealID+" can't be counted on the History card yet")
 	assert.NotContains(t, shown, "XTS")
 	assert.NotContains(t, shown, "627")
 	assert.NotContains(t, shown, "suppressed")
@@ -821,7 +821,7 @@ func TestAnUnpricedDealSaysWhyItIsNotOnTheCard(t *testing.T) {
 	// The staple says it too, not only the card command.
 	_, err = invoke(t, "", "--profile", "deal", "deal", "standard-history", "staple", "--derivation", "standard_history/1")
 	require.Error(t, err)
-	assert.Contains(t, cli.SafeError(err), "deal "+dealID+" cannot be on the History card yet")
+	assert.Contains(t, cli.SafeError(err), "deal "+dealID+" can't be counted on the History card yet")
 }
 
 func TestNoCardWithoutATickSaysSo(t *testing.T) {
@@ -829,7 +829,7 @@ func TestNoCardWithoutATickSaysSo(t *testing.T) {
 	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
 	require.Error(t, err)
-	assert.Equal(t, "stored state conflicts with the selected target or identity: no finished checkpoint yet: run `deal tick` first", cli.SafeError(err))
+	assert.Equal(t, "stored state conflicts with the selected target or identity: no finished checkpoint yet: run `deal tick`, then ask again", cli.SafeError(err))
 	assert.ErrorIs(t, err, errNoTick)
 }
 

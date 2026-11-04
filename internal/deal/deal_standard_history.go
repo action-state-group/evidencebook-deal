@@ -403,13 +403,13 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 	}
 	anchor, err := cadence.StandardHistoryAnchor(ctx, tick)
 	if errors.Is(err, evidencebook.ErrNotFound) {
-		return standardHistoryCard{}, shRefusal("no finished checkpoint yet: run `deal tick` first", fmt.Errorf("%w (run `deal tick` first)", errNoTick))
+		return standardHistoryCard{}, shRefusal("no finished checkpoint yet: run `deal tick`, then ask again", fmt.Errorf("%w (run `deal tick` first)", errNoTick))
 	}
 	if err != nil {
 		return standardHistoryCard{}, err
 	}
 	if settings.changedAfter(anchor.Tick.At) {
-		return standardHistoryCard{}, shRefusal(errStaleAnchor.Error(), errStaleAnchor)
+		return standardHistoryCard{}, shRefusal("the declaration or policy changed after the last checkpoint: run `deal tick`, then ask again", errStaleAnchor)
 	}
 	x := s.books()
 	var deals []standardhistory.Deal
@@ -425,7 +425,7 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 		deal, isDeal, err := dealprofile.StandardHistoryDeal(in)
 		if errors.Is(err, dealprofile.ErrUnpriced) {
 			// No currency or amount: the cause says which, the operator needs only the deal.
-			return standardHistoryCard{}, shRefusal("deal "+dealID+" cannot be on the History card yet: its check records no amount, or an amount in a currency that has no ISO 4217 minor units", err)
+			return standardHistoryCard{}, shRefusal("deal "+dealID+" can't be counted on the History card yet: its agreed amount isn't recorded, or its currency is one the card can't count", err)
 		}
 		if err != nil {
 			return standardHistoryCard{}, err
@@ -452,7 +452,7 @@ func (x shelfDealIndex) historyInput(ctx context.Context, keys []ed25519.PublicK
 	if legacy, err := x.isLegacy(ctx, dealID); err != nil {
 		return in, err
 	} else if legacy {
-		return in, shRefusal("deal "+dealID+" is kept on the old index and cannot be counted by the card", fmt.Errorf("deal %s: %w", dealID, errLegacyDeal))
+		return in, shRefusal("deal "+dealID+" was recorded in an older format and can't be counted on the History card", fmt.Errorf("deal %s: %w", dealID, errLegacyDeal))
 	}
 	records, err := x.records(ctx, dealID)
 	if err != nil {
