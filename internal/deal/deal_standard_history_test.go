@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -293,6 +292,9 @@ func TestTheCardIsAsOfItsAnchor(t *testing.T) {
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "x.json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "deal tick")
+	assert.Equal(t, "the History card was not built: the declaration or policy changed after the last checkpoint: run `deal tick`, then ask again", cli.SafeError(err))
+	assert.Equal(t, 1, cli.ExitCode(err))
+	assert.ErrorIs(t, err, errStaleAnchor)
 	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, pinRequest(t, pin))))
 	*now = now.Add(3 * time.Hour)
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
@@ -811,7 +813,7 @@ func TestAnUnpricedDealSaysWhyItIsNotOnTheCard(t *testing.T) {
 	assert.NotContains(t, shown, "XTS")
 	assert.NotContains(t, shown, "627")
 	assert.NotContains(t, shown, "suppressed")
-	assert.Equal(t, 5, cli.ExitCode(err))
+	assert.Equal(t, 1, cli.ExitCode(err), "the exit code is unchanged")
 	assert.ErrorIs(t, err, dealprofile.ErrUnpriced, "deal respond still refuses on the cause")
 
 	// A deal respond serves the same refusal, as before.
@@ -829,10 +831,45 @@ func TestNoCardWithoutATickSaysSo(t *testing.T) {
 	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
 	require.Error(t, err)
-	assert.Equal(t, "stored state conflicts with the selected target or identity: no finished checkpoint yet: run `deal tick`, then ask again", cli.SafeError(err))
+	assert.Equal(t, "the History card was not built: no finished checkpoint yet: run `deal tick`, then ask again", cli.SafeError(err))
 	assert.ErrorIs(t, err, errNoTick)
+	assert.Equal(t, 1, cli.ExitCode(err))
+
+	// Both staples reach the same checkpoint check first and say the same.
+	for _, derivation := range []string{"history_card/1", "standard_history/1"} {
+		dealRun(t, "standard-history", "declare", "--holder-kind", "node", "--answer")
+		_, err = invoke(t, "", "--profile", "deal", "deal", "standard-history", "staple", "--derivation", derivation)
+		require.Error(t, err, derivation)
+		assert.Contains(t, cli.SafeError(err), "no finished checkpoint yet: run `deal tick`, then ask again", derivation)
+		assert.ErrorIs(t, err, errNoTick, derivation)
+	}
 }
 
 func TestAnUnrelatedCardFailureStaysMasked(t *testing.T) {
-	assert.Contains(t, cli.SafeError(errors.New("sql: secret-dsn failed")), "sensitive details suppressed")
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	// A card that is built but cannot be written (the path is a directory): not a refusal, so nothing is shown.
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, cli.SafeError(err), "sensitive details suppressed")
+}
+
+// A deal kept on the old index is said to be, not masked.
+func TestALegacyDealSaysWhyItIsNotOnTheCard(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	legacyDeals(t)
+	dealID := retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "card.json"))
+	require.Error(t, err)
+	assert.Contains(t, cli.SafeError(err), "deal "+dealID+" was recorded in an older format")
+	assert.ErrorIs(t, err, errLegacyDeal)
+	assert.Equal(t, 5, cli.ExitCode(err), "a legacy deal was already a conflict")
 }

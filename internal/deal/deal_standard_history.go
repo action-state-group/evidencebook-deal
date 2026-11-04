@@ -376,7 +376,17 @@ var errLegacyDeal = fmt.Errorf("%w: a deal kept on the old index cannot be count
 // error), so it holds no value from the records: at most a deal id. The cause
 // stays in the chain, so `errors.Is` on it still decides `deal respond`.
 func shRefusal(msg string, cause error) error {
-	return fmt.Errorf("%w: %w", cli.Hint(cli.ErrConflict, msg), cause)
+	return fmt.Errorf("%w: %w", cli.Hint(errCardNotBuilt, msg), cause)
+}
+
+// errCardNotBuilt is the class SafeError prints before a refusal's message.
+// It is no host class, so the exit code stays the cause's own (1, or 5 for a
+// legacy deal's ErrConflict).
+var errCardNotBuilt = errors.New("the History card was not built")
+
+// shNoTick is errNoTick said to the operator, wherever it is found.
+func shNoTick(cause error) error {
+	return shRefusal("no finished checkpoint yet: run `deal tick`, then ask again", cause)
 }
 
 // standardHistory derives the card as of tick n, or the newest finished tick when n is 0. The anchor is the profile's cadence
@@ -403,7 +413,7 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 	}
 	anchor, err := cadence.StandardHistoryAnchor(ctx, tick)
 	if errors.Is(err, evidencebook.ErrNotFound) {
-		return standardHistoryCard{}, shRefusal("no finished checkpoint yet: run `deal tick`, then ask again", fmt.Errorf("%w (run `deal tick` first)", errNoTick))
+		return standardHistoryCard{}, shNoTick(fmt.Errorf("%w (run `deal tick` first)", errNoTick))
 	}
 	if err != nil {
 		return standardHistoryCard{}, err
