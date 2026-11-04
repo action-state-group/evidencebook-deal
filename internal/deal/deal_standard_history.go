@@ -435,7 +435,7 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 		deal, isDeal, err := dealprofile.StandardHistoryDeal(in)
 		if errors.Is(err, dealprofile.ErrUnpriced) {
 			// No currency or amount: the cause says which, the operator needs only the deal.
-			return standardHistoryCard{}, shRefusal("deal "+dealID+" can't be counted on the History card yet: its agreed amount isn't recorded, or its currency is one the card can't count", err)
+			return standardHistoryCard{}, shRefusal("deal "+dealID+" can't be counted yet: its agreed amount isn't recorded, or its currency is one the card can't count", err)
 		}
 		if err != nil {
 			return standardHistoryCard{}, err
@@ -462,7 +462,7 @@ func (x shelfDealIndex) historyInput(ctx context.Context, keys []ed25519.PublicK
 	if legacy, err := x.isLegacy(ctx, dealID); err != nil {
 		return in, err
 	} else if legacy {
-		return in, shRefusal("deal "+dealID+" was recorded in an older format and can't be counted on the History card", fmt.Errorf("deal %s: %w", dealID, errLegacyDeal))
+		return in, shRefusal("deal "+dealID+" was recorded in an older format and can't be counted", fmt.Errorf("deal %s: %w", dealID, errLegacyDeal))
 	}
 	records, err := x.records(ctx, dealID)
 	if err != nil {
