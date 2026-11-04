@@ -37,7 +37,7 @@ func packCheckedUnder(t *testing.T, role string, shape func(pin map[string]any))
 	t.Helper()
 	dealFixture(t)
 	out := `printf '%s' '{"schema":"external-check-result/v0","ruleset_id":"` + packID + `","definition_digest":"` + packDigest +
-		`","verdict":"allow","tier":"recomputed","findings":[{"id":"price_as_offered","check":"price equals the offer","verdict":"pass"}]}'`
+		`","verdict":"allow","tier":"recomputed","findings":[{"id":"price_as_offered","check":"price equals the offer","verdict":"pass"},` + declaredFindings + `]}'`
 	pin := map[string]any{"command": []string{stubChecker(t, "pack", out)}, "definition_digest": packDigest}
 	shape(pin)
 	pinChecker(t, pin)
@@ -114,7 +114,9 @@ func TestTheAdjudicatorCopyNamesADealPackAndNoOther(t *testing.T) {
 		return string(text)
 	}
 	deal := adjudicator(packChecked(t, "deal", dealRoleSeller))
-	assert.Contains(t, deal, "under the seller's terms, pack "+packShown)
+	// Right after the verdict, before the rest of the line (the rules declared but not measured).
+	assert.Contains(t, deal, "no differences, under the seller's terms, pack "+packShown+" (you asked for")
+	assert.Contains(t, deal, "not yet checked: r14, r24, r25")
 	for _, leak := range []string{packID, packDigest} {
 		assert.NotContains(t, deal, leak)
 	}
