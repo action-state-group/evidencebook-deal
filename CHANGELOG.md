@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The receipt names the pack that judged a check (evidencebook-deal#138): the user's own copy reads
+  "Checked before paying: no differences, under <ruleset id>, pack <12 hex>". A counterparty's copy reads
+  "..., under the seller's terms, pack <12 hex>" (the buyer's terms on a buyer's deal) only when the profile's
+  rules-checker pin states `"kind": "deal"` (capsule-cli v0.1.0-rc35) and the check ran the pinned digest. A conduct
+  pack, or a pin that states no kind, is never named to a counterparty or an adjudicator.
+
 - A replay fixture for the Terms Pack Studio first demo (evidencebook-deal#136): ten sticker trades,
   nine clean and one where the seller raised the price after the buyer accepted, and
   `scripts/studio-replay.sh` to replay them into a seller's and a buyer's deal store;
