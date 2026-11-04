@@ -51,11 +51,21 @@ while read -r line; do
             | [.[] | select(.type == "action-record/v0" and .body.action == "commit") | .body.amount_minor] | . == [$o]' \
     "$work/seller-$deal.json" >/dev/null; then
     met=$((met + 1))
+    # A met trade has no unchecked attempt either.
+    check "trade $(jq -r .trade <<<"$line"): no unchecked action" 0 \
+      "$(jq '[.[] | select(.type == "action-outcome/v0" and .body.status == "unchecked_action")] | length' "$work/seller-$deal.json")"
   else
     missed=$((missed + 1))
     missed_trade=$(jq -r .trade <<<"$line")
-    check "the missed trade's sealed commit attempt is its raised price" 175 \
-      "$(jq '[.[] | select(.type == "action-outcome/v0" and .body.status == "unchecked_action") | .body.attempted.amount_minor] | first' "$work/seller-$deal.json")"
+    # The miss is exactly: the offer as made, its acceptance, no sealed commit, and a commit
+    # attempt at the raised price refused as changed after the acceptance.
+    check "the missed trade is sealed as an offer of 150, its acceptance and a refused commit of 175" true \
+      "$(jq '([.[] | select(.type == "action-record/v0" and .body.action == "offer") | .body.amount_minor] == [150])
+            and ([.[] | select(.type == "action-approval/v0")] | length == 1)
+            and ([.[] | select(.type == "action-record/v0" and .body.action == "commit")] | length == 0)
+            and ([.[] | select(.type == "action-outcome/v0" and .body.status == "unchecked_action")
+                  | select(.body.outcome == "mismatch" and .body.attempted.action == "commit" and .body.attempted.amount_minor == 175
+                           and .body.findings[0].rule == "changed_after_acceptance")] | length == 1)' "$work/seller-$deal.json")"
   fi
   check "trade $(jq -r .trade <<<"$line"): the buyer's half pays what the buyer was asked" "$(jq -r .paid_minor <<<"$line")" \
     "$(jq '[.[] | select(.type == "action-record/v0" and .body.action == "pay") | .body.amount_minor] | first' "$work/buyer-$deal.json")"
