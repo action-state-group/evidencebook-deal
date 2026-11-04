@@ -16,12 +16,17 @@ Ten closed `deal` entries per store (`deal list --json`, `kind: "deal"`); the se
 closed `sale` entries.
 
 Read a deal's sealed records with `capsulectl --profile deal deal export --deal ID --output FILE`
-(a JSON array in order, no raw values). Each record has `at` (the replay's own sealed time: the
-CLI cannot backdate, so a whole replay spans a minute or two) and `type`/`body`.
+(a JSON array in order, no raw values). Two shapes, both with the replay's own sealed time (the
+CLI cannot backdate, so a whole replay spans a minute or two):
+
+- the `*/v0` records (`task-authority/v0`, `proposed-action/v0`, `action-evaluation/v0`,
+  `action-record/v0`, `action-approval/v0`, `action-outcome/v0`): `{"type": …, "at": …, "body": …}`;
+- the deal's own records (`baseline`, `evidence`, `close`): `{"body": …, "x-deal-v0": {"record_type":
+  …, "at": …, "seq": …}}`, with **no** top-level `type` or `at`.
 
 ## Seller's records for a clean trade (in order)
 
-| `type` | `body` carries |
+| record (`type`, or `x-deal-v0.record_type`) | `body` carries |
 |---|---|
 | `baseline` | the deal's terms |
 | `task-authority/v0` | the sale's authority |
@@ -32,8 +37,8 @@ CLI cannot backdate, so a whole replay spans a minute or two) and `type`/`body`.
 | `proposed-action/v0` | `action: "commit"`, `amount_minor`, `terms.price_minor` |
 | `action-evaluation/v0` | |
 | `action-record/v0` | `action: "commit"`, `amount_minor` |
-| `evidence` | `source: "x402_settle_response"` (payment received; `at` is its time) |
-| `evidence` | `source: "seller_handoff"` (delivered; `at` is its time) |
+| `evidence` | `source: "x402_settle_response"` (payment received; `x-deal-v0.at` is its time) |
+| `evidence` | `source: "seller_handoff"` (delivered; `x-deal-v0.at` is its time) |
 | `action-outcome/v0` | `status: "received"` |
 | `close` | |
 
@@ -59,5 +64,5 @@ The buyer's half of trade 7 pays 175.
 ## Times
 
 Sealed times are the replay's clock, so "paid before delivered" and "delivered within N days" are
-met by every trade on the sealed `at` of the `x402_settle_response` and `seller_handoff` evidence.
+met by every trade on the sealed `x-deal-v0.at` of the `x402_settle_response` and `seller_handoff` evidence.
 The fixture carries no times.

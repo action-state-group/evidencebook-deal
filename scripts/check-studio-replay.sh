@@ -67,9 +67,17 @@ while read -r line; do
                  | ($u | length) == 1 and ($u[0].body.outcome == "mismatch" and $u[0].body.attempted.action == "commit"
                    and $u[0].body.attempted.amount_minor == 175 and $u[0].body.findings[0].rule == "changed_after_acceptance"))' "$work/seller-$deal.json")"
   fi
+  # the evidence the sibling evaluator reads: one payment, one handoff, each with its sealed time,
+  # the payment first (these records have x-deal-v0.record_type and x-deal-v0.at, no top-level type).
+  check "trade $(jq -r .trade <<<"$line"): payment then handoff, each with a sealed time" true \
+    "$(jq '[.[] | select(.["x-deal-v0"].record_type == "evidence")] as $e
+          | ($e | map(.body.source)) == ["x402_settle_response", "seller_handoff"]
+            and ($e | all(.["x-deal-v0"].at != null)) and $e[0]["x-deal-v0"].at <= $e[1]["x-deal-v0"].at' "$work/seller-$deal.json")"
   check "trade $(jq -r .trade <<<"$line"): the buyer's half pays what the buyer was asked" "$(jq -r .paid_minor <<<"$line")" \
     "$(jq '[.[] | select(.type == "action-record/v0" and .body.action == "pay") | .body.amount_minor] | first' "$work/buyer-$deal.json")"
 done < <(grep '"trade"' "$work/replay.out")
+check "the seller store holds ten closed sales" 10 \
+  "$(side "$work/seller" list --json | jq '[.[] | select(.kind == "sale" and .state == "closed")] | length')"
 check "price as offered met" 9 "$met"
 check "price as offered missed" 1 "$missed"
 check "the missed trade is trade 7" 7 "$missed_trade"
