@@ -1230,8 +1230,13 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 				text = words
 			}
 			text = p.scrub(text)
-			if item.SharedPack != "" && audience == cli.DealAudienceCounterparty {
+			// A deal-kind pack is shared terms: the counterparty's copy (whose Shared text already
+			// says whose terms) and the adjudicator's, who rules by them, carry its fingerprint.
+			switch {
+			case item.SharedPack != "" && audience == cli.DealAudienceCounterparty:
 				text += item.SharedPack
+			case item.SharedPack != "" && audience == cli.DealAudienceAdjudicator:
+				text += item.SharedTerms + item.SharedPack
 			}
 			m := map[string]interface{}{"kind": item.Kind, "text": text, "steps": ids}
 			if item.Self != "" {
