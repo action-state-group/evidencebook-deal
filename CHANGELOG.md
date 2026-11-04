@@ -7,6 +7,8 @@
   "..., under the seller's terms, pack <12 hex>" (the buyer's terms on a buyer's deal) only when the profile's
   rules-checker pin states `"kind": "deal"` (capsule-cli v0.1.0-rc35) and the check ran the pinned digest. A conduct
   pack, or a pin that states no kind, is never named to a counterparty or an adjudicator.
+  Whether a counterparty's copy names the pack is decided from the profile's current pin, not the pin the check ran
+  under (evidencebook-deal#146); the adjudicator copy names no pack yet (evidencebook-deal#145).
 
 - A replay fixture for the Terms Pack Studio first demo (evidencebook-deal#136): ten sticker trades,
   nine clean and one where the seller raised the price after the buyer accepted, and

@@ -2395,12 +2395,13 @@ func actText(a dealAct, currency string) string {
 	return text
 }
 
-// buildDealReport reads the sealed steps into the three parts. It invents
-// nothing: every item points at the steps it was read from.
 // packDigestShown is how many leading hex characters of a pack's definition digest a receipt
 // line shows: the length studio's publish prints it at.
 const packDigestShown = 12
 
+// buildDealReport reads the sealed steps into the three parts. It invents
+// nothing: every item points at the steps it was read from. pin is the profile's rules
+// checker pin: it decides whether a counterparty's copy may name the pack.
 func buildDealReport(events []sealedEvent, pin cli.ProfileRulesChecker) dealReport {
 	open := events[0].Event.Open
 	openID := events[0].CapsuleID
