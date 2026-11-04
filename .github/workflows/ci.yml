@@ -179,6 +179,23 @@ jobs:
           CHROME: google-chrome
         run: bash scripts/check-portability.sh
 
+  studio-replay:
+    # The Terms Pack Studio replay fixture lands in fresh seller and buyer stores
+    # (scripts/check-studio-replay.sh).
+    name: studio replay fixture lands in both stores
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Replay ten sticker trades into a seller and a buyer store
+        run: bash scripts/check-studio-replay.sh
+
   presentation-pass:
     # The presentation goldens' bundles through `presentation list` and
     # `presentation build` (internal/deal/presentation_pass_test.go), each
