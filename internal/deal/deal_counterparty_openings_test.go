@@ -335,3 +335,29 @@ func TestThePayeeTheUserApprovedIsNamedOnTheReceipt(t *testing.T) {
 		}
 	}
 }
+
+// An act before a switch to another counterparty went to the earlier one: the
+// receipt names the one the deal switched to, not the earlier payee beside
+// the new site.
+func TestAPayeeBeforeASwitchIsNotNamedBesideTheNewCounterparty(t *testing.T) {
+	dealFixture(t)
+	id := dealRun(t, "open", "--input", writeJSON(t, fawnOpen))["deal_id"].(string)
+	pay := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"authorized_max_minor":190,"who":{"payee":"sticker-payouts-2"},"terms":{"item":"Fawn Sticker","price_minor":175},"recourse":{"rail":"card","refundable":true}}`))
+	_, err := answer(t, id, pay["check_id"].(string), "yes, the new payee is fine", shownCard(t, pay["card"].(string)))
+	require.NoError(t, err)
+	dealRun(t, "note", "--deal", id, "--kind", "act", "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"payee":"sticker-payouts-2","rail":"card"}`))
+	dealRun(t, "note", "--deal", id, "--kind", "intent", "--input", writeJSON(t, `{"verbatim":"lets change to ebay","who":{"name":"eBay","domain":"ebay.com"}}`))
+
+	got := map[string]string{}
+	r := sealedReport(t, ownReport(t, id))
+	if cp, ok := r["counterparty_openings"].(map[string]interface{}); ok {
+		for _, e := range cp["steps"].([]interface{}) {
+			for kind, v := range e.(map[string]interface{}) {
+				if kind != "step" {
+					got[kind] = v.(string)
+				}
+			}
+		}
+	}
+	assert.Equal(t, map[string]string{"name": "eBay", "domain": "ebay.com"}, got)
+}

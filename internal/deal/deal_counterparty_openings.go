@@ -60,7 +60,8 @@ func recordCounterpartyIDs(record map[string]interface{}) map[string]interface{}
 // about a named recipient (a platform, someone else) names none.
 func endingWho(state dealState, events []sealedEvent) dealWho {
 	who := state.who
-	for i := len(events) - 1; i >= 0; i-- {
+	// An act before the leg in force went to the earlier counterparty.
+	for i := len(events) - 1; i >= currentLegStart(events); i-- {
 		act := events[i].Event.Act
 		if act == nil {
 			continue
