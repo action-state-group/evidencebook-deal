@@ -441,6 +441,7 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 			return standardHistoryCard{}, err
 		}
 		if isDeal {
+			deal.Disputes = disputesOf(in.Records, deal.Role)
 			deals = append(deals, deal)
 		}
 	}

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `deal note --kind dispute` and `--kind ruling` (evidencebook-deal#151, Terms Pack Studio step 6). They stand in for
+  the dispute and ruling record kinds until those land and add no record family and no schema: each seals an evidence
+  step whose `source` is `dispute` (the buyer's, once per deal), `ruling_for_buyer` or `ruling_for_seller` (the
+  referee's one ruling, final at once). The ruling digest is the SHA-256 of the ruling body, which names both
+  parties' adjudicator copies, so the same body written to both stores gives the same digest. The receipt reads
+  `Ruling <12 hex> on "price as offered": found for the buyer` on both parties' own copies and on the counterparty's
+  shared copy. The standard history card's `disputes` tally is filled from it: raised for a buyer, received for a
+  seller, `for` or `against` the holder, forum `external`; a dispute with no ruling yet counts as open.
 - The sealed check now records the terms pack's `kind` (evidencebook-deal#146). A counterparty's or adjudicator's
   copy names the pack only when the kind sealed with the check is exactly `deal` and the profile still pins that
   pack for the party's role. Sharing follows the sealed kind, never the profile's current pin. Checks sealed

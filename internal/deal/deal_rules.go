@@ -2504,6 +2504,14 @@ func buildDealReport(events []sealedEvent, pin cli.ProfileRulesChecker) dealRepo
 			if e.Evidence.Who != nil {
 				changedWho(*e.Evidence.Who, se.CapsuleID)
 			}
+			// The referee's one ruling: the same line on both parties' receipts. The digest is
+			// kept apart so a shared copy can place it after its scrubbing (deal_share.go).
+			if e.Evidence.Source == sourceRulingBuyer || e.Evidence.Source == sourceRulingSell {
+				if ru, ok := rulingOfEvent(e); ok {
+					words, hex := rulingLine(ru)
+					r.Did = append(r.Did, dealReportItem{Kind: "ruling", Text: "Ruling " + hex + " " + words, Steps: []string{se.CapsuleID}, At: e.At, OwnPack: " " + hex, SharedPack: " " + hex})
+				}
+			}
 		case "check":
 			verdict := map[string]string{"pass": "no differences", "pause": "flagged", "deny": "not allowed by your rules"}[e.Check.Verdict]
 			checkItem[se.CapsuleID] = len(r.Did)
