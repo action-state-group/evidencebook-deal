@@ -71,7 +71,7 @@ func TestTheRulingDigestIsTheSameWhicheverStoreItIsWrittenTo(t *testing.T) {
 	var digests []string
 	for range 2 {
 		dealFixture(t)
-		id := retailDeal(t)
+		id := openTyped(t, sellerTyped)
 		// the copies in the other order: the body sorts them.
 		first, second := a, b
 		if len(digests) == 1 {
@@ -165,4 +165,83 @@ func TestDisputesOfReadsTheRecordsUnderTheAnchor(t *testing.T) {
 	assert.Equal(t, "", got([]dealprofile.HistoryRecord{rec("dispute")}, "provided"), "a seller's store holds no dispute of its own")
 	assert.Equal(t, "", got([]dealprofile.HistoryRecord{other}, "bought"), "only an evidence record counts")
 	assert.Equal(t, "", got(nil, "bought"))
+}
+
+func TestARulingCitesTheDisputeTheStoreHolds(t *testing.T) {
+	dealFixture(t)
+	id := retailDeal(t)
+	a, b := adjudicatorCopies(t)
+	run := func(row, digest, finding string) error {
+		_, err := invoke(t, "", "--profile", "deal", "deal", "note", "--deal", id, "--kind", "ruling", "--row", row, "--finding", finding,
+			"--referee", "demo-referee", "--dispute-digest", digest, "--copy", a, "--copy", b)
+		return err
+	}
+	require.ErrorContains(t, run("price_as_offered", someDigest, "for_buyer"), "holds no dispute")
+	d := disputeNote(t, id)["dispute_digest"].(string)
+	require.ErrorContains(t, run("price_as_offered", someDigest, "for_buyer"), "must cite this deal's dispute")
+	require.ErrorContains(t, run("other_row", d, "for_buyer"), "must cite this deal's dispute")
+	require.NoError(t, run("price_as_offered", d, "for_buyer"))
+	// final at once: no dispute after the ruling, and no second ruling.
+	_, err := invoke(t, "", "--profile", "deal", "deal", "note", "--deal", id, "--kind", "dispute", "--row", "price_as_offered", "--words", "late")
+	require.ErrorContains(t, err, "already holds a ruling")
+	require.ErrorContains(t, run("price_as_offered", d, "for_seller"), "already holds a ruling")
+}
+
+// The dispute's reference is the sealed step's record digest, which commits to a salted detail: the same
+// words and row give a different digest on another deal, so the seller cannot test a guess at the words.
+func TestTheDisputeReferenceDoesNotLetTheSellerTestAGuess(t *testing.T) {
+	var digests []string
+	for range 2 {
+		dealFixture(t)
+		digests = append(digests, disputeNote(t, retailDeal(t))["dispute_digest"].(string))
+	}
+	assert.NotEqual(t, digests[0], digests[1])
+}
+
+// A deal the referee rules on is closed by then: the dispute and the ruling are bound to the close like any
+// later record, but neither reads as confirming it, and the receipt and the card still carry the ruling.
+func TestADisputeAndRulingAfterTheCloseDoNotConfirmIt(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	id := retailDeal(t)
+	dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"received"}`))
+	a, b := adjudicatorCopies(t)
+	d := disputeNote(t, id)
+	dealRun(t, "note", "--deal", id, "--kind", "ruling", "--row", "price_as_offered", "--finding", "for_seller",
+		"--referee", "demo-referee", "--dispute-digest", d["dispute_digest"].(string), "--copy", a, "--copy", b)
+	text := receiptText(t, id, false)
+	assert.Contains(t, text, `found for the seller`)
+	assert.NotContains(t, text, "confirms")
+	assert.NotContains(t, text, "unverified")
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	own := filepath.Join(t.TempDir(), "own.json")
+	dealRun(t, "standard-history", "card", "--out", own)
+	entry := shBlock(t, readBundle(t, own))["deals"].([]any)[0].(map[string]any)
+	assert.Equal(t, []any{map[string]any{"side": "raised", "outcome": "against", "forum": "external"}}, entry["disputes"])
+}
+
+// The seller's store holds only the ruling; its receipt reads the same line as the buyer's.
+func TestTheSellersReceiptReadsTheSameRulingLine(t *testing.T) {
+	a, b := adjudicatorCopies(t)
+	var lines []string
+	ref := ""
+	for _, role := range []string{"buyer", "seller"} {
+		dealFixture(t)
+		var id, digest string
+		if role == "buyer" {
+			id = retailDeal(t)
+			digest = disputeNote(t, id)["dispute_digest"].(string)
+			ref = digest
+		} else {
+			id, digest = openTyped(t, sellerTyped), ref
+		}
+		r := dealRun(t, "note", "--deal", id, "--kind", "ruling", "--row", "price_as_offered", "--finding", "for_buyer",
+			"--referee", "demo-referee", "--dispute-digest", digest, "--copy", a, "--copy", b)
+		lines = append(lines, "Ruling "+r["ruling_digest"].(string)[:rulingShown]+` on \"price as offered\": found for the buyer`)
+		assert.Contains(t, receiptText(t, id, false), lines[len(lines)-1], role)
+		assert.Contains(t, receiptText(t, id, true), lines[len(lines)-1], role+" shared")
+	}
+	assert.Equal(t, lines[0], lines[1])
 }

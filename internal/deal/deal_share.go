@@ -1093,6 +1093,13 @@ func dealShareStepLine(e dealEvent, audience string, p dealPrivate, currency str
 		}
 		return "Claim recorded (withheld)"
 	case "evidence":
+		if e.Evidence.Source == sourceDispute {
+			return "A dispute was recorded"
+		}
+		if r, ok := rulingOfEvent(e); ok {
+			line, _ := rulingLine(r)
+			return "Ruling " + line
+		}
 		state := "not verified"
 		if e.Evidence.Verified {
 			state = "verified"

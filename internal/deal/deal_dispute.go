@@ -138,38 +138,55 @@ func disputeNoteEvent(c *cobra.Command, kind string) (dealEvent, error) {
 	return dealEvent{Kind: "evidence", Evidence: &dealEvidence{About: row, Source: source, Detail: detail}}, nil
 }
 
-// checkDisputeNote holds a dispute or a ruling to the deal it is sealed on: the buyer disputes,
-// once; one ruling per deal, whichever party's store holds it.
+// checkDisputeNote holds a dispute or a ruling to the deal it is sealed on: the buyer disputes, once and
+// only before the ruling; one ruling per deal, whichever party's store holds it. Where the store holds
+// the dispute (the buyer's), the ruling must cite that dispute's record digest and its row; the
+// seller's store holds no dispute, so it takes the ruling's citation as given.
 func checkDisputeNote(events []sealedEvent, ev dealEvent) error {
 	source := ev.Evidence.Source
-	for _, se := range events {
+	var dispute *sealedEvent
+	ruled := false
+	for i, se := range events {
 		if se.Event.Evidence == nil {
 			continue
 		}
-		prior := se.Event.Evidence.Source
-		switch {
-		case source == sourceDispute && prior == sourceDispute:
-			return cli.InputError("this deal already holds a dispute: one dispute per deal")
-		case source != sourceDispute && (prior == sourceRulingBuyer || prior == sourceRulingSell):
-			return cli.InputError("this deal already holds a ruling: a ruling is final, and there is no second one")
+		switch se.Event.Evidence.Source {
+		case sourceDispute:
+			dispute = &events[i]
+		case sourceRulingBuyer, sourceRulingSell:
+			ruled = true
 		}
 	}
-	if source == sourceDispute && dealRole(events) != dealRoleBuyer {
+	switch {
+	case source == sourceDispute && dealRole(events) != dealRoleBuyer:
 		return cli.InputError("the buyer disputes: this deal's user is the seller, whose store takes the ruling")
+	case ruled:
+		return cli.InputError("this deal already holds a ruling: a ruling is final, and there is no second one")
+	case source == sourceDispute && dispute != nil:
+		return cli.InputError("this deal already holds a dispute: one dispute per deal")
+	case source == sourceDispute:
+		return nil
+	case dealRole(events) == dealRoleBuyer && dispute == nil:
+		return cli.InputError("this deal holds no dispute to rule on: the buyer disputes first (deal note --kind dispute)")
+	case dispute != nil:
+		var b rulingBody
+		if err := json.Unmarshal([]byte(ev.Evidence.Detail), &b); err != nil {
+			return err
+		}
+		if b.Dispute != disputeRef(dispute.Digest) || b.Row != dispute.Event.Evidence.About {
+			return cli.InputError("the ruling must cite this deal's dispute: its --dispute-digest and --row are the ones the dispute note printed")
+		}
 	}
 	return nil
 }
 
-// rulingOf is a deal's one ruling as its store holds it: the finding, its row, the digest of the
-// ruling body and, where the buyer sealed one, the dispute's words are not needed here.
+// rulingOf is a deal's one ruling as its store holds it: its row, who it found for, and the digest of
+// its body.
 type rulingOf struct {
 	Row      string
 	ForBuyer bool
 	Digest   string
-	Body     rulingBody
 }
-
-func (r rulingOf) forUser(role string) bool { return r.ForBuyer == (role == dealRoleBuyer) }
 
 // rulingOfEvent reads a ruling step. ok is false for any other step, and for a ruling whose body
 // does not read, so a ruling the store cannot read is not counted.
@@ -182,7 +199,7 @@ func rulingOfEvent(e dealEvent) (rulingOf, bool) {
 	if json.Unmarshal([]byte(ev.Detail), &b) != nil {
 		return rulingOf{}, false
 	}
-	return rulingOf{Row: ev.About, ForBuyer: ev.Source == sourceRulingBuyer, Digest: bodyDigest(ev.Detail), Body: b}, true
+	return rulingOf{Row: ev.About, ForBuyer: ev.Source == sourceRulingBuyer, Digest: bodyDigest(ev.Detail)}, true
 }
 
 // rulingIn finds the ruling a deal's events hold.
@@ -194,6 +211,12 @@ func rulingIn(events []sealedEvent) (rulingOf, bool) {
 	}
 	return rulingOf{}, false
 }
+
+// disputeRef is the reference a ruling cites for a dispute: the SHA-256 of the dispute step's record digest.
+// The record digest commits to the dispute's salted detail, so the reference cannot be tested against a
+// guess at the buyer's words; and it is not the record digest itself, which a shared copy lists, so the
+// ruling's sealed detail never holds a value the page carries.
+func disputeRef(recordDigest string) string { return bodyDigest("dispute-ref:" + recordDigest) }
 
 // rowWords reads a row token as words ("price_as_offered" is "price as offered").
 func rowWords(row string) string { return strings.ReplaceAll(row, "_", " ") }
