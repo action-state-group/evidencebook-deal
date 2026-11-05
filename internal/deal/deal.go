@@ -1949,6 +1949,7 @@ func dealNoteCommand() *cobra.Command {
 	cmd.Flags().String("finding", "", "ruling: for_buyer or for_seller")
 	cmd.Flags().String("referee", "", "ruling: who rules")
 	cmd.Flags().String("dispute-digest", "", "ruling: the dispute_digest the dispute note printed")
+	cmd.Flags().String("ruling-digest", "", "ruling, in the second store: the ruling_digest the first store printed; a ruling that differs is refused")
 	cmd.Flags().StringArray("copy", nil, "ruling: each party's `disclose --share adjudicator` file, the two `terms-result --check` ran over")
 	cmd.Flags().String("words", "", "acceptance: the counterparty's words accepting the offer, exactly as given (committed, never stored); dispute: what the buyer says was wrong")
 	cmd.Flags().String("channel", "", "acceptance: the channel the counterparty accepted on (x-deal-v0's channel set)")

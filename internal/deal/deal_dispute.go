@@ -135,6 +135,11 @@ func disputeNoteEvent(c *cobra.Command, kind string) (dealEvent, error) {
 	if err != nil {
 		return dealEvent{}, err
 	}
+	// The second store's ruling names the first one's digest, so a flag mistyped there is refused instead of
+	// sealed for good with a digest that differs from the other party's.
+	if want := flag("ruling-digest"); want != "" && kind == noteKindRuling && want != bodyDigest(detail) {
+		return dealEvent{}, cli.InputError("this ruling's digest is not " + want + ": it differs from the other store's ruling in a flag (--row, --finding, --referee, --dispute-digest or a --copy file)")
+	}
 	return dealEvent{Kind: "evidence", Evidence: &dealEvidence{About: row, Source: source, Detail: detail}}, nil
 }
 

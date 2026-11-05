@@ -287,3 +287,22 @@ func TestTheSharedCopyKeepsTheRulingAndWithholdsTheDispute(t *testing.T) {
 	assert.Contains(t, string(raw), "ruling_for_buyer", "the ruling record is shared")
 	assert.NotContains(t, string(raw), `"dispute"`, "the dispute record is withheld")
 }
+
+// The second store's ruling must come out as the first one's: --ruling-digest refuses a flag that differs.
+func TestTheSecondStoresRulingMustMatchTheFirst(t *testing.T) {
+	a, b := adjudicatorCopies(t)
+	dealFixture(t)
+	first := dealRun(t, "note", "--deal", openTyped(t, sellerTyped), "--kind", "ruling", "--row", "price_as_offered", "--finding", "for_buyer",
+		"--referee", "demo-referee", "--dispute-digest", someDigest, "--copy", a, "--copy", b)["ruling_digest"].(string)
+	dealFixture(t)
+	id := openTyped(t, sellerTyped)
+	run := func(finding string) (string, error) {
+		return invoke(t, "", "--profile", "deal", "deal", "note", "--deal", id, "--kind", "ruling", "--row", "price_as_offered", "--finding", finding,
+			"--referee", "demo-referee", "--dispute-digest", someDigest, "--copy", a, "--copy", b, "--ruling-digest", first)
+	}
+	_, err := run("for_seller")
+	require.ErrorContains(t, err, "differs from the other store's ruling")
+	out, err := run("for_buyer")
+	require.NoError(t, err, out)
+	assert.Contains(t, out, first)
+}
