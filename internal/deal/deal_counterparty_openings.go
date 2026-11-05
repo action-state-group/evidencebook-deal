@@ -13,57 +13,21 @@ import (
 // not the deal key either, which would let a holder test a guessed name
 // against counterparty.ids.name.
 //
-// counterparty_openings holds the deal's key and, per step whose sealed
-// record carries a keyed counterparty fingerprint, the raw payee, name and domain
-// that fingerprint was made from. acceptance_openings holds, per acceptance,
+// counterparty_openings holds the deal's key and, for the counterparty the
+// deal ends with, the payee, name and domain, each at a step whose sealed
+// record carries the keyed fingerprint it was made into. acceptance_openings holds, per acceptance,
 // its salted words (content_commitment). Both are left out when the deal has
 // none, so a deal sealed before this change reports as it did.
 
 // counterpartyOpeningKinds are the fingerprints a page may open.
 var counterpartyOpeningKinds = []string{"payee", "name", "domain"}
 
-// eventWhos are every counterparty identity a step names.
-func eventWhos(ev dealEvent) []dealWho {
-	var out []dealWho
-	add := func(w *dealWho) {
-		if w != nil {
-			out = append(out, *w)
-		}
-	}
-	if ev.Open != nil {
-		out = append(out, ev.Open.Who)
-	}
-	for _, in := range []*dealIntent{ev.Intent, ev.TaskAuthority} {
-		if in != nil {
-			add(in.Who)
-		}
-	}
-	if ev.Message != nil {
-		add(ev.Message.Who)
-	}
-	if ev.Evidence != nil {
-		add(ev.Evidence.Who)
-	}
-	if ev.Change != nil {
-		add(ev.Change.Who)
-	}
-	if ev.Snapshot != nil {
-		add(ev.Snapshot.Who)
-	}
-	// A chosen leg's counterparty. A disclosure's recipient is not the deal's
-	// counterparty, so its who is never opened.
-	if ev.AgentMove != nil {
-		add(ev.AgentMove.Who)
-	}
-	return out
-}
-
 func whoValue(w dealWho, kind string) string {
 	switch kind {
 	case "domain":
 		return w.Domain
 	case "payee":
-		return legFirstContact(w).Payee
+		return w.Payee
 	}
 	return w.Name
 }
@@ -90,41 +54,48 @@ func recordCounterpartyIDs(record map[string]interface{}) map[string]interface{}
 	return nil
 }
 
-// counterpartyOpenings opens the payee, the name and the domain each step's sealed
-// counterparty fingerprints were made from, or nil when none were.
+// counterpartyOpenings opens the counterparty the deal ends with, as the OK
+// card names them: foldDeal's who (cardWho's source), its payee, name and
+// domain, each opened at the last step whose sealed fingerprint it recomputes
+// to. It is nil when none is.
 func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface{} {
 	if len(key) == 0 {
 		return nil
 	}
-	var whos []dealWho
-	for _, se := range events {
-		whos = append(whos, eventWhos(se.Event)...)
+	state, err := foldDeal(events)
+	if err != nil {
+		return nil
 	}
-	steps := []interface{}{}
+	sealed := make([]map[string]interface{}, len(events))
 	var before []sealedEvent
-	for _, se := range events {
+	for i, se := range events {
 		payload, _, err := encodeDealRecord(se.Event, before, key)
 		before = append(before, se)
-		if err != nil {
+		if err == nil {
+			sealed[i] = sealedCounterpartyIDs(payload)
+		}
+	}
+	byStep := map[int]map[string]interface{}{}
+	for _, kind := range counterpartyOpeningKinds {
+		value := whoValue(state.who, kind)
+		want, err := dealprofile.Fingerprint(key, kind, value)
+		if value == "" || err != nil {
 			continue
 		}
-		ids := sealedCounterpartyIDs(payload)
-		entry := map[string]interface{}{"step": se.CapsuleID}
-		for _, kind := range counterpartyOpeningKinds {
-			want, _ := ids[kind].(string)
-			if want == "" {
-				continue
-			}
-			for _, w := range whos {
-				value := whoValue(w, kind)
-				if got, err := dealprofile.Fingerprint(key, kind, value); err == nil && got == want {
-					entry[kind] = value
-					break
+		for i := len(events) - 1; i >= 0; i-- {
+			if got, _ := sealed[i][kind].(string); got == want {
+				if byStep[i] == nil {
+					byStep[i] = map[string]interface{}{"step": events[i].CapsuleID}
 				}
+				byStep[i][kind] = value
+				break
 			}
 		}
-		if len(entry) > 1 {
-			steps = append(steps, entry)
+	}
+	steps := []interface{}{}
+	for i := range events {
+		if e := byStep[i]; e != nil {
+			steps = append(steps, e)
 		}
 	}
 	if len(steps) == 0 {

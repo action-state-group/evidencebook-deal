@@ -221,8 +221,8 @@ func TestARepeatedStepVerifiesOnlyItsFirstOpening(t *testing.T) {
 }
 
 // The receipt names the counterparty as the OK card does (the payee, else the
-// name, the site in brackets), from the last step that names one, and shows
-// only what recomputed: a value that did not is never shown, and nor are a
+// name, the site in brackets), field by field from the last entry that names
+// it, and shows only what recomputed: a value that did not is never shown, and nor are a
 // repeated step's later entries or an acceptance that did not verify.
 func TestTheReceiptShowsOnlyWhatRecomputed(t *testing.T) {
 	steps := func(entries ...map[string]any) map[string]any {
@@ -253,6 +253,12 @@ func TestTheReceiptShowsOnlyWhatRecomputed(t *testing.T) {
 			{"report": steps(map[string]any{"step": "", "name": "Evil"}), "checked": map[string]any{}},
 			// the buyer's words: shown when they recomputed only.
 			{"report": withAcceptances(map[string]any{}, "yes", "no"), "checked": map[string]any{"acceptances": []any{true, false}}},
+			// the last step's values did not recompute: nobody is named, not the step before.
+			{"report": steps(map[string]any{"step": "a", "name": "Alice"}, map[string]any{"step": "b", "name": "Bob"}),
+				"checked": map[string]any{"counterparty": []any{map[string]any{"name": true}, map[string]any{"name": false}}}},
+			// a payment names only the payee: the opening's site stays.
+			{"report": steps(map[string]any{"step": "a", "name": "Air", "domain": "air.example"}, map[string]any{"step": "b", "payee": "Air Pay"}),
+				"checked": map[string]any{"counterparty": []any{map[string]any{"name": true, "domain": true}, map[string]any{"payee": true}}}},
 			// a deal with nothing to open.
 			{"report": map[string]any{}, "checked": map[string]any{}},
 		},
@@ -267,6 +273,35 @@ func TestTheReceiptShowsOnlyWhatRecomputed(t *testing.T) {
 	assert.Equal(t, true, line(2)["whoBad"])
 	assert.Equal(t, []any{map[string]any{"step": "s", "text": "yes"}, map[string]any{}}, line(3)["accepted"])
 	assert.Equal(t, "", line(4)["who"])
-	assert.Equal(t, false, line(4)["whoBad"])
-	assert.Empty(t, line(4)["accepted"])
+	assert.Equal(t, true, line(4)["whoBad"])
+	assert.Equal(t, "Air Pay (air.example)", line(5)["who"])
+	assert.Equal(t, "", line(6)["who"])
+	assert.Equal(t, false, line(6)["whoBad"])
+	assert.Empty(t, line(6)["accepted"])
+}
+
+// The counterparty is who the deal ends with, as the OK card names them: a
+// change of site and payee after the opening replaces those two, the name the
+// opening gave stays, and every value is opened at a step whose sealed
+// fingerprint it recomputes to.
+func TestTheCounterpartyOpenedIsTheOneTheDealEndsWith(t *testing.T) {
+	dealFixture(t)
+	id := openTypedFlight(t)
+	b := ownReport(t, id)
+	got := map[string]string{}
+	for _, e := range sealedReport(t, b)["counterparty_openings"].(map[string]interface{})["steps"].([]interface{}) {
+		for kind, v := range e.(map[string]interface{}) {
+			if kind != "step" {
+				got[kind] = v.(string)
+			}
+		}
+	}
+	assert.Equal(t, map[string]string{"name": "Example Air", "domain": "travel-super-discount.example", "payee": "Travel Super Discount"}, got)
+	out, err := dealPageOpenings(b)
+	require.NoError(t, err)
+	for _, kinds := range out["counterparty"].([]interface{}) {
+		for kind, ok := range kinds.(map[string]interface{}) {
+			assert.Equal(t, true, ok, kind)
+		}
+	}
 }

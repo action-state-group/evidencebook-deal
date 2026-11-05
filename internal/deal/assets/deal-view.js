@@ -23,25 +23,29 @@
 // dealOpeningLines reads the owner's copy openings of who the deal was with and
 // what the buyer wrote (evidencebook-deal#56) against what capsulectl
 // recomputed when it built the page (page.openings, one result per opening, in
-// order). The counterparty is the last step's, named as the OK card names
-// them: the payee, else the name, then the site in brackets; one value that did
-// not recompute is never shown and sets whoBad. An acceptance is shown only
+// order). The counterparty is named as the OK card names them: the payee, else
+// the name, then the site in brackets; a value that did not recompute is never
+// shown and sets whoBad. An acceptance is shown only
 // when it recomputed.
 function dealOpeningLines(report, checkedBy) {
   const list = report && report.counterparty_openings && Array.isArray(report.counterparty_openings.steps) ? report.counterparty_openings.steps : [];
-  let who = "";
+  const got = {};
   let whoBad = false;
   list.forEach((e, i) => {
     const ok = (Array.isArray(checkedBy.counterparty) && checkedBy.counterparty[i]) || {};
-    const got = {};
     ["payee", "name", "domain"].forEach((kind) => {
       if (!e || typeof e[kind] !== "string") return;
+      // The last entry for a field decides it; one that did not recompute
+      // leaves the field unnamed rather than an earlier entry's value.
       if (ok[kind] === true) got[kind] = e[kind];
-      else whoBad = true;
+      else {
+        delete got[kind];
+        whoBad = true;
+      }
     });
-    const label = got.payee || got.name || got.domain;
-    if (label) who = got.domain && label !== got.domain ? `${label} (${got.domain})` : label;
   });
+  const label = got.payee || got.name || got.domain;
+  const who = !label ? "" : got.domain && label !== got.domain ? `${label} (${got.domain})` : label;
   const accepted = (Array.isArray(report && report.acceptance_openings) ? report.acceptance_openings : []).map((a, i) =>
     a && Array.isArray(checkedBy.acceptances) && checkedBy.acceptances[i] === true && typeof a.text === "string" ? { step: a.step, text: a.text } : {},
   );
