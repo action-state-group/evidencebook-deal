@@ -893,7 +893,9 @@ func TestCardRightAfterDeclareAndTickInTheSameMinute(t *testing.T) {
 
 	*now = now.Add(10 * time.Second)
 	dealRun(t, "standard-history", "policy", "--months", "6")
-	// A tick that is not due cuts nothing, so it must not move the recorded cut.
+	// A tick that is not due cuts nothing, so it must not move the recorded cut:
+	// retried later (still before its due time) it would otherwise admit the change.
+	*now = now.Add(10 * time.Second)
 	assert.Equal(t, "not_due", dealRun(t, "tick")["state"])
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "x.json"))
 	require.Error(t, err)
@@ -923,4 +925,22 @@ func TestCutOfFallsBackToTheCoarseTime(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, shCutFile), []byte("not json"), 0o600))
 	assert.Equal(t, coarse, cutOf(p, 1, coarse), "a corrupt record")
+}
+
+// A cut-time file the settings check refuses (here, group and world readable)
+// costs the card its sharper guard, never the tick itself.
+func TestATickSurvivesARefusedCutFile(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 5, 0, time.UTC))
+	retailDeal(t)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	dir, err := shDir(p)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(filepath.Join(dir, shCutFile), 0o644))
+	*now = now.Add(3 * time.Hour)
+	tick := dealRun(t, "tick")
+	assert.Equal(t, "ticked", tick["state"])
+	assert.Equal(t, true, tick["cut_time_not_recorded"])
 }

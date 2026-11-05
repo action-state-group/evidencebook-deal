@@ -476,7 +476,7 @@ func (s *dealSession) standardHistory(ctx context.Context, tick uint64) (standar
 	if settings.changedAfter(cutOf(s.p, anchor.Tick.N, anchor.Tick.At)) {
 		msg := "the declaration or policy changed after the last checkpoint: run `deal tick`, then ask again"
 		if last, ok, err := cadence.Last(ctx); err == nil && ok && last.DueNext.After(cli.DealClock()) {
-			msg = "the declaration or policy changed after the last checkpoint, and the next checkpoint can be cut at " + last.DueNext.UTC().Format(time.RFC3339) + ": run `deal tick` then, and ask again"
+			msg = "the declaration or policy changed after the last checkpoint. The next checkpoint can be cut at " + last.DueNext.UTC().Format(time.RFC3339) + "; run `deal tick` then and ask again"
 		}
 		return standardHistoryCard{}, fmt.Errorf("%w: %w", cli.Hint(errCardNotYet{}, msg), errStaleAnchor)
 	}
