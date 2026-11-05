@@ -91,6 +91,9 @@ func (s *dealSession) tick(ctx context.Context) (map[string]any, error) {
 	}
 	out := map[string]any{"cadence_log": p.LogID}
 	if result.Ticked {
+		if err := recordSHCut(p, result.Tick.N, now); err != nil {
+			return nil, err
+		}
 		out["state"], out["tick"], out["checkpoint"], out["due"] = "ticked", result.Tick.N, result.Tick.CheckpointSize, result.Tick.DueNext.Format(time.RFC3339)
 	} else {
 		out["state"], out["due"] = "not_due", result.DueNext.Format(time.RFC3339)

@@ -293,7 +293,7 @@ func TestTheCardIsAsOfItsAnchor(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "deal tick")
 	assert.Equal(t, "the History card was not built: the declaration or policy changed after the last checkpoint: run `deal tick`, then ask again", cli.SafeError(err))
-	assert.Equal(t, 1, cli.ExitCode(err))
+	assert.Equal(t, 4, cli.ExitCode(err))
 	assert.ErrorIs(t, err, errStaleAnchor)
 	assert.Equal(t, evidencebook.ReasonCoverageUnsatisfiable, refusedWith(t, respondCard(t, pinRequest(t, pin))))
 	*now = now.Add(3 * time.Hour)
@@ -872,4 +872,31 @@ func TestALegacyDealSaysWhyItIsNotOnTheCard(t *testing.T) {
 	assert.Contains(t, cli.SafeError(err), "deal "+dealID+" was recorded in an older format")
 	assert.ErrorIs(t, err, errLegacyDeal)
 	assert.Equal(t, 5, cli.ExitCode(err), "a legacy deal was already a conflict")
+}
+
+// The documented order on a new profile (declare, tick, card) works when the
+// tick is cut in the same minute as the declaration: a tick's stored time is
+// coarsened to the minute, so the guard reads the real cut time. A change made
+// after the tick, even in that same minute, is still refused, and the refusal
+// says when the next tick is due and is no fault of the device (evidencebook-deal#153).
+func TestCardRightAfterDeclareAndTickInTheSameMinute(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 5, 0, time.UTC))
+	retailDeal(t)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "person")
+	*now = now.Add(10 * time.Second)
+	tick := dealRun(t, "tick")
+	require.Equal(t, "ticked", tick["state"])
+	out := filepath.Join(t.TempDir(), "card.json")
+	dealRun(t, "standard-history", "card", "--out", out)
+	assert.FileExists(t, out)
+
+	*now = now.Add(10 * time.Second)
+	dealRun(t, "standard-history", "policy", "--months", "6")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "x.json"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errStaleAnchor)
+	assert.Contains(t, cli.SafeError(err), tick["due"].(string), "the refusal says when the next tick can be cut")
+	assert.Equal(t, 4, cli.ExitCode(err))
+	assert.ErrorIs(t, err, cli.ErrPending, "narrated as waiting on something, not as a device fault")
 }
