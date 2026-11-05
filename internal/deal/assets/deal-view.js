@@ -20,6 +20,33 @@
 // itself (it is all zeros here). Its stylesheet is DEAL_VIEW_CSS, inserted
 // once at render and pinned by the manifest's style_sha256 (assets/deal-view.css
 // holds the same bytes).
+// dealOpeningLines reads the owner's copy openings of who the deal was with and
+// what the buyer wrote (evidencebook-deal#56) against what capsulectl
+// recomputed when it built the page (page.openings, one result per opening, in
+// order). The counterparty is the last step's, named as the OK card names
+// them: the payee, else the name, then the site in brackets; one value that did
+// not recompute is never shown and sets whoBad. An acceptance is shown only
+// when it recomputed.
+function dealOpeningLines(report, checkedBy) {
+  const list = report && report.counterparty_openings && Array.isArray(report.counterparty_openings.steps) ? report.counterparty_openings.steps : [];
+  let who = "";
+  let whoBad = false;
+  list.forEach((e, i) => {
+    const ok = (Array.isArray(checkedBy.counterparty) && checkedBy.counterparty[i]) || {};
+    const got = {};
+    ["payee", "name", "domain"].forEach((kind) => {
+      if (!e || typeof e[kind] !== "string") return;
+      if (ok[kind] === true) got[kind] = e[kind];
+      else whoBad = true;
+    });
+    const label = got.payee || got.name || got.domain;
+    if (label) who = got.domain && label !== got.domain ? `${label} (${got.domain})` : label;
+  });
+  const accepted = (Array.isArray(report && report.acceptance_openings) ? report.acceptance_openings : []).map((a, i) =>
+    a && Array.isArray(checkedBy.acceptances) && checkedBy.acceptances[i] === true && typeof a.text === "string" ? { step: a.step, text: a.text } : {},
+  );
+  return { who, whoBad, accepted };
+}
 // versionBefore reports whether version a is older than b: "v0.1.0-rc3" style,
 // numbers compared as numbers, a pre-release before its release. An
 // unparsable version, or a development build, is never called older.
@@ -1328,24 +1355,11 @@ const dealViewRender = (model, regions) => {
   // each value is shown only when capsulectl recomputed it against its sealed
   // fingerprint or commitment when it built the page.
   if (!shared) {
-    const checkedBy = (page && page.openings) || {};
-    const cpList = report.counterparty_openings && Array.isArray(report.counterparty_openings.steps) ? report.counterparty_openings.steps : [];
-    const withWho = [];
-    let withBad = false;
-    cpList.forEach((e) => {
-      const ok = (checkedBy.counterparty && checkedBy.counterparty[e && e.step]) || {};
-      ["name", "domain"].forEach((kind) => {
-        if (!e || typeof e[kind] !== "string" || !(kind in ok)) return;
-        if (ok[kind] !== true) withBad = true;
-        else if (!withWho.includes(e[kind])) withWho.push(e[kind]);
-      });
-    });
-    if (withWho.length > 0) card.append(el("div", W("page.card.with", { who: withWho.join(" · ") }), "deal-small"));
-    if (withBad) card.append(el("div", W("page.card.with_unchecked"), "deal-bad"));
-    const accList = Array.isArray(report.acceptance_openings) ? report.acceptance_openings : [];
-    accList.forEach((a) => {
-      const ok = !!a && !!checkedBy.acceptances && checkedBy.acceptances[a.step] === true && typeof a.text === "string";
-      if (!ok) {
+    const lines = dealOpeningLines(report, (page && page.openings) || {});
+    if (lines.who) card.append(el("div", W("page.card.with", { who: lines.who }), "deal-small"));
+    if (lines.whoBad) card.append(el("div", W("page.card.with_unchecked"), "deal-bad"));
+    lines.accepted.forEach((a) => {
+      if (!a.text) {
         card.append(el("div", W("page.card.accepted_unchecked"), "deal-bad"));
         return;
       }

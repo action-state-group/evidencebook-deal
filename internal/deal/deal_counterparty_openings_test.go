@@ -72,16 +72,14 @@ func TestTheOwnCopyOpensTheCounterpartyAndTheBuyersWords(t *testing.T) {
 
 	out, err := dealPageOpenings(b)
 	require.NoError(t, err)
-	for step, kinds := range out["counterparty"].(map[string]interface{}) {
+	require.NotEmpty(t, out["counterparty"])
+	for i, kinds := range out["counterparty"].([]interface{}) {
 		for kind, ok := range kinds.(map[string]interface{}) {
-			assert.Equal(t, true, ok, "%s %s", step, kind)
+			assert.Equal(t, true, ok, "%d %s", i, kind)
 		}
 	}
-	assert.NotEmpty(t, out["counterparty"])
-	for step, ok := range out["acceptances"].(map[string]interface{}) {
-		assert.Equal(t, true, ok, step)
-	}
-	assert.Len(t, out["acceptances"], 1)
+	require.Len(t, out["acceptances"], 1)
+	assert.Equal(t, true, out["acceptances"].([]interface{})[0])
 }
 
 // An opening that does not recompute is reported not verified: other words, a
@@ -114,6 +112,9 @@ func TestAnOpeningThatDoesNotMatchIsNotVerified(t *testing.T) {
 		"other nonce": func(r map[string]interface{}) {
 			r["acceptance_openings"].([]interface{})[0].(map[string]interface{})["nonce"] = strings.Repeat("0", 64)
 		},
+		"empty step": func(r map[string]interface{}) {
+			r["counterparty_openings"].(map[string]interface{})["steps"].([]interface{})[0].(map[string]interface{})["step"] = ""
+		},
 		"no such step": func(r map[string]interface{}) {
 			r["acceptance_openings"].([]interface{})[0].(map[string]interface{})["step"] = "nope"
 		},
@@ -125,12 +126,12 @@ func TestAnOpeningThatDoesNotMatchIsNotVerified(t *testing.T) {
 			out, err := dealPageOpenings(b)
 			require.NoError(t, err, "the page is written; the value is not shown")
 			failed := false
-			for _, kinds := range out["counterparty"].(map[string]interface{}) {
+			for _, kinds := range out["counterparty"].([]interface{}) {
 				for _, ok := range kinds.(map[string]interface{}) {
 					failed = failed || ok == false
 				}
 			}
-			for _, ok := range out["acceptances"].(map[string]interface{}) {
+			for _, ok := range out["acceptances"].([]interface{}) {
 				failed = failed || ok == false
 			}
 			assert.True(t, failed, "something does not verify")
@@ -138,9 +139,9 @@ func TestAnOpeningThatDoesNotMatchIsNotVerified(t *testing.T) {
 	}
 }
 
-// A shared copy carries neither the openings or the deal key
-// the deal key that would let a holder test a guessed name against
-// counterparty.ids.name, and a shared copy that did carry them refuses the page.
+// A shared copy carries neither the openings nor the deal key (which would let
+// a holder test a guessed name against counterparty.ids.name) nor the
+// acceptance's nonce, and a shared copy that did carry them refuses the page.
 func TestSharedCopiesCarryNoCounterpartyOpenings(t *testing.T) {
 	id := acceptedSale(t)
 	dir := t.TempDir()
@@ -175,13 +176,13 @@ func TestSharedCopiesCarryNoCounterpartyOpenings(t *testing.T) {
 	}
 }
 
-// A deal sealed with no name, domain or acceptance to open reports, and
+// A deal sealed with no payee, name, domain or acceptance to open reports, and
 // renders, as it did.
 func TestADealWithNothingToOpenCarriesNoOpenings(t *testing.T) {
 	dealFixture(t)
 	id := dealRun(t, "open", "--input", writeJSON(t, `{"type":"purchase","channel":"web",
 		"intent":{"verbatim":"buy me an otter sticker under 8 bucks","max_total_minor":800,"allowed":["pay"]},
-		"who":{"payee":"Sticker Marketplace"},
+		"who":{"email":"seller@stickers.example"},
 		"terms":{"item":"otter sticker","price_minor":600,"currency":"USD"},
 		"recourse":{"rail":"card","refundable":true}}`))["deal_id"].(string)
 	b := ownReport(t, id)
@@ -192,4 +193,80 @@ func TestADealWithNothingToOpenCarriesNoOpenings(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, out, "counterparty")
 	assert.NotContains(t, out, "acceptances")
+}
+
+// A step opened twice verifies only its first entry, so a wrong value put
+// before or after the right one is never shown beside it as checked.
+func TestARepeatedStepVerifiesOnlyItsFirstOpening(t *testing.T) {
+	id := acceptedSale(t)
+	b := ownReport(t, id)
+	r := sealedReport(t, b)
+	steps := r["counterparty_openings"].(map[string]interface{})["steps"].([]interface{})
+	first := steps[0].(map[string]interface{})
+	wrong := map[string]interface{}{"step": first["step"], "name": "Someone Else"}
+	r["counterparty_openings"].(map[string]interface{})["steps"] = append(steps, wrong)
+	acc := r["acceptance_openings"].([]interface{})
+	again := map[string]interface{}{}
+	for k, v := range acc[0].(map[string]interface{}) {
+		again[k] = v
+	}
+	r["acceptance_openings"] = append(acc, again)
+
+	out, err := dealPageOpenings(b)
+	require.NoError(t, err)
+	checked := out["counterparty"].([]interface{})
+	require.Len(t, checked, len(steps)+1)
+	assert.Equal(t, false, checked[len(steps)].(map[string]interface{})["name"])
+	assert.Equal(t, []interface{}{true, false}, out["acceptances"])
+}
+
+// The receipt names the counterparty as the OK card does (the payee, else the
+// name, the site in brackets), from the last step that names one, and shows
+// only what recomputed: a value that did not is never shown, and nor are a
+// repeated step's later entries or an acceptance that did not verify.
+func TestTheReceiptShowsOnlyWhatRecomputed(t *testing.T) {
+	steps := func(entries ...map[string]any) map[string]any {
+		list := make([]any, len(entries))
+		for i, e := range entries {
+			list[i] = e
+		}
+		return map[string]any{"counterparty_openings": map[string]any{"key": "00", "steps": list}}
+	}
+	withAcceptances := func(r map[string]any, texts ...string) map[string]any {
+		var list []any
+		for _, text := range texts {
+			list = append(list, map[string]any{"step": "s", "nonce": "n", "text": text})
+		}
+		r["acceptance_openings"] = list
+		return r
+	}
+	got := runDealViewFunctions(t, map[string]any{
+		"close": []any{}, "band": []any{}, "afterYes": []any{}, "settlement": []any{},
+		"openings": []map[string]any{
+			// payee, else name; the earlier leg is not named.
+			{"report": steps(map[string]any{"step": "a", "name": "A", "domain": "a.example"}, map[string]any{"step": "b", "payee": "B Pay", "name": "B", "domain": "b.example"}),
+				"checked": map[string]any{"counterparty": []any{map[string]any{"name": true, "domain": true}, map[string]any{"payee": true, "name": true, "domain": true}}}},
+			// a value that did not recompute is not shown and says so.
+			{"report": steps(map[string]any{"step": "a", "name": "Evil"}, map[string]any{"step": "a", "name": "Real"}),
+				"checked": map[string]any{"counterparty": []any{map[string]any{"name": false}, map[string]any{"name": true}}}},
+			// no result at all for an opening: not verified.
+			{"report": steps(map[string]any{"step": "", "name": "Evil"}), "checked": map[string]any{}},
+			// the buyer's words: shown when they recomputed only.
+			{"report": withAcceptances(map[string]any{}, "yes", "no"), "checked": map[string]any{"acceptances": []any{true, false}}},
+			// a deal with nothing to open.
+			{"report": map[string]any{}, "checked": map[string]any{}},
+		},
+	})
+	lines := got["openings"].([]any)
+	line := func(i int) map[string]any { return lines[i].(map[string]any) }
+	assert.Equal(t, "B Pay (b.example)", line(0)["who"])
+	assert.Equal(t, false, line(0)["whoBad"])
+	assert.Equal(t, "Real", line(1)["who"])
+	assert.Equal(t, true, line(1)["whoBad"])
+	assert.Equal(t, "", line(2)["who"])
+	assert.Equal(t, true, line(2)["whoBad"])
+	assert.Equal(t, []any{map[string]any{"step": "s", "text": "yes"}, map[string]any{}}, line(3)["accepted"])
+	assert.Equal(t, "", line(4)["who"])
+	assert.Equal(t, false, line(4)["whoBad"])
+	assert.Empty(t, line(4)["accepted"])
 }

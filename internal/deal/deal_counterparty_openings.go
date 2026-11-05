@@ -14,13 +14,13 @@ import (
 // against counterparty.ids.name.
 //
 // counterparty_openings holds the deal's key and, per step whose sealed
-// record carries a keyed counterparty fingerprint, the raw name and domain
+// record carries a keyed counterparty fingerprint, the raw payee, name and domain
 // that fingerprint was made from. acceptance_openings holds, per acceptance,
 // its salted words (content_commitment). Both are left out when the deal has
 // none, so a deal sealed before this change reports as it did.
 
 // counterpartyOpeningKinds are the fingerprints a page may open.
-var counterpartyOpeningKinds = []string{"name", "domain"}
+var counterpartyOpeningKinds = []string{"payee", "name", "domain"}
 
 // eventWhos are every counterparty identity a step names.
 func eventWhos(ev dealEvent) []dealWho {
@@ -50,15 +50,20 @@ func eventWhos(ev dealEvent) []dealWho {
 	if ev.Snapshot != nil {
 		add(ev.Snapshot.Who)
 	}
-	if ev.Disclosure != nil {
-		add(ev.Disclosure.Who)
+	// A chosen leg's counterparty. A disclosure's recipient is not the deal's
+	// counterparty, so its who is never opened.
+	if ev.AgentMove != nil {
+		add(ev.AgentMove.Who)
 	}
 	return out
 }
 
 func whoValue(w dealWho, kind string) string {
-	if kind == "domain" {
+	switch kind {
+	case "domain":
 		return w.Domain
+	case "payee":
+		return legFirstContact(w).Payee
 	}
 	return w.Name
 }
@@ -85,7 +90,7 @@ func recordCounterpartyIDs(record map[string]interface{}) map[string]interface{}
 	return nil
 }
 
-// counterpartyOpenings opens the name and the domain each step's sealed
+// counterpartyOpenings opens the payee, the name and the domain each step's sealed
 // counterparty fingerprints were made from, or nil when none were.
 func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface{} {
 	if len(key) == 0 {
