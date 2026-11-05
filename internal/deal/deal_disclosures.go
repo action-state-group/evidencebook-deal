@@ -4,14 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"regexp"
 
 	"github.com/action-state-group/agent-action-capsule/go/canonical"
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/spf13/cobra"
 )
-
-var dealRecordDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // dealDisclosuresCommand reads back the disclosure records the deal's shares
 // put on record (recordShare), as the holder's own store holds them. It is the
@@ -31,7 +28,7 @@ func dealDisclosuresCommand() *cobra.Command {
 			return cli.InputError("--deal must be a deal id as printed by `deal open`: deal- followed by 16 hex characters")
 		}
 		digest, _ := c.Flags().GetString("record")
-		if digest != "" && !dealRecordDigestPattern.MatchString(digest) {
+		if digest != "" && !contentDigestPattern.MatchString(digest) {
 			return cli.InputError("--record must be a disclosure record digest: 64 lowercase hex characters, as a share prints in disclosure_record")
 		}
 		s, err := openDealSessionRead(c.Context(), p, dealID)
@@ -52,12 +49,15 @@ func dealDisclosuresCommand() *cobra.Command {
 
 // disclosures lists the deal's stored records in the order they were sealed,
 // or the one with the given digest. Each record is the object recordShare
-// stored; its JCS digest is recomputed and must be the one stored, which is
-// the digest sealed on the disclosure log.
+// stored. A row still at sequence 0 was never confirmed on the log (recordShare
+// inserts before it appends), so it is not listed, as deal_requests rows are
+// not (exchangeRows). Its JCS digest is
+// recomputed and must be the one stored, which is the digest sealed on the
+// disclosure log.
 func (s *dealSession) disclosures(ctx context.Context, dealID, only string) (_ map[string]any, err error) {
-	q, args := `SELECT n, record_digest, cll_sequence, record FROM deal_disclosures WHERE deal_id=? ORDER BY n`, []any{dealID}
+	q, args := `SELECT n, record_digest, cll_sequence, record FROM deal_disclosures WHERE deal_id=? AND cll_sequence>0 ORDER BY n`, []any{dealID}
 	if only != "" {
-		q, args = `SELECT n, record_digest, cll_sequence, record FROM deal_disclosures WHERE deal_id=? AND record_digest=? ORDER BY n`, append(args, only)
+		q, args = `SELECT n, record_digest, cll_sequence, record FROM deal_disclosures WHERE deal_id=? AND cll_sequence>0 AND record_digest=? ORDER BY n`, append(args, only)
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

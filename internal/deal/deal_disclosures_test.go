@@ -2,9 +2,11 @@ package deal
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/action-state-group/agent-action-capsule/go/canonical"
+	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,4 +69,67 @@ func TestDealDisclosuresWritesNothing(t *testing.T) {
 	assert.Equal(t, before, dealRun(t, "checkpoint", "status", "--deal", dealID))
 	stored, _ := sharedRecords(t, dealID)
 	assert.Len(t, stored, 1)
+}
+
+// A row that was never confirmed on the log (sequence 0: recordShare inserts
+// before it appends) is not listed.
+func TestDealDisclosuresSkipsAnUnconfirmedRow(t *testing.T) {
+	dealFixture(t)
+	dealID := openPrivateDeal(t)
+	shareRun(t, dealID, "counterparty", filepath.Join(t.TempDir(), "a.html"))
+	updateDisclosureRow(t, `UPDATE deal_disclosures SET cll_sequence=0 WHERE deal_id=?`, dealID)
+	assert.Empty(t, dealRun(t, "disclosures", "--deal", dealID)["disclosures"])
+}
+
+// A stored row that is not the record whose digest was sealed is a conflict,
+// and nothing is printed.
+func TestDealDisclosuresRefusesATamperedRow(t *testing.T) {
+	dealFixture(t)
+	dealID := openPrivateDeal(t)
+	share := shareRun(t, dealID, "counterparty", filepath.Join(t.TempDir(), "a.html"))
+	digest := share["disclosure_record"].(string)
+
+	updateDisclosureRow(t, `UPDATE deal_disclosures SET record=replace(record, 'the shop''s support desk', 'someone else') WHERE deal_id=?`, dealID)
+	out, err := invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", dealID)
+	assert.ErrorIs(t, err, cli.ErrConflict)
+	assert.NotContains(t, out, "someone else")
+	_, err = invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", dealID, "--record", digest)
+	assert.ErrorIs(t, err, cli.ErrConflict)
+
+	updateDisclosureRow(t, `UPDATE deal_disclosures SET record='not json' WHERE deal_id=?`, dealID)
+	_, err = invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", dealID)
+	assert.ErrorIs(t, err, cli.ErrConflict)
+}
+
+// A read_only profile reads the records, and the read changes no file of the
+// store or its logs.
+func TestDealDisclosuresOnAReadOnlyProfileWritesNothing(t *testing.T) {
+	dealFixture(t)
+	dealID := openPrivateDeal(t)
+	shareRun(t, dealID, "counterparty", filepath.Join(t.TempDir(), "a.html"))
+	writable := dealRun(t, "disclosures", "--deal", dealID)
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	p.ReadOnly = true
+	require.NoError(t, cli.SaveProfile(p, true))
+	before := storeFiles(t, p)
+	assert.Equal(t, writable, dealRun(t, "disclosures", "--deal", dealID))
+	_, err = invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", "deal-0000000000000000")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown deal")
+	_, err = invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", dealID, "--record", strings.Repeat("0", 64))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no disclosure record")
+	assert.Equal(t, before, storeFiles(t, p))
+}
+
+func updateDisclosureRow(t *testing.T, stmt, dealID string) {
+	t.Helper()
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	db, _, err := cli.SqliteConnection(p)
+	require.NoError(t, err)
+	defer db.Close()
+	_, err = db.Exec(stmt, dealID)
+	require.NoError(t, err)
 }
