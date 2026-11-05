@@ -76,9 +76,12 @@ func TestDealDisclosuresWritesNothing(t *testing.T) {
 func TestDealDisclosuresSkipsAnUnconfirmedRow(t *testing.T) {
 	dealFixture(t)
 	dealID := openPrivateDeal(t)
-	shareRun(t, dealID, "counterparty", filepath.Join(t.TempDir(), "a.html"))
+	share := shareRun(t, dealID, "counterparty", filepath.Join(t.TempDir(), "a.html"))
 	updateDisclosureRow(t, `UPDATE deal_disclosures SET cll_sequence=0 WHERE deal_id=?`, dealID)
 	assert.Empty(t, dealRun(t, "disclosures", "--deal", dealID)["disclosures"])
+	_, err := invoke(t, "", "--profile", "deal", "deal", "disclosures", "--deal", dealID, "--record", share["disclosure_record"].(string))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no disclosure record")
 }
 
 // A stored row that is not the record whose digest was sealed is a conflict,
