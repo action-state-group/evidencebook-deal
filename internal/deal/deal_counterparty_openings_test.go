@@ -221,7 +221,7 @@ func TestARepeatedStepVerifiesOnlyItsFirstOpening(t *testing.T) {
 }
 
 // The receipt names the counterparty as the OK card does (the payee, else the
-// name, the site in brackets), field by field from the last entry that names
+// name, else the site, phone or email, with the site in brackets), field by field from the last entry that names
 // it, and shows only what recomputed: a value that did not is never shown, and nor are a
 // repeated step's later entries or an acceptance that did not verify.
 func TestTheReceiptShowsOnlyWhatRecomputed(t *testing.T) {
@@ -429,4 +429,35 @@ func TestAnAddressOpeningThatDoesNotMatchIsNotVerified(t *testing.T) {
 	kinds := out["counterparty"].([]interface{})[0].(map[string]interface{})
 	assert.Equal(t, false, kinds["email"])
 	assert.Equal(t, false, kinds["phone"])
+}
+
+// The address is chosen as recipientName chooses it: a blank field is skipped.
+func TestCardAddressKindSkipsBlankFields(t *testing.T) {
+	assert.Equal(t, "email", cardAddressKind(dealWho{Phone: " ", Email: "a@b.example"}))
+	assert.Equal(t, "phone", cardAddressKind(dealWho{Phone: "+1 415 555 0100", Email: "a@b.example"}))
+	assert.Equal(t, "", cardAddressKind(dealWho{Domain: " ", Phone: " "}))
+	assert.Equal(t, "email", cardAddressKind(dealWho{Domain: "  ", Email: "a@b.example"}))
+	assert.Equal(t, "", cardAddressKind(dealWho{Name: "N", Email: "a@b.example"}))
+}
+
+// The card takes no phone or email from a check: a check naming another phone
+// than the one the deal opened with leaves the opened email the card names, and
+// the check's phone is not opened.
+func TestACheckDoesNotChangeTheAddressTheCardNames(t *testing.T) {
+	dealFixture(t)
+	open := strings.Replace(fawnOpen, `"who":{"name":"sticker_shop_example","domain":"marketplace.example"}`, `"who":{"email":"seller@buyer.example"}`, 1)
+	id := dealRun(t, "open", "--input", writeJSON(t, open))["deal_id"].(string)
+	pay := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"authorized_max_minor":190,"who":{"phone":"+1 415 555 0199"},"terms":{"item":"Fawn Sticker","price_minor":175},"recourse":{"rail":"card","refundable":true}}`))
+	require.NotEmpty(t, pay["check_id"])
+	dealRun(t, "note", "--deal", id, "--kind", "act", "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"rail":"card"}`))
+
+	got := map[string]string{}
+	for _, e := range sealedReport(t, ownReport(t, id))["counterparty_openings"].(map[string]interface{})["steps"].([]interface{}) {
+		for kind, v := range e.(map[string]interface{}) {
+			if kind != "step" {
+				got[kind] = v.(string)
+			}
+		}
+	}
+	assert.Equal(t, map[string]string{"email": "seller@buyer.example"}, got)
 }

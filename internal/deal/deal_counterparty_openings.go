@@ -3,6 +3,7 @@ package deal
 import (
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 
 	"github.com/action-state-group/evidencebook/dealprofile"
 )
@@ -14,7 +15,7 @@ import (
 // against counterparty.ids.name.
 //
 // counterparty_openings holds the deal's key and, for the counterparty the
-// deal ends with, the payee, name and domain, each at a step whose sealed
+// deal ends with, the payee, name and domain (else the phone or email the card names them by, cardAddressKind), each at a step whose sealed
 // record carries the keyed fingerprint it was made into. acceptance_openings holds, per acceptance,
 // its salted words (content_commitment). Both are left out when the deal has
 // none, so a deal sealed before this change reports as it did.
@@ -27,13 +28,13 @@ var counterpartyOpeningKinds = []string{"payee", "name", "domain", "phone", "ema
 // when it has no payee, name or site: recipientName's order (phone, then
 // email). Empty when the card names it otherwise, or by neither.
 func cardAddressKind(w dealWho) string {
-	if w.Payee != "" || w.Name != "" || w.Domain != "" {
+	if w.Payee != "" || w.Name != "" || strings.TrimSpace(w.Domain) != "" {
 		return ""
 	}
 	switch {
-	case w.Phone != "":
+	case strings.TrimSpace(w.Phone) != "":
 		return "phone"
-	case w.Email != "":
+	case strings.TrimSpace(w.Email) != "":
 		return "email"
 	}
 	return ""
@@ -104,7 +105,7 @@ func endingWho(state dealState, events []sealedEvent) dealWho {
 
 // counterpartyOpenings opens the counterparty the deal ends with, as the OK
 // card names them: endingWho (cardWho's reading), its payee, name and
-// domain, each opened at the last step whose sealed fingerprint it recomputes
+// domain (else phone or email, cardAddressKind), each opened at the last step whose sealed fingerprint it recomputes
 // to. It is nil when none is.
 func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface{} {
 	if len(key) == 0 {
