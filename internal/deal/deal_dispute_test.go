@@ -187,7 +187,7 @@ func TestARulingCitesTheDisputeTheStoreHolds(t *testing.T) {
 	require.ErrorContains(t, run("price_as_offered", d, "for_seller"), "already holds a ruling")
 }
 
-// The dispute's reference is the sealed step's record digest, which commits to a salted detail: the same
+// The dispute's reference derives from the sealed step's record digest, which commits to a salted detail: the same
 // words and row give a different digest on another deal, so the seller cannot test a guess at the words.
 func TestTheDisputeReferenceDoesNotLetTheSellerTestAGuess(t *testing.T) {
 	var digests []string
@@ -244,4 +244,46 @@ func TestTheSellersReceiptReadsTheSameRulingLine(t *testing.T) {
 		assert.Contains(t, receiptText(t, id, true), lines[len(lines)-1], role+" shared")
 	}
 	assert.Equal(t, lines[0], lines[1])
+}
+
+// The seller's half of the acceptance, run through the commands: a sold-and-closed deal, the ruling, the
+// tick and the card ("1 dispute received"), and the counterparty's shared bundle, which keeps the ruling
+// record and carries neither the dispute record nor the buyer's words.
+func TestTheSellersCardCountsTheRulingReceived(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	id := openTyped(t, sellerTyped)
+	check := makeOffer(t, id, "190000")
+	_, err := acceptOffer(t, id, check)
+	require.NoError(t, err)
+	commitNow(t, id, "190000")
+	a, b := adjudicatorCopies(t)
+	dealRun(t, "note", "--deal", id, "--kind", "ruling", "--row", "price_as_offered", "--finding", "for_buyer",
+		"--referee", "demo-referee", "--dispute-digest", someDigest, "--copy", a, "--copy", b)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	own := filepath.Join(t.TempDir(), "own.json")
+	dealRun(t, "standard-history", "card", "--out", own)
+	card := shBlock(t, readBundle(t, own))
+	entries, _ := card["deals"].([]any)
+	require.Len(t, entries, 1)
+	assert.Equal(t, []any{map[string]any{"side": "received", "outcome": "against", "forum": "external"}}, entries[0].(map[string]any)["disputes"])
+}
+
+func TestTheSharedCopyKeepsTheRulingAndWithholdsTheDispute(t *testing.T) {
+	dealFixture(t)
+	id := retailDeal(t)
+	a, b := adjudicatorCopies(t)
+	d := disputeNote(t, id)
+	dealRun(t, "note", "--deal", id, "--kind", "ruling", "--row", "price_as_offered", "--finding", "for_buyer",
+		"--referee", "demo-referee", "--dispute-digest", d["dispute_digest"].(string), "--copy", a, "--copy", b)
+	page := filepath.Join(t.TempDir(), "shared.html")
+	dealRun(t, "report", "--deal", id, "--html", page, "--share", "counterparty", "--to", "the other side")
+	raw, err := os.ReadFile(page)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "wrong one", "the buyer's words never leave")
+	assert.NotContains(t, string(raw), "demo-referee")
+	assert.Contains(t, string(raw), "ruling_for_buyer", "the ruling record is shared")
+	assert.NotContains(t, string(raw), `"dispute"`, "the dispute record is withheld")
 }

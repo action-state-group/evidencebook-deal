@@ -457,7 +457,7 @@ When the buyer says what they bought was not what was offered, the buyer's agent
 capsulectl --profile deal deal note --deal ID --kind dispute --row price_as_offered --words "the sticker was the wrong one"
 ```
 
-It prints `dispute_digest`. A referee, who has run `deal terms-result --check` over both parties' copies, then notes one ruling in each party's store, with the same flags in both:
+It prints `dispute_digest`. A referee, who has run `deal terms-result --check` over both parties' copies, then notes one ruling in each party's store, the buyer's first (it checks the ruling against the dispute it holds), then the seller's, each with its own `--deal` and otherwise the same flags. A ruling is final in the store it is sealed in, so a flag mistyped in the seller's store cannot be corrected there:
 
 ```bash
 capsulectl --profile deal deal note --deal ID --kind ruling --row price_as_offered --finding for_buyer \

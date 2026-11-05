@@ -61,7 +61,7 @@ func isDisputeSource(source string) bool {
 	return source == sourceDispute || source == sourceRulingBuyer || source == sourceRulingSell
 }
 
-// bodyDigest is the SHA-256 of a body's RFC 8785 bytes, which is what the step seals as its detail.
+// bodyDigest is the SHA-256 of a string, hex. For a ruling it is taken over the step's detail, the body's RFC 8785 bytes.
 func bodyDigest(detail string) string {
 	sum := sha256.Sum256([]byte(detail))
 	return hex.EncodeToString(sum[:])
@@ -140,7 +140,7 @@ func disputeNoteEvent(c *cobra.Command, kind string) (dealEvent, error) {
 
 // checkDisputeNote holds a dispute or a ruling to the deal it is sealed on: the buyer disputes, once and
 // only before the ruling; one ruling per deal, whichever party's store holds it. Where the store holds
-// the dispute (the buyer's), the ruling must cite that dispute's record digest and its row; the
+// the dispute (the buyer's), the ruling must cite that dispute (the reference derived from its record digest, disputeRef) and its row; the
 // seller's store holds no dispute, so it takes the ruling's citation as given.
 func checkDisputeNote(events []sealedEvent, ev dealEvent) error {
 	source := ev.Evidence.Source
