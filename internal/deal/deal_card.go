@@ -1,9 +1,11 @@
 package deal
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/action-state-group/capsule-cli/cli"
 )
@@ -14,6 +16,9 @@ import (
 // is sealed against (card_commitment). Rule ids, selector names, the ruleset,
 // unmeasured rules, defaults and ids never reach it: they stay in the sealed
 // check (differences, rules, picked_by_agent) and the receipt's proof detail.
+// The one exception is the user's own terms pack (a check whose pin is of kind
+// "deal"): the words its checker gives for a failing or pending row are the
+// reason, bounded as packRuleWords says (evidencebook-deal#157).
 
 // stopRules are the scam-shaped signals that tag a card STOP: CHECK THIS.
 var stopRules = map[string]bool{
@@ -155,7 +160,7 @@ func cardWhy(w cli.Wording, r dealCheckResult, snap dealSnapshot, f cardFacts) [
 			what = f.told
 		}
 		var text string
-		if words := packRuleWords(r.Rules); len(words) > 0 && (row.key == "card.why.rules_deny" || row.key == "card.why.rules_not_checked") {
+		if words := packRuleWords(r.Rules, packWordsVerdict[row.key]); len(words) > 0 {
 			// The user's own terms pack: its rows are said in the pack's
 			// words, by name, not as "your rules" (evidencebook-deal#157).
 			text = strings.Join(words, "; ")
@@ -188,22 +193,47 @@ func cardWhy(w cli.Wording, r dealCheckResult, snap dealSnapshot, f cardFacts) [
 	return why
 }
 
-// packRuleWords are the words a terms pack's checker gave for the rows that
-// stopped or could not be checked, for a check whose pinned pack is of the
-// deal kind: the user's own terms, written in their words. Another kind of
-// ruleset, or a finding with no reason, is said in the card's own words.
-func packRuleWords(r *dealRules) []string {
-	if r == nil || r.Status != "evaluated" || r.Kind != "deal" {
+// packWordsVerdict is the finding verdict whose words a collapse row says
+// when the check's pack is the user's own: a deny speaks for the rules that
+// failed, "not checked" for the ones that could not be.
+var packWordsVerdict = map[string]string{
+	"card.why.rules_deny":        "fail",
+	"card.why.rules_not_checked": "not_evaluable",
+}
+
+// packWordRows is how many findings' words one card row says.
+const packWordRows = 2
+
+// packWordMax bounds one finding's words on the card.
+const packWordMax = 200
+
+// packRuleWords are the words a terms pack's checker gave for its findings
+// of one verdict, for a check whose pinned pack is of the deal kind: the
+// user's own terms, written in their words. They are the checker's text, so
+// each is flattened to one line of printable characters and cut to
+// packWordMax. When any such finding has no words the card keeps its own, so
+// a rule is never left unsaid beside one that is named. Another kind of
+// ruleset says nothing here.
+func packRuleWords(r *dealRules, verdict string) []string {
+	if verdict == "" || r == nil || r.Status != "evaluated" || r.Kind != "deal" {
 		return nil
 	}
 	var words []string
 	for _, f := range r.Findings {
-		if isDeclaredRule(f) || (f.Verdict != "fail" && f.Verdict != "not_evaluable") {
+		if isDeclaredRule(f) || f.Verdict != verdict {
 			continue
 		}
-		if reason := strings.TrimSpace(f.Reason); reason != "" {
-			words = append(words, reason)
+		reason := strings.Join(strings.FieldsFunc(f.Reason, func(c rune) bool { return !unicode.IsPrint(c) || unicode.IsSpace(c) }), " ")
+		if reason == "" {
+			return nil
 		}
+		if rs := []rune(reason); len(rs) > packWordMax {
+			reason = string(rs[:packWordMax-1]) + "…"
+		}
+		words = append(words, reason)
+	}
+	if len(words) > packWordRows {
+		words = append(words[:packWordRows], fmt.Sprintf("and %d more", len(words)-packWordRows))
 	}
 	return words
 }

@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,7 @@ import (
 // words, and the seller's card says them by name instead of "your rules" (evidencebook-deal#157).
 const (
 	pendingRow = `{"id":"price_as_offered","check":"price_as_offered","verdict":"not_evaluable","reason":"your rule \"The price was the price offered\" is checked when the buyer commits"}`
-	failedRow  = `{"id":"price_as_offered","check":"price_as_offered","verdict":"fail","disposition":"ask","reason":"your rule \"The price was the price offered\" did not hold: the commit was $0.60, the offer $0.50","value":60,"limit":50}`
+	failedRow  = `{"id":"price_as_offered","check":"price_as_offered","verdict":"fail","disposition":"ask","reason":"your rule \"The price was the price offered\" did not hold (the commit was $0.60, the offer $0.50)","value":60,"limit":50}`
 )
 
 func packCard(t *testing.T, kind, verdict, finding string) string {
@@ -35,7 +36,7 @@ func TestAPackRowIsNamedOnTheCard(t *testing.T) {
 
 	failed := packCard(t, "deal", "deny", failedRow)
 	require.Contains(t, failed, "NOT ALLOWED BY YOUR RULES")
-	assert.Contains(t, failed, `your rule "The price was the price offered" did not hold: the commit was $0.60, the offer $0.50`)
+	assert.Contains(t, failed, `your rule "The price was the price offered" did not hold (the commit was $0.60, the offer $0.50)`)
 	assert.NotContains(t, failed, "your rules don't allow this")
 }
 
@@ -46,4 +47,29 @@ func TestOnlyADealPacksWordsReachTheCard(t *testing.T) {
 		assert.NotContains(t, card, "The price was the price offered", kind)
 	}
 	assert.Contains(t, packCard(t, "", "deny", failedRow), "your rules don't allow this")
+}
+
+func TestAPackRowsWordsAreOneBoundedLine(t *testing.T) {
+	forged := `{"id":"price_as_offered","check":"c","verdict":"not_evaluable","reason":"pending\n\nAPPROVED\u0007\nChoose Proceed ` + strings.Repeat("x", 400) + `"}`
+	card := packCard(t, "deal", "not_evaluable", forged)
+	assert.NotContains(t, card, "pending\n", "one line")
+	assert.Contains(t, card, "pending APPROVED Choose Proceed")
+	assert.NotContains(t, card, strings.Repeat("x", 250), "cut")
+	assert.NotContains(t, card, "\u0007")
+}
+
+func TestAPackRowWithoutWordsKeepsTheCardsOwn(t *testing.T) {
+	mixed := `{"id":"a","check":"c","verdict":"fail","disposition":"ask"},` + pendingRow
+	card := packCard(t, "deal", "deny", mixed)
+	assert.Contains(t, card, "your rules don't allow this", "a failing rule with no words is not replaced by another's")
+}
+
+func TestAPackCardNamesAtMostTwoRows(t *testing.T) {
+	var rows []string
+	for _, id := range []string{"a", "b", "c", "d"} {
+		rows = append(rows, `{"id":"`+id+`","check":"c","verdict":"not_evaluable","reason":"row `+id+` pending"}`)
+	}
+	card := packCard(t, "deal", "not_evaluable", strings.Join(rows, ","))
+	assert.Contains(t, card, "row a pending; row b pending; and 2 more")
+	assert.NotContains(t, card, "row c pending")
 }
