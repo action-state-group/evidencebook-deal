@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -114,6 +115,62 @@ func dealPageOpenings(b map[string]interface{}) (map[string]interface{}, error) 
 		}
 	}
 
+	// Who the deal was with and what the buyer wrote (evidencebook-deal#56),
+	// the user's own copy only. A shared copy carrying either, or the deal
+	// key, refuses the page. An opening that does not recompute against its
+	// step's sealed fingerprint or content_commitment is reported as not
+	// verified and its value is never shown; one that names no step of this
+	// bundle is not verified either.
+	cpRaw, hasCP := report["counterparty_openings"]
+	accRaw, hasAcc := report["acceptance_openings"]
+	if hasCP || hasAcc {
+		if audience == cli.DealAudienceCounterparty || audience == cli.DealAudienceAdjudicator {
+			return nil, errors.New("refusing to write the page: a shared copy carries who the deal was with or what the buyer wrote, which only your own copy may")
+		}
+	}
+	if hasCP {
+		cp, _ := cpRaw.(map[string]interface{})
+		key, _ := hex.DecodeString(strOf(cp["key"]))
+		steps, _ := cp["steps"].([]interface{})
+		checked := map[string]interface{}{}
+		for _, e := range steps {
+			entry, _ := e.(map[string]interface{})
+			step, _ := entry["step"].(string)
+			ids := recordCounterpartyIDs(input(step))
+			kinds := map[string]interface{}{}
+			for _, kind := range counterpartyOpeningKinds {
+				value, present := entry[kind].(string)
+				if !present {
+					continue
+				}
+				want, _ := ids[kind].(string)
+				got, err := dealprofile.Fingerprint(key, kind, value)
+				kinds[kind] = len(key) > 0 && want != "" && err == nil && got == want
+			}
+			if step != "" && len(kinds) > 0 {
+				checked[step] = kinds
+			}
+		}
+		out["counterparty"] = checked
+	}
+	if hasAcc {
+		list, _ := accRaw.([]interface{})
+		checked := map[string]interface{}{}
+		for _, a := range list {
+			opening, _ := a.(map[string]interface{})
+			step, _ := opening["step"].(string)
+			body, _ := input(step)["body"].(map[string]interface{})
+			var commitment interface{}
+			if body["kind"] == counterpartyAcceptanceKind {
+				commitment = body["content_commitment"]
+			}
+			present, ok := opens(opening, commitment)
+			_, seen := checked[step]
+			checked[step] = present && ok && !seen
+		}
+		out["acceptances"] = checked
+	}
+
 	said, _ := report["representations"].([]interface{})
 	checked := make([]interface{}, len(said))
 	for i, r := range said {
@@ -141,4 +198,9 @@ func dealPageOpenings(b map[string]interface{}) (map[string]interface{}, error) 
 	}
 	out["representations"] = checked
 	return out, nil
+}
+
+func strOf(v interface{}) string {
+	s, _ := v.(string)
+	return s
 }

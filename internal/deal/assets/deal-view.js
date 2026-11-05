@@ -78,6 +78,8 @@ const DEAL_VIEW_WORDS = {
   "page.cancel.not_shown": "What this does not show",
   "page.cancel.shows": "What this shows",
   "page.cancel.title": "Your cancellation",
+  "page.card.accepted": "Their words accepting the offer",
+  "page.card.accepted_unchecked": "⚠️ Their words accepting the offer could not be checked against the sealed record.",
   "page.card.asked": "You asked",
   "page.card.asked_day": "You asked, {day}",
   "page.card.asked_unchecked": "⚠️ The words you asked could not be checked against the sealed record.",
@@ -89,6 +91,8 @@ const DEAL_VIEW_WORDS = {
   "page.card.so_far": "So far: {text}",
   "page.card.title": "Receipt",
   "page.card.title_deal": "Receipt · deal {deal}",
+  "page.card.with": "With {who}",
+  "page.card.with_unchecked": "⚠️ Who this deal was with could not be checked against the sealed record.",
   "page.card.withheld": "What was asked is withheld from this copy.",
   "page.claim.address": "Address",
   "page.claim.authenticity": "Authenticity",
@@ -1319,6 +1323,37 @@ const dealViewRender = (model, regions) => {
     card.append(quote);
   } else {
     card.append(el("div", W("page.card.asked_unchecked"), "deal-bad"));
+  }
+  // Who the deal was with and what the buyer wrote, on the user's own copy:
+  // each value is shown only when capsulectl recomputed it against its sealed
+  // fingerprint or commitment when it built the page.
+  if (!shared) {
+    const checkedBy = (page && page.openings) || {};
+    const cpList = report.counterparty_openings && Array.isArray(report.counterparty_openings.steps) ? report.counterparty_openings.steps : [];
+    const withWho = [];
+    let withBad = false;
+    cpList.forEach((e) => {
+      const ok = (checkedBy.counterparty && checkedBy.counterparty[e && e.step]) || {};
+      ["name", "domain"].forEach((kind) => {
+        if (!e || typeof e[kind] !== "string" || !(kind in ok)) return;
+        if (ok[kind] !== true) withBad = true;
+        else if (!withWho.includes(e[kind])) withWho.push(e[kind]);
+      });
+    });
+    if (withWho.length > 0) card.append(el("div", W("page.card.with", { who: withWho.join(" · ") }), "deal-small"));
+    if (withBad) card.append(el("div", W("page.card.with_unchecked"), "deal-bad"));
+    const accList = Array.isArray(report.acceptance_openings) ? report.acceptance_openings : [];
+    accList.forEach((a) => {
+      const ok = !!a && !!checkedBy.acceptances && checkedBy.acceptances[a.step] === true && typeof a.text === "string";
+      if (!ok) {
+        card.append(el("div", W("page.card.accepted_unchecked"), "deal-bad"));
+        return;
+      }
+      card.append(el("div", W("page.card.accepted"), "deal-small"));
+      const said = el("div", `“${a.text}”`, "deal-quote");
+      said.dataset.accepted = a.step;
+      card.append(said);
+    });
   }
   const did = report.did || [];
   if (did.length > 0) {
