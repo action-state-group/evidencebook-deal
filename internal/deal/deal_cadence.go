@@ -91,8 +91,10 @@ func (s *dealSession) tick(ctx context.Context) (map[string]any, error) {
 	}
 	out := map[string]any{"cadence_log": p.LogID}
 	if result.Ticked {
+		// The cut time only sharpens the History card's guard (cutOf falls back to
+		// the coarse tick time), so failing to keep it never fails a committed tick.
 		if err := recordSHCut(p, result.Tick.N, now); err != nil {
-			return nil, err
+			out["cut_time_not_recorded"] = true
 		}
 		out["state"], out["tick"], out["checkpoint"], out["due"] = "ticked", result.Tick.N, result.Tick.CheckpointSize, result.Tick.DueNext.Format(time.RFC3339)
 	} else {

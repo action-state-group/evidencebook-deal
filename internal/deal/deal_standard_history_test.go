@@ -893,10 +893,34 @@ func TestCardRightAfterDeclareAndTickInTheSameMinute(t *testing.T) {
 
 	*now = now.Add(10 * time.Second)
 	dealRun(t, "standard-history", "policy", "--months", "6")
+	// A tick that is not due cuts nothing, so it must not move the recorded cut.
+	assert.Equal(t, "not_due", dealRun(t, "tick")["state"])
 	_, err := invoke(t, "", "--profile", "deal", "deal", "standard-history", "card", "--out", filepath.Join(t.TempDir(), "x.json"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errStaleAnchor)
 	assert.Contains(t, cli.SafeError(err), tick["due"].(string), "the refusal says when the next tick can be cut")
 	assert.Equal(t, 4, cli.ExitCode(err))
 	assert.ErrorIs(t, err, cli.ErrPending, "narrated as waiting on something, not as a device fault")
+}
+
+// cutOf trusts the recorded cut only for the tick it names and only inside the
+// minute that tick's time was coarsened to; anything else is the coarse time.
+func TestCutOfFallsBackToTheCoarseTime(t *testing.T) {
+	dealFixture(t)
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	coarse := time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC)
+	real := coarse.Add(15 * time.Second)
+
+	assert.Equal(t, coarse, cutOf(p, 1, coarse), "no record")
+	require.NoError(t, recordSHCut(p, 1, real))
+	assert.Equal(t, real, cutOf(p, 1, coarse), "the recorded tick")
+	assert.Equal(t, coarse, cutOf(p, 2, coarse), "another tick")
+	assert.Equal(t, coarse.Add(time.Minute), cutOf(p, 1, coarse.Add(time.Minute)), "a record before the coarse time")
+	require.NoError(t, recordSHCut(p, 1, coarse.Add(time.Minute)))
+	assert.Equal(t, coarse, cutOf(p, 1, coarse), "a record past the coarse minute")
+	dir, err := shDir(p)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, shCutFile), []byte("not json"), 0o600))
+	assert.Equal(t, coarse, cutOf(p, 1, coarse), "a corrupt record")
 }

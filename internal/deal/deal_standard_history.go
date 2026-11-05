@@ -100,7 +100,8 @@ func recordSHCut(p cli.Profile, n uint64, at time.Time) error {
 }
 
 // cutOf is when tick n was cut: the recorded full-precision time when it is
-// n's, otherwise the tick's own (minute-coarsened) time, which can only make a
+// n's and lies in the minute the tick's time was coarsened to, otherwise the
+// tick's own (minute-coarsened) time, which can only make a
 // change look later than the cut, never earlier.
 func cutOf(p cli.Profile, n uint64, coarse time.Time) time.Time {
 	dir, err := shDir(p)
@@ -115,7 +116,7 @@ func cutOf(p cli.Profile, n uint64, coarse time.Time) time.Time {
 	if cli.DecodeJSON(raw, &c) != nil || c.Tick != n {
 		return coarse
 	}
-	if at, err := time.Parse(time.RFC3339Nano, c.At); err == nil && !at.Before(coarse) {
+	if at, err := time.Parse(time.RFC3339Nano, c.At); err == nil && !at.Before(coarse) && at.Before(coarse.Add(time.Minute)) {
 		return at
 	}
 	return coarse
