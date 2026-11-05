@@ -123,7 +123,7 @@ const DEAL_VIEW_WORDS = {
   "page.card.title": "Receipt",
   "page.card.title_deal": "Receipt · deal {deal}",
   "page.card.with": "With {who}",
-  "page.card.with_unchecked": "⚠️ Who this deal was with could not be checked against the sealed record.",
+  "page.card.with_unchecked": "⚠️ Some of who this deal was with could not be checked against the sealed record, so it is not shown.",
   "page.card.withheld": "What was asked is withheld from this copy.",
   "page.claim.address": "Address",
   "page.claim.authenticity": "Authenticity",
