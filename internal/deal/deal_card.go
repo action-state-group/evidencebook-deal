@@ -154,7 +154,14 @@ func cardWhy(w cli.Wording, r dealCheckResult, snap dealSnapshot, f cardFacts) [
 		if row.key == "card.why.first_disclosure.some" {
 			what = f.told
 		}
-		text := w.Line(row.key, cli.V{"limit": f.limit, "floor": f.floor, "what": what, "days": strconv.Itoa(cli.RulesHistoryDays), "payee": f.payee})
+		var text string
+		if words := packRuleWords(r.Rules); len(words) > 0 && (row.key == "card.why.rules_deny" || row.key == "card.why.rules_not_checked") {
+			// The user's own terms pack: its rows are said in the pack's
+			// words, by name, not as "your rules" (evidencebook-deal#157).
+			text = strings.Join(words, "; ")
+		} else {
+			text = w.Line(row.key, cli.V{"limit": f.limit, "floor": f.floor, "what": what, "days": strconv.Itoa(cli.RulesHistoryDays), "payee": f.payee})
+		}
 		if text != "" && !slices.Contains(why, text) {
 			why = append(why, text)
 		}
@@ -179,6 +186,26 @@ func cardWhy(w cli.Wording, r dealCheckResult, snap dealSnapshot, f cardFacts) [
 		}
 	}
 	return why
+}
+
+// packRuleWords are the words a terms pack's checker gave for the rows that
+// stopped or could not be checked, for a check whose pinned pack is of the
+// deal kind: the user's own terms, written in their words. Another kind of
+// ruleset, or a finding with no reason, is said in the card's own words.
+func packRuleWords(r *dealRules) []string {
+	if r == nil || r.Status != "evaluated" || r.Kind != "deal" {
+		return nil
+	}
+	var words []string
+	for _, f := range r.Findings {
+		if isDeclaredRule(f) || (f.Verdict != "fail" && f.Verdict != "not_evaluable") {
+			continue
+		}
+		if reason := strings.TrimSpace(f.Reason); reason != "" {
+			words = append(words, reason)
+		}
+	}
+	return words
 }
 
 // cardTag is the card's tag: not allowed on a deny, stop on a scam-shaped
