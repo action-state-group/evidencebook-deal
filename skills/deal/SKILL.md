@@ -457,14 +457,14 @@ When the buyer says what they bought was not what was offered, the buyer's agent
 capsulectl --profile deal deal note --deal ID --kind dispute --row price_as_offered --words "the sticker was the wrong one"
 ```
 
-It prints `dispute_digest`. A referee, who has run `deal terms-result --check` over both parties' copies, then notes one ruling in each party's store, the buyer's first (it checks the ruling against the dispute it holds), then the seller's, each with its own `--deal` and otherwise the same flags. A ruling is final in the store it is sealed in, so a flag mistyped in the seller's store cannot be corrected there:
+It prints `dispute_digest`. A referee who has run `deal terms-result --check` over both parties' copies then notes one ruling in each party's store: the buyer's first, where it is checked against the dispute, then the seller's, with that store's own `--deal` and the same other flags. Type the seller's flags carefully: a ruling cannot be changed once it is sealed.
 
 ```bash
 capsulectl --profile deal deal note --deal ID --kind ruling --row price_as_offered --finding for_buyer \
   --referee NAME --dispute-digest DIGEST --copy buyer.json --copy seller.json
 ```
 
-The ruling is final at once: a second ruling, or a dispute after it, is refused. Both parties' receipts then read the same line, `Ruling <12 hex> on "price as offered": found for the buyer`, and each says it in the same words (the note's `say`). Report that sentence as it is; do not add your own account of who was right.
+A second ruling, or a dispute after the ruling, is refused. When both stores got the same flags, both receipts read the same line, `Ruling <12 hex> on "price as offered": found for the buyer`, and the note's `say` gives the same sentence. Report that sentence as it is; do not add your own account of who was right.
 
 ### Where the user sells: payment received, and what was delivered
 
