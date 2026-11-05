@@ -54,8 +54,32 @@ func recordCounterpartyIDs(record map[string]interface{}) map[string]interface{}
 	return nil
 }
 
+// endingWho is who the deal's last act goes to, as cardWho reads it for the
+// check that act rests on: the fold's who, with the check's own name, site and
+// payee over it, and the act's payee (which it sealed) over that. A check
+// about a named recipient (a platform, someone else) names none.
+func endingWho(state dealState, events []sealedEvent) dealWho {
+	who := state.who
+	for i := len(events) - 1; i >= 0; i-- {
+		act := events[i].Event.Act
+		if act == nil {
+			continue
+		}
+		if snap, ok := actSnapshot(events, act.AuthorizedBy); ok && snap.Event.Snapshot != nil && !namedRecipient(snap.Event.Snapshot.DisclosingTo) {
+			if w := snap.Event.Snapshot.Who; w != nil {
+				who = overlayWho(who, *w)
+			}
+		}
+		if act.Payee != "" {
+			who.Payee = act.Payee
+		}
+		break
+	}
+	return who
+}
+
 // counterpartyOpenings opens the counterparty the deal ends with, as the OK
-// card names them: foldDeal's who (cardWho's source), its payee, name and
+// card names them: endingWho (cardWho's reading), its payee, name and
 // domain, each opened at the last step whose sealed fingerprint it recomputes
 // to. It is nil when none is.
 func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface{} {
@@ -66,6 +90,7 @@ func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface
 	if err != nil {
 		return nil
 	}
+	who := endingWho(state, events)
 	sealed := make([]map[string]interface{}, len(events))
 	var before []sealedEvent
 	for i, se := range events {
@@ -77,7 +102,7 @@ func counterpartyOpenings(key []byte, events []sealedEvent) map[string]interface
 	}
 	byStep := map[int]map[string]interface{}{}
 	for _, kind := range counterpartyOpeningKinds {
-		value := whoValue(state.who, kind)
+		value := whoValue(who, kind)
 		want, err := dealprofile.Fingerprint(key, kind, value)
 		if value == "" || err != nil {
 			continue

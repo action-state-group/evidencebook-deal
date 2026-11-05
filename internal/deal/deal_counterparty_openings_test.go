@@ -305,3 +305,33 @@ func TestTheCounterpartyOpenedIsTheOneTheDealEndsWith(t *testing.T) {
 		}
 	}
 }
+
+// A payment to a payee the check names (not the opening's) is named on the
+// receipt as the OK card named it: the payee beside the opening's site.
+func TestThePayeeTheUserApprovedIsNamedOnTheReceipt(t *testing.T) {
+	dealFixture(t)
+	id := dealRun(t, "open", "--input", writeJSON(t, fawnOpen))["deal_id"].(string)
+	pay := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"authorized_max_minor":190,"who":{"payee":"sticker-payouts-2"},"terms":{"item":"Fawn Sticker","price_minor":175},"recourse":{"rail":"card","refundable":true}}`))
+	_, err := answer(t, id, pay["check_id"].(string), "yes, the new payee is fine", shownCard(t, pay["card"].(string)))
+	require.NoError(t, err)
+	dealRun(t, "note", "--deal", id, "--kind", "act", "--input", writeJSON(t, `{"action":"pay","amount_minor":190,"payee":"sticker-payouts-2","rail":"card"}`))
+
+	b := ownReport(t, id)
+	got := map[string]string{}
+	for _, e := range sealedReport(t, b)["counterparty_openings"].(map[string]interface{})["steps"].([]interface{}) {
+		for kind, v := range e.(map[string]interface{}) {
+			if kind != "step" {
+				got[kind] = v.(string)
+			}
+		}
+	}
+	assert.Equal(t, "sticker-payouts-2", got["payee"])
+	assert.NotEmpty(t, got["name"])
+	out, err := dealPageOpenings(b)
+	require.NoError(t, err)
+	for _, kinds := range out["counterparty"].([]interface{}) {
+		for kind, ok := range kinds.(map[string]interface{}) {
+			assert.Equal(t, true, ok, kind)
+		}
+	}
+}
