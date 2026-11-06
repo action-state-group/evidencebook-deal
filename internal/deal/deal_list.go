@@ -144,7 +144,7 @@ func dealListCommand() *cobra.Command {
 		}
 		return nil
 	}}
-	cmd.Flags().Bool("json", false, "Emit the deals as one JSON array, each with a plain summary and its `reconcile` state (null until a verified sealed terms Result: then counterparty_half_held, halves_conflict, at), instead of tab-separated lines; with --since or --until, one object: the range, its deals, totals and disclosures")
+	cmd.Flags().Bool("json", false, "Emit the deals as one JSON array, each with a plain summary and its reconcile state (null until a verified sealed terms Result: then counterparty_half_held, halves_conflict, at), instead of tab-separated lines; with --since or --until, one object: the range, its deals, totals and disclosures")
 	cmd.Flags().String("since", "", "List only deals with a step at or after this date (2026-10-01, UTC) or time (2026-10-01T00:00:00-07:00)")
 	cmd.Flags().String("until", "", "List only deals with a step before this date or time (exclusive), each as it stood then")
 	return cmd

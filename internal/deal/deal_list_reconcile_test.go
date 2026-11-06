@@ -79,7 +79,7 @@ func TestListReconcileOwnHalfOnly(t *testing.T) {
 }
 
 // Several Results: held is true once any verified Result cited both halves,
-// conflict and `at` are the newest's, and a ranged listing reads only the
+// `at` is the newest's, conflict is the newest two-half Result's, and a ranged listing reads only the
 // Results sealed before --until (exclusive).
 func TestListReconcileNewestResultAndUntil(t *testing.T) {
 	pair := closedPair(t, received, `{"status":"received","delivered":{"price_minor":185000}}`)
