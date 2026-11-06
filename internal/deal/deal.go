@@ -2665,6 +2665,14 @@ func dealReportCommand() *cobra.Command {
 			// profile's wording pack (capsule-cli#340).
 			pack, _ := cli.ActiveWording(s.p)
 			out["journey"] = dealJourney(events, pack)
+			side, dispute, ruling := disputeFields(events)
+			out["side"] = side
+			if dispute != nil {
+				out["dispute"] = dispute
+			}
+			if ruling != nil {
+				out["ruling"] = ruling
+			}
 			if report.Money != nil {
 				out["money"] = report.Money
 			}
@@ -2826,11 +2834,7 @@ func dealExportCommand() *cobra.Command {
 		if path == "" {
 			return cli.InputError("--output is required: the file to write the result to")
 		}
-		run := runDeal
-		if readOnly, _ := c.Flags().GetBool("read-only"); readOnly {
-			run = runDealRead
-		}
-		return run(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
+		return runDeal(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
 			records := make([]json.RawMessage, 0, len(events))
 			var before []sealedEvent
 			for _, se := range events {
@@ -2853,7 +2857,6 @@ func dealExportCommand() *cobra.Command {
 	}}
 	cmd.Flags().String("deal", "", "Deal ID from `deal open`")
 	cmd.Flags().String("output", "", "New file for the JSON array of records")
-	cmd.Flags().Bool("read-only", false, "Read the deal as it stands and write nothing to the store: no writer lock, no signing key needed, never migrates (for a History page reading the sealed dispute and side)")
 	return cmd
 }
 
