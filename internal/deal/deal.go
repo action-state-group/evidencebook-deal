@@ -2093,6 +2093,9 @@ func dealCheckCommand() *cobra.Command {
 			if dealFinallyClosed(events) {
 				return cli.InputError("this deal is closed and takes no more steps; start a new one with `deal open`")
 			}
+			if len(received) > 0 && len(s.p.RulesChecker.Command) == 0 {
+				return cli.InputError("--received needs a pinned rules checker to hand the cards to; this profile has none")
+			}
 			// The profile's pinned materiality predicate, read before anything
 			// is sealed: one that cannot be read, or no longer has the pinned
 			// digest, refuses the check and never falls back. The check run
@@ -2292,12 +2295,19 @@ func dealCheckCommand() *cobra.Command {
 			// disclosed record) and the profile's recent acts. One verdict and
 			// one prompt with the check's own differences.
 			rules := dealRules{Status: "not_configured"}
+			var notice, unavailable string
 			if len(s.p.RulesChecker.Command) > 0 {
-				input, history, err := s.rulesInput(ctx, snapped.CapsuleID, events, received)
+				input, history, err := s.rulesInput(ctx, snapped.CapsuleID, events)
 				if err != nil {
 					return err
 				}
-				rules = runRulesChecker(ctx, s.p, dealRole(events), input, history, len(received) > 0)
+				rules = runRulesChecker(ctx, s.p, dealRole(events), input, history)
+				rules.Notice = ""
+				if len(received) > 0 {
+					// The sealed rules above come from a run given no cards.
+					// A second run with them is read for its notice only.
+					notice, unavailable = receivedNotice(ctx, s.p, dealRole(events), input, received)
+				}
 				// The card reads the thread's acceptance against the same
 				// cutoff the checker's history was read from.
 				state.historySince = history.Since
@@ -2368,8 +2378,10 @@ func dealCheckCommand() *cobra.Command {
 			out["materiality"] = result.Materiality
 			out["rules"] = result.Rules
 			// The checker's line about the received cards: shown, never sealed.
-			if rules.Notice != "" {
-				out["rules_notice"] = rules.Notice
+			if notice != "" {
+				out["rules_notice"] = notice
+			} else if unavailable != "" {
+				out["rules_notice_unavailable"] = unavailable
 			}
 			if rc := result.Recipient; rc != nil {
 				out["recipient"] = rc
@@ -2404,7 +2416,7 @@ func dealCheckCommand() *cobra.Command {
 	cmd.Flags().String("deal", "", "Deal ID from `deal open`, or a sale id from `deal sale new` for a listing's post check")
 	cmd.Flags().String("input", "", "Snapshot JSON: the action and exactly what is about to happen")
 	cmd.Flags().Duration("stale-after", 15*time.Minute, "How long the check stays current; the approval text says when it goes stale")
-	cmd.Flags().String("received", "", "A JSON array of cards received about the counterparty, exactly as received, handed to the rules checker alone: never stored, sealed or shared")
+	cmd.Flags().String("received", "", "A JSON array of cards received about the counterparty, handed to the rules checker in a second run read for its notice only: never stored, sealed or shared")
 	return cmd
 }
 
@@ -2414,17 +2426,18 @@ const (
 )
 
 // readReceivedCards reads `deal check --received FILE`: a non-empty JSON array
-// of card objects, or nil when the flag is not given.
-func readReceivedCards(c *cobra.Command) ([]map[string]interface{}, error) {
-	path, _ := c.Flags().GetString("received")
-	if path == "" {
+// of card objects, kept byte for byte as given, or nil when the flag is not
+// given.
+func readReceivedCards(c *cobra.Command) ([]json.RawMessage, error) {
+	if !c.Flags().Changed("received") {
 		return nil, nil
 	}
+	path, _ := c.Flags().GetString("received")
 	raw, err := cli.ReadInput(path)
 	if err != nil {
 		return nil, err
 	}
-	var cards []map[string]interface{}
+	var cards []json.RawMessage
 	if err = cli.DecodeJSONAs("--received", raw, &cards); err != nil {
 		return nil, err
 	}
@@ -2436,8 +2449,9 @@ func readReceivedCards(c *cobra.Command) ([]map[string]interface{}, error) {
 		return nil, cli.InputError("--received holds at most 64 cards and 1 MiB")
 	}
 	for _, card := range cards {
-		if card == nil {
-			return nil, cli.InputError("--received holds a null instead of a card")
+		var obj map[string]json.RawMessage
+		if err = json.Unmarshal(card, &obj); err != nil || obj == nil {
+			return nil, cli.InputError("--received holds something that is not a card (a JSON object)")
 		}
 	}
 	return cards, nil

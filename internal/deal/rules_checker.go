@@ -74,9 +74,9 @@ type dealRules struct {
 	Grade string `json:"grade,omitempty"`
 	// History is what the checker was given beside the record.
 	History *dealRulesHistory `json:"history,omitempty"`
-	// Notice is the checker's one line for the person about the received
-	// cards it was given (external-check-result/v0 notice). It is shown by the
-	// check and never sealed, stored or shared: json:"-" keeps it out of every
+	// Notice is the checker's one line for the person (external-check-result/v0
+	// notice), as the run reported it. Only the run that was given received
+	// cards is read for it (receivedNotice); json:"-" keeps it out of every
 	// marshalled form of the rules block.
 	Notice string `json:"-"`
 }
@@ -175,7 +175,7 @@ func parseExternalCheck(out []byte) (externalCheckResult, error) {
 // role is the side the check acts as: the answer is held to that role's
 // pinned definition digests (cli.ProfileRulesChecker.ForRole), so swapping one
 // role's pin changes only that role's check.
-func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []byte, history *dealRulesHistory, withCards bool) dealRules {
+func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []byte, history *dealRulesHistory) dealRules {
 	pin := p.RulesChecker
 	if len(pin.Command) == 0 {
 		return dealRules{Status: "not_configured"}
@@ -225,8 +225,8 @@ func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []by
 	}
 	rules := dealRules{Status: "evaluated", RulesetID: result.RulesetID, Kind: pin.Kind, DefinitionDigest: result.DefinitionDigest, CheckerSHA256: pin.SHA256,
 		Verdict: result.Verdict, Tier: result.Tier, Grade: result.Grade, Findings: result.Findings, History: history}
-	// The notice is for the person and only when the checker was given cards.
-	if result.Notice != nil && withCards {
+	// The notice is read only from the run that was given cards (receivedNotice).
+	if result.Notice != nil {
 		rules.Notice = result.Notice.Line
 	}
 	return rules
@@ -544,7 +544,7 @@ func findingField(id string) string {
 // approval, sealed as a task-authority record in typed records). It is
 // absent when the task authority in force is not a task-authority record
 // (an x-deal-v0 deal), and in a deal with none.
-func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events []sealedEvent, received []map[string]interface{}) ([]byte, *dealRulesHistory, error) {
+func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events []sealedEvent) ([]byte, *dealRulesHistory, error) {
 	record, err := s.capsuleWithInput(ctx, capsuleID)
 	if err != nil {
 		return nil, nil, err
@@ -602,12 +602,6 @@ func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events [
 	// explicit, so a checker selects its rules without inferring the side.
 	input := map[string]interface{}{"schema": cli.ExternalCheckInput, "party_role": dealRole(events), "record": record, "history": history,
 		"history_scope": map[string]interface{}{"days": scope.Days, "max_records": rulesHistoryMax, "complete": scope.Complete}}
-	// received_cards: the cards the host handed over at this check, as it
-	// received them, for this device's checker alone. Never stored, sealed or
-	// shared; absent when there are none.
-	if len(received) > 0 {
-		input["received_cards"] = received
-	}
 	// rules_pin: on a profile that pins rules per role, the acting role's pin
 	// alone (never the other role's), so the checker selects the pack and
 	// digests the profile means for this side. Absent without roles, so a
@@ -1051,4 +1045,33 @@ func (s *dealSession) actCounterpartyProfile(ctx context.Context, actID string) 
 		}
 	}
 	return out, nil
+}
+
+// receivedNotice is the checker's one line about the cards a host received,
+// for the person. The sealed rules block comes from a run given no cards, so
+// nothing the cards could change reaches it: this second run is read for its
+// notice alone, and a run that is not evaluated, or prints none, says why
+// there is no line and nothing else of it is kept.
+func receivedNotice(ctx context.Context, p cli.Profile, role string, input []byte, received []json.RawMessage) (line, unavailable string) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(input, &doc); err != nil {
+		return "", "the rules checker's input could not be extended with the cards"
+	}
+	cards, err := json.Marshal(received)
+	if err != nil {
+		return "", "the cards could not be handed to the rules checker"
+	}
+	doc["received_cards"] = cards
+	extended, err := json.Marshal(doc)
+	if err != nil {
+		return "", "the cards could not be handed to the rules checker"
+	}
+	run := runRulesChecker(ctx, p, role, extended, nil)
+	switch {
+	case run.Status != "evaluated":
+		return "", "the rules checker did not read the cards: " + run.Reason
+	case run.Notice == "":
+		return "", "the rules checker printed no line about the cards"
+	}
+	return run.Notice, ""
 }
