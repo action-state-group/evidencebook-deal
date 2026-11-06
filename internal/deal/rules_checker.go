@@ -74,6 +74,11 @@ type dealRules struct {
 	Grade string `json:"grade,omitempty"`
 	// History is what the checker was given beside the record.
 	History *dealRulesHistory `json:"history,omitempty"`
+	// Notice is the checker's one line for the person about the received
+	// cards it was given (external-check-result/v0 notice). It is shown by the
+	// check and never sealed, stored or shared: json:"-" keeps it out of every
+	// marshalled form of the rules block.
+	Notice string `json:"-"`
 }
 
 // dealRulesHistory states the history a checker was given: how many earlier
@@ -98,6 +103,9 @@ type externalCheckResult struct {
 	Tier             string             `json:"tier"`
 	Grade            string             `json:"grade"`
 	Findings         []dealRulesFinding `json:"findings"`
+	Notice           *struct {
+		Line string `json:"line"`
+	} `json:"notice"`
 }
 
 //go:embed assets/external-check-result-v0.schema.json
@@ -167,7 +175,7 @@ func parseExternalCheck(out []byte) (externalCheckResult, error) {
 // role is the side the check acts as: the answer is held to that role's
 // pinned definition digests (cli.ProfileRulesChecker.ForRole), so swapping one
 // role's pin changes only that role's check.
-func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []byte, history *dealRulesHistory) dealRules {
+func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []byte, history *dealRulesHistory, withCards bool) dealRules {
 	pin := p.RulesChecker
 	if len(pin.Command) == 0 {
 		return dealRules{Status: "not_configured"}
@@ -215,8 +223,13 @@ func runRulesChecker(ctx context.Context, p cli.Profile, role string, input []by
 	if pinned := pin.ForRole(role).PinnedDigests(); len(pinned) > 0 && !slices.Contains(pinned, result.DefinitionDigest) {
 		return notEvaluated("ruleset_changed", "the ruleset changed since it was pinned ("+result.RulesetID+" reports another definition digest)"+rePinHint)
 	}
-	return dealRules{Status: "evaluated", RulesetID: result.RulesetID, Kind: pin.Kind, DefinitionDigest: result.DefinitionDigest, CheckerSHA256: pin.SHA256,
+	rules := dealRules{Status: "evaluated", RulesetID: result.RulesetID, Kind: pin.Kind, DefinitionDigest: result.DefinitionDigest, CheckerSHA256: pin.SHA256,
 		Verdict: result.Verdict, Tier: result.Tier, Grade: result.Grade, Findings: result.Findings, History: history}
+	// The notice is for the person and only when the checker was given cards.
+	if result.Notice != nil && withCards {
+		rules.Notice = result.Notice.Line
+	}
+	return rules
 }
 
 // privateExecutableCopy reads the executable at path once (under a trusted
@@ -531,7 +544,7 @@ func findingField(id string) string {
 // approval, sealed as a task-authority record in typed records). It is
 // absent when the task authority in force is not a task-authority record
 // (an x-deal-v0 deal), and in a deal with none.
-func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events []sealedEvent) ([]byte, *dealRulesHistory, error) {
+func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events []sealedEvent, received []map[string]interface{}) ([]byte, *dealRulesHistory, error) {
 	record, err := s.capsuleWithInput(ctx, capsuleID)
 	if err != nil {
 		return nil, nil, err
@@ -589,6 +602,12 @@ func (s *dealSession) rulesInput(ctx context.Context, capsuleID string, events [
 	// explicit, so a checker selects its rules without inferring the side.
 	input := map[string]interface{}{"schema": cli.ExternalCheckInput, "party_role": dealRole(events), "record": record, "history": history,
 		"history_scope": map[string]interface{}{"days": scope.Days, "max_records": rulesHistoryMax, "complete": scope.Complete}}
+	// received_cards: the cards the host handed over at this check, as it
+	// received them, for this device's checker alone. Never stored, sealed or
+	// shared; absent when there are none.
+	if len(received) > 0 {
+		input["received_cards"] = received
+	}
 	// rules_pin: on a profile that pins rules per role, the acting role's pin
 	// alone (never the other role's), so the checker selects the pack and
 	// digests the profile means for this side. Absent without roles, so a

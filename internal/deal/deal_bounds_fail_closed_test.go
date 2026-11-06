@@ -112,10 +112,10 @@ func TestTheCheckerInputIsNotBuiltWithoutTheFloorsOpening(t *testing.T) {
 	defer func() { _ = s.close() }()
 	defer func() { require.NoError(t, s.close()) }()
 	require.NoError(t, s.useDeal(t.Context(), id, false))
-	raw, _, err := s.rulesInput(t.Context(), check, withBoundsNonce(events, ""))
+	raw, _, err := s.rulesInput(t.Context(), check, withBoundsNonce(events, ""), nil)
 	require.Error(t, err)
 	assert.Nil(t, raw, "no input to send")
-	_, _, err = s.rulesInput(t.Context(), check, events)
+	_, _, err = s.rulesInput(t.Context(), check, events, nil)
 	require.NoError(t, err)
 }
 
