@@ -1,10 +1,13 @@
 package deal
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,4 +76,52 @@ func TestListReconcileOwnHalfOnly(t *testing.T) {
 	got, _ := reconcileOfListing(t, pair.id).(map[string]any)
 	assert.Equal(t, false, got["counterparty_half_held"])
 	assert.Equal(t, false, got["halves_conflict"])
+}
+
+// Several Results: held is true once any verified Result cited both halves,
+// conflict and `at` are the newest's, and a ranged listing reads only the
+// Results sealed before --until (exclusive).
+func TestListReconcileNewestResultAndUntil(t *testing.T) {
+	pair := closedPair(t, received, `{"status":"received","delivered":{"price_minor":185000}}`)
+	first := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	second := first.Add(time.Hour)
+	now := clockAt(t, first)
+	_, _, _, err := runTermsResult(t, pair.id, pair.response, "--openings", pair.sellerFile)
+	require.NoError(t, err)
+	*now = second
+	_, _, _, err = runTermsResult(t, pair.id, pair.response)
+	require.NoError(t, err)
+
+	facts := func(extra ...string) map[string]any {
+		got, _ := reconcileOfListing(t, pair.id, extra...).(map[string]any)
+		return got
+	}
+	at := func(m map[string]any) string { return m["at"].(string) }
+	newest := facts()
+	assert.Equal(t, true, newest["counterparty_half_held"], "an earlier Result cited both halves")
+	assert.Equal(t, false, newest["halves_conflict"], "the newest cites one half and tallies no conflict")
+	assert.Equal(t, second.Format(time.RFC3339), at(newest))
+
+	earlier := facts("--until", second.Format(time.RFC3339))
+	assert.Equal(t, true, earlier["halves_conflict"], "the second Result is sealed at --until and is not read")
+	assert.Equal(t, first.Format(time.RFC3339), at(earlier))
+	assert.Equal(t, second.Format(time.RFC3339), at(facts("--until", second.Add(time.Second).Format(time.RFC3339))))
+	assert.Nil(t, reconcileOfListing(t, pair.id, "--until", first.Format(time.RFC3339)), "no Result is sealed before the first")
+}
+
+// A Result the profile cannot verify (here its signer is no longer trusted)
+// fails the listing loudly: a plugin never reads a zero for a fact it could
+// not check.
+func TestListReconcileFailsOnAResultItCannotVerify(t *testing.T) {
+	pair := closedPair(t, received, received)
+	_, _, _, err := runTermsResult(t, pair.id, pair.response, "--openings", pair.sellerFile)
+	require.NoError(t, err)
+
+	p := dealProfile(t)
+	other, _, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	p.TrustedKeys = []string{hex.EncodeToString(other)}
+	require.NoError(t, cli.SaveProfile(p, true))
+	text, err := invoke(t, "", "--profile", "deal", "deal", "list", "--json")
+	require.ErrorIs(t, err, cli.ErrConflict, text)
 }
