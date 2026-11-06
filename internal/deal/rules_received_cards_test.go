@@ -104,6 +104,9 @@ else ` + checkerPrints("allow", "") + `; fi`,
 			} else {
 				assert.NotContains(t, with, "rules_notice")
 				assert.Contains(t, with["rules_notice_unavailable"], tc.wantNone)
+				rawWith, err := json.Marshal(with)
+				require.NoError(t, err)
+				assert.NotContains(t, string(rawWith), cardMarker, "no card text reaches the output")
 			}
 
 			records, raw := exportAsAny(t, id)
@@ -117,7 +120,7 @@ else ` + checkerPrints("allow", "") + `; fi`,
 	}
 }
 
-// The checker is handed each card byte for byte, numbers a float cannot hold included.
+// The checker is handed each card with its values and numbers as given, ones a float cannot hold included.
 func TestReceivedCardsReachTheCheckerAsReceived(t *testing.T) {
 	id := stickerDeal(t, "card", false)
 	checker := stubChecker(t, "checker", checkerPrints("allow", ""))
@@ -169,4 +172,20 @@ func TestReceivedCardsNeedARulesChecker(t *testing.T) {
 	err = dealRunErr(t, "check", "--deal", sale, "--input", writeJSON(t, `{"action":"post","posting":`+postingJSON(listingText, "example", "condition")+`}`), "--received", cardsFile(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "post check runs no rules checker")
+}
+
+// When the check's own run is not answered, the cards get no second run: the
+// checker is not run twice over a failure, and the output says why.
+func TestReceivedCardsGetNoSecondRunWhenTheCheckWasNotEvaluated(t *testing.T) {
+	id := stickerDeal(t, "card", false)
+	root := t.TempDir()
+	t.Setenv("CAPSULECTL_PLUGIN_ROOTS", root)
+	checker := stubChecker(t, "checker", "echo refused >&2; exit 3")
+	pinChecker(t, map[string]any{"command": []string{checker}, "definition_digest": exampleRulesDigest})
+	check := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, payCheck("card", 454, 480)), "--received", cardsFile(t))
+	assert.Contains(t, check["rules_notice_unavailable"], "the check itself was not evaluated")
+	assert.NotContains(t, check, "rules_notice")
+	raw, err := os.ReadFile(checker + ".input")
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "received_cards", "the checker was run once, without cards")
 }

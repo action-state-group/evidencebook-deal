@@ -1069,7 +1069,8 @@ func receivedNotice(ctx context.Context, p cli.Profile, role string, input []byt
 	run := runRulesChecker(ctx, p, role, extended, nil)
 	switch {
 	case run.Status != "evaluated":
-		return "", "the rules checker did not read the cards: " + run.Reason
+		// The cause, never the run's own words: its stderr may carry a card.
+		return "", "the rules checker did not read the cards (" + run.Cause + ")"
 	case run.Notice == "":
 		return "", "the rules checker printed no line about the cards"
 	}

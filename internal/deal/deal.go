@@ -2305,8 +2305,13 @@ func dealCheckCommand() *cobra.Command {
 				rules.Notice = ""
 				if len(received) > 0 {
 					// The sealed rules above come from a run given no cards.
-					// A second run with them is read for its notice only.
-					notice, unavailable = receivedNotice(ctx, s.p, dealRole(events), input, received)
+					// A second run with them is read for its notice only, and
+					// only when the first answered.
+					if rules.Status == "evaluated" {
+						notice, unavailable = receivedNotice(ctx, s.p, dealRole(events), input, received)
+					} else {
+						unavailable = "the rules checker did not read the cards (the check itself was not evaluated: " + rules.Cause + ")"
+					}
 				}
 				// The card reads the thread's acceptance against the same
 				// cutoff the checker's history was read from.
@@ -2426,7 +2431,7 @@ const (
 )
 
 // readReceivedCards reads `deal check --received FILE`: a non-empty JSON array
-// of card objects, kept byte for byte as given, or nil when the flag is not
+// of card objects, kept as given (values, numbers and key order), or nil when the flag is not
 // given.
 func readReceivedCards(c *cobra.Command) ([]json.RawMessage, error) {
 	if !c.Flags().Changed("received") {
