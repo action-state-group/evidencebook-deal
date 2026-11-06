@@ -22,9 +22,12 @@ type dealReconcileFacts struct {
 	// halves, that is, the counterparty's half was received and admitted
 	// (citesTwoHalves, as the History card reads it).
 	CounterpartyHalfHeld bool `json:"counterparty_half_held"`
-	// HalvesConflict is whether the newest verified Result tallies a
-	// conflicting pairing under any of its claims.
-	HalvesConflict bool `json:"halves_conflict"`
+	// HalvesConflict is read from the newest verified Result that cites both
+	// halves: true when a claim tallies a conflicting pairing, false when
+	// every claim matched, null when no such Result exists or a claim could
+	// not be compared (insufficient or unresolved). A Result over one half
+	// compared nothing, so it never turns a conflict into "no conflict".
+	HalvesConflict *bool `json:"halves_conflict"`
 	// At is when the newest verified Result was sealed (RFC 3339, UTC).
 	At string `json:"at"`
 }
@@ -85,31 +88,40 @@ func (x shelfDealIndex) reconcileFacts(ctx context.Context, keys []ed25519.Publi
 		if facts == nil {
 			facts = &dealReconcileFacts{}
 		}
-		facts.CounterpartyHalfHeld = facts.CounterpartyHalfHeld || citesTwoHalves(raw)
-		facts.HalvesConflict = resultConflicts(raw)
+		if citesTwoHalves(raw) {
+			facts.CounterpartyHalfHeld = true
+			facts.HalvesConflict = resultConflicts(raw)
+		}
 		facts.At = at.UTC().Format(time.RFC3339)
 	}
 	return facts, nil
 }
 
-// resultConflicts is whether a Result's claims tally a conflicting pairing.
-func resultConflicts(result []byte) bool {
+// resultConflicts is whether a two-half Result's claims tally a conflicting
+// pairing (true), all matched (false), or could not all be compared (nil).
+func resultConflicts(result []byte) *bool {
 	var doc struct {
 		Claims []struct {
 			Reconcile struct {
-				Tallies struct {
-					Conflicting int `json:"conflicting"`
-				} `json:"tallies"`
+				Tallies evidencebook.ResultTallies `json:"tallies"`
 			} `json:"reconcile"`
 		} `json:"claims"`
 	}
-	if json.Unmarshal(result, &doc) != nil {
-		return false
+	if json.Unmarshal(result, &doc) != nil || len(doc.Claims) == 0 {
+		return nil
 	}
+	matched := true
 	for _, c := range doc.Claims {
-		if c.Reconcile.Tallies.Conflicting > 0 {
-			return true
+		t := c.Reconcile.Tallies
+		if t.Conflicting > 0 {
+			conflict := true
+			return &conflict
 		}
+		matched = matched && t.Matched > 0
 	}
-	return false
+	if !matched {
+		return nil
+	}
+	none := false
+	return &none
 }

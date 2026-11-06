@@ -75,7 +75,7 @@ func TestListReconcileOwnHalfOnly(t *testing.T) {
 	require.NoError(t, err)
 	got, _ := reconcileOfListing(t, pair.id).(map[string]any)
 	assert.Equal(t, false, got["counterparty_half_held"])
-	assert.Equal(t, false, got["halves_conflict"])
+	assert.Nil(t, got["halves_conflict"], "a Result over one half compared nothing")
 }
 
 // Several Results: held is true once any verified Result cited both halves,
@@ -99,7 +99,7 @@ func TestListReconcileNewestResultAndUntil(t *testing.T) {
 	at := func(m map[string]any) string { return m["at"].(string) }
 	newest := facts()
 	assert.Equal(t, true, newest["counterparty_half_held"], "an earlier Result cited both halves")
-	assert.Equal(t, false, newest["halves_conflict"], "the newest cites one half and tallies no conflict")
+	assert.Equal(t, true, newest["halves_conflict"], "the newest cites one half: it compared nothing and leaves the conflict found before")
 	assert.Equal(t, second.Format(time.RFC3339), at(newest))
 
 	earlier := facts("--until", second.Format(time.RFC3339))
@@ -124,4 +124,15 @@ func TestListReconcileFailsOnAResultItCannotVerify(t *testing.T) {
 	require.NoError(t, cli.SaveProfile(p, true))
 	text, err := invoke(t, "", "--profile", "deal", "deal", "list", "--json")
 	require.ErrorIs(t, err, cli.ErrConflict, text)
+}
+
+// Both halves held but nothing comparable (a side that did not receive
+// commits no money terms): held, and the conflict is unknown, not false.
+func TestListReconcileHeldButNotComparable(t *testing.T) {
+	pair := closedPair(t, `{"status":"not_received","reason":"not_delivered"}`, received)
+	_, _, _, err := runTermsResult(t, pair.id, pair.response, "--openings", pair.sellerFile)
+	require.NoError(t, err)
+	got, _ := reconcileOfListing(t, pair.id).(map[string]any)
+	assert.Equal(t, true, got["counterparty_half_held"])
+	assert.Nil(t, got["halves_conflict"])
 }
