@@ -59,7 +59,7 @@ func (s *dealSession) heldWitnessReceipt(ctx context.Context, statement []byte) 
 
 // dealScopeLine is printed on the face of every receipt, report page and
 // email: a receipt is about one deal, never about the agent's whole activity.
-const dealScopeLine = "This receipt covers this one deal. It is not a record of everything the agent did."
+const dealScopeLine = "This receipt covers this one exchange. It is not a record of everything the agent did."
 
 // dealDidLine says what kind of evidence the "did" part is. What was asked,
 // proposed and approved happened in the conversation on the agent's device,
@@ -182,7 +182,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 	when := "a checkpoint covering these steps, sent at a cadence tick after them"
 	out := map[string]any{"rung": "witnessed", "witness_state": "witnessed", "witness": host}
 	if at, _ := cadence["checkpoint_at"].(string); at != "" {
-		when = "this deal's checkpoint, cut at " + at + " at a cadence tick after the deal's steps"
+		when = "this receipt's checkpoint, cut at " + at + " at a cadence tick after the receipt's steps"
 		out["checkpoint_at"] = at
 	}
 	// Witnessed in part: the receipt covers an earlier checkpoint of this

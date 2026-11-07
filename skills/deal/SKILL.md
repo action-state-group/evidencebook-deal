@@ -1195,7 +1195,7 @@ never as the seller or the other side. Never call a countersignature
 confirmed, independent or notarized. When it covers part of the deal, say
 "through step k of n".
 
-Every page opens with its scope (this one deal, not a record of everything the agent did), whether it is countersigned, and what it does not claim. What
+Every page opens with its scope (this one exchange, not a record of everything the agent did), whether it is countersigned, and what it does not claim. What
 was verified, the witness receipt included, is the page's own verification
 section, said once; anyone can also run `capsulectl verify --bundle
 deal-report.html` on the file.
@@ -1243,7 +1243,7 @@ the reader chooses. The email copy cannot check itself; the attached page and
 `capsulectl verify --bundle bundle.json` can.
 
 Every receipt, page and email states its own scope on its face: "This
-receipt covers this one deal. It is not a record of everything the agent
+receipt covers this one exchange. It is not a record of everything the agent
 did." Never describe a receipt as complete. What was asked, proposed and
 approved is sealed where it happened, in the conversation. What the agent
 did is the agent's own report until an independent source, such as the

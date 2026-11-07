@@ -476,7 +476,7 @@ check the receipt itself and says so; `capsulectl verify --bundle FILE
 reader chooses. Making a report never contacts the witness.
 
 The page and the email both say, on their face, "This receipt covers this
-one deal. It is not a record of everything the agent did." They also say
+one exchange. It is not a record of everything the agent did." They also say
 that what was asked, proposed and approved is sealed where it happened, while
 what the agent did is the agent's own report until an independent source is
 attached.

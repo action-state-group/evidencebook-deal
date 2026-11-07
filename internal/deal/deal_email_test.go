@@ -97,7 +97,7 @@ func TestDealReceiptEmailIsReadableWithoutADownloadAndCheckable(t *testing.T) {
 
 	// The attachments: the self-checking page and the bundle.
 	require.Contains(t, files, "receipt.html")
-	assert.Regexp(t, `<title>Deal report: “[^<]+”</title>`, string(files["receipt.html"]), "the user's own copy is titled with the words they asked")
+	assert.Regexp(t, `<title>Receipt report: “[^<]+”</title>`, string(files["receipt.html"]), "the user's own copy is titled with the words they asked")
 	written, err := os.ReadFile(bundlePath)
 	require.NoError(t, err)
 	assert.Equal(t, written, files["bundle.json"])

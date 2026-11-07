@@ -670,7 +670,7 @@ func TestDealIsWitnessPendingUntilATick(t *testing.T) {
 	a = report["assurance"].(map[string]any)
 	assert.Equal(t, "witnessed", a["rung"])
 	assert.Equal(t, "2026-09-27T18:07:00Z", a["checkpoint_at"], "the tick's time, coarsened to the minute")
-	assert.Contains(t, a["text"], "signed a receipt for this deal's checkpoint, cut at 2026-09-27T18:07:00Z at a cadence tick after the deal's steps")
+	assert.Contains(t, a["text"], "signed a receipt for this receipt's checkpoint, cut at 2026-09-27T18:07:00Z at a cadence tick after the receipt's steps")
 	cadence := embeddedBundle(t, string(mustRead(t, page)))["extensions"].(map[string]any)[cli.DealCadenceExtension].(map[string]any)
 	assert.Equal(t, "2026-09-27T18:07:00Z", cadence["checkpoint_at"], "the page reads it from the bundle")
 }
