@@ -71,7 +71,13 @@ with a clear message.
   7 MiB; the object cap rises from 4 MiB only if wanted. 10 MB cannot fit in any single record.
 - **New steps only.** A step already sealed carries its bytes inside `deal_local`, and the store
   cannot purge one original. It stays droppable only together with the deal, as today.
-- **Verb.** `deal drop --deal <id> --step <n>` (name for Sherlock2), asking the user to confirm first and then running `SetRetention(DELETED, reason)` on the held record. It is irreversible.
+- **Verb.** `deal drop --deal <id> --step <n>` (Sherlock2 keeps "drop" and avoids "purge" and "delete"
+  as the user word), asking the user to confirm first and then running `SetRetention(DELETED, reason)`
+  on the held record. The confirmation names what goes and what stays: "This deletes the held
+  {object|email} bytes for step <n> of deal <id>. The step, its digests and the sealed facts stay.
+  The order id stays in the clear. A copy you kept still verifies against the digest. This cannot
+  be undone." `verify-object` prints `NOT_PRESENT (dropped <date>)`, so a reader can tell dropped
+  from digest-only.
 
 ## What the issue's framing leaves open (found in the code)
 
@@ -99,8 +105,10 @@ with a clear message.
 3. **Parsed values stay.** For an email the re-derivation also reads the parsed totals, currency,
    dates and item count (deal_profile.go:552-577), which are in the sealed payload, so a drop
    cannot remove `Parsed` without breaking the byte-equal check (deal_books.go:863). What a drop
-   removes is the raw message, the object octets, the carrier headers and the order id text; whether
-   that is enough is a user-facing choice to put to Sherlock2.
+   removes is the raw message, the object octets and the carrier headers. The order id text, the
+   parsed values and the sealed digests stay: Sherlock2 (Buzz, 2026-11-07, reply to this note) rules
+   the headers are the personal part and the rest are deal facts the counterparty holds anyway, so
+   a drop that left header tokens in the clear must not ship as a drop.
 
 ## Is the build wanted?
 
@@ -115,11 +123,16 @@ My recommendation: split it.
   moving the header and order id commitments out of the text-derived path (open point 1). Build it when a user asks for
   a drop, with open points 1 and 3 decided first. Until then the note is the design of record.
 
+Sherlock2 also notes that "new steps only" leaves every step sealed before the build undroppable,
+and that landing the held-book storage shape early (with any other `deal_local` shape change)
+makes the later verb retroactive from that point. That is a schedule trade-off for the build, not
+a reason to build now.
+
 ## Doors and routing
 
 - Option A: no store API, no wire change, no release. The `deal_local` shape is a local, versionless
   detail of this plugin (new steps only; old steps read as today).
-- Needs routing if built: the drop verb and the confirmation wording (Sherlock2); what a drop
+- Needs routing if built: the final confirmation wording (Sherlock2 has given the text above); what a drop
   removes beyond the bytes (open point 3) and the irreversible deletion of a user's evidence
   (Steven, as a user-visible disclosure and deletion rule).
 - `deal verify-object` keeps `object_digest: NOT_PRESENT` after a drop, per the issue.
