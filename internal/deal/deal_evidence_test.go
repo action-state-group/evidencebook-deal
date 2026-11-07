@@ -386,7 +386,7 @@ func TestADealCopyUnderAnotherCheckpointKeyIsRecordedFailed(t *testing.T) {
 
 // respond refuses, signed, what it cannot serve: a deal this profile does
 // not hold, a subject that names no deal, a request without exactly one
-// coverage member, a derivation, and a field it does not define.
+// coverage member, and a field it does not define.
 func TestDealRespondRefusesWhatItCannotServe(t *testing.T) {
 	dealFixture(t)
 	held := dealRun(t, "open", "--input", writeJSON(t, crossPartyBuyerOpen))["deal_id"].(string)
@@ -399,8 +399,6 @@ func TestDealRespondRefusesWhatItCannotServe(t *testing.T) {
 		"not a deal subject": {map[string]any{"subject": map[string]any{"kind": "range", "first": 1, "last": 1},
 			"coverage": map[string]any{"min_freshness": map[string]any{"size": 1}}}, "no_such_subject"},
 		"a held deal with no coverage": {map[string]any{"subject": map[string]any{"kind": "correlation", "value": held}, "coverage": map[string]any{}}, "coverage_unsatisfiable"},
-		"a held deal with a derivation": {map[string]any{"subject": map[string]any{"kind": "correlation", "value": held},
-			"coverage": map[string]any{"min_freshness": map[string]any{"size": 1}}, "derivation": "history_card/1"}, "derivation_unsupported"},
 		"unknown field": {map[string]any{"subject": map[string]any{"kind": "correlation", "value": "deal-0000000000000000"},
 			"coverage": map[string]any{"min_freshness": map[string]any{"size": 1}}, "extra": true}, "request_malformed"},
 	} {
@@ -411,6 +409,34 @@ func TestDealRespondRefusesWhatItCannotServe(t *testing.T) {
 			assert.Equal(t, c.reason, result["reason"])
 		})
 	}
+}
+
+// A request above the standard card (any derivation the holder does not serve
+// automatically) is held for the holder: not refused, not answered, no reply
+// written, one pending item however often it is presented (F4.10 "ask me").
+func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
+	dealFixture(t)
+	held := dealRun(t, "open", "--input", writeJSON(t, crossPartyBuyerOpen))["deal_id"].(string)
+	request := writeJSONFile(t, "req.json", map[string]any{"subject": map[string]any{"kind": "correlation", "value": held},
+		"coverage": map[string]any{"min_freshness": map[string]any{"size": 1}}, "derivation": "outcome/1"})
+	out := filepath.Join(t.TempDir(), "response.json")
+	first := runJSON(t, "deal", "respond", "--request", request, "--requester", "x", "--output", out)
+	assert.Equal(t, "held", first["outcome"])
+	assert.Empty(t, first["reason"], "a hold is not a refusal")
+	assert.NoFileExists(t, out, "the holder does not reply until it decides")
+	again := runJSON(t, "deal", "respond", "--request", request, "--requester", "x", "--output", out)
+	assert.Equal(t, "held", again["outcome"])
+	assert.Equal(t, first["record_id"], again["record_id"], "the same request is one pending item")
+	assert.NoFileExists(t, out)
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	s, err := openDealSession(t.Context(), p)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, s.close()) }()
+	rows, err := s.exchangeRows(t.Context(), `kind=?`, dealExchangeHeld)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "outcome/1", rows[0].record["derivation"])
 }
 
 // dealReportCount is how many reports the profile's store has sealed for a

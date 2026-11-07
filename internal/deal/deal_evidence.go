@@ -58,6 +58,10 @@ const (
 	dealExchangeResponse = "evidence_response"
 	dealExchangeAbsence  = "evidence_absence"
 	dealExchangeAnswered = "evidence_request_answered"
+	// dealExchangeHeld is a request above the standard that the holder has
+	// not decided: pending, with no reply written.
+	dealExchangeHeld = "evidence_request_held"
+	dealOutcomeHeld  = "held"
 )
 
 // dealRequestsLogID names the log a deal's request records go on. An answer
@@ -671,7 +675,10 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		}
 	}
 	if req.Derivation != "" {
-		return refuse(evidencebook.ReasonDerivationUnsupported)
+		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
+		// holder does not serve automatically is above the standard card.
+		// It is not refused and not answered; the holder decides.
+		return s.holdRequest(c, dealID, answered, req.Derivation)
 	}
 	if e = s.useDeal(ctx, dealID, false); e != nil {
 		return e
@@ -804,6 +811,30 @@ func (s *dealSession) writeAnswer(c *cobra.Command, dealID string, answered map[
 		return err
 	}
 	return s.writeAnswerBytes(c, dealID, answered, encoded, path)
+}
+
+// holdRequest records a request above the standard as pending for the
+// holder and writes no reply: no wire change, so the requester sees pending
+// until its window closes and then a recorded absence (RecordAbsence). The
+// same request held twice is one item.
+func (s *dealSession) holdRequest(c *cobra.Command, dealID string, held map[string]interface{}, derivation string) error {
+	ctx := c.Context()
+	digest, _ := held["request_digest"].(string)
+	prior, err := s.exchangeRows(ctx, `kind=? AND deal_id=?`, dealExchangeHeld, dealID)
+	if err != nil {
+		return err
+	}
+	for _, r := range prior {
+		if r.record["request_digest"] == digest {
+			return cli.Output(c, cli.EvidenceRespondResult{RecordID: r.digest, RequestDigest: digest, Outcome: dealOutcomeHeld, Relationship: evidencebook.RelationshipIdentified})
+		}
+	}
+	held["derivation"], held["outcome"] = derivation, dealOutcomeHeld
+	id, err := s.recordExchange(ctx, dealID, dealExchangeHeld, "", held)
+	if err != nil {
+		return err
+	}
+	return cli.Output(c, cli.EvidenceRespondResult{RecordID: id, RequestDigest: digest, Outcome: dealOutcomeHeld, Relationship: evidencebook.RelationshipIdentified})
 }
 
 // writeAnswerBytes records the answer and writes its octets: a deal answer's
