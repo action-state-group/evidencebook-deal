@@ -666,16 +666,8 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		return refuse(evidencebook.ReasonNoSuchSubject)
 	}
 	dealID = req.Subject.Value
-	if req.Derivation != "" {
-		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
-		// holder does not serve automatically is above the standard card.
-		// It is not refused and not answered, whatever the coverage would
-		// say today. Deciding a held item has no CLI surface yet (#178).
-		return s.holdRequest(c, dealID, answered, req.Derivation)
-	}
-	if (req.Coverage.ExpectedPin == nil) == (req.Coverage.MinFreshness == nil) {
-		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
-	}
+	// A malformed time is the request's fault, whatever it asks for: refused
+	// before any hold, so a held item is always a well-formed request.
 	if req.Deadline != "" {
 		if _, e = time.Parse(time.RFC3339Nano, req.Deadline); e != nil {
 			return refuse(evidencebook.ReasonRequestMalformed)
@@ -686,9 +678,19 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		if notBefore, e = time.Parse(time.RFC3339Nano, floor.Time); e != nil {
 			return refuse(evidencebook.ReasonRequestMalformed)
 		}
-		if notBefore.After(cli.DealClock()) {
-			return refuse(evidencebook.ReasonCoverageUnsatisfiable)
-		}
+	}
+	if req.Derivation != "" {
+		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
+		// holder does not serve automatically is above the standard card.
+		// It is not refused and not answered, whatever the coverage would
+		// say today. Deciding a held item has no CLI surface yet (#178).
+		return s.holdRequest(c, dealID, answered, req.Derivation)
+	}
+	if (req.Coverage.ExpectedPin == nil) == (req.Coverage.MinFreshness == nil) {
+		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
+	}
+	if !notBefore.IsZero() && notBefore.After(cli.DealClock()) {
+		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 	}
 	if e = s.useDeal(ctx, dealID, false); e != nil {
 		return e

@@ -434,6 +434,17 @@ func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
 		"coverage": map[string]any{"min_freshness": map[string]any{"time": "2099-01-01T00:00:00Z"}}, "derivation": "outcome/1"})
 	assert.Equal(t, "held", runJSON(t, "deal", "respond", "--request", future, "--requester", "x", "--output", out)["outcome"])
 
+	// A malformed time is refused, never held.
+	for name, cov := range map[string]map[string]any{"floor": {"min_freshness": map[string]any{"time": "garbage"}}, "deadline": {"min_freshness": map[string]any{"size": 1}}} {
+		req := map[string]any{"subject": map[string]any{"kind": "correlation", "value": held}, "coverage": cov, "derivation": "outcome/1"}
+		if name == "deadline" {
+			req["deadline"] = "garbage"
+		}
+		bad := runJSON(t, "deal", "respond", "--request", writeJSONFile(t, name+".json", req), "--requester", "x", "--output", filepath.Join(t.TempDir(), name+".json"))
+		assert.Equal(t, "refusal", bad["outcome"], name)
+		assert.Equal(t, "request_malformed", bad["reason"], name)
+	}
+
 	// The interop request shape (full_history subject) is held too.
 	interop := filepath.Join(t.TempDir(), "interop.json")
 	require.NoError(t, os.WriteFile(interop, []byte(`{"subject":{"full_history":null},"coverage":{"min_freshness":1},"derivation":"outcome/1","profile":"evidence-interop/0"}`), 0o600))
