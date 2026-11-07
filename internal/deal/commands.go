@@ -35,7 +35,7 @@ func dealEvidenceCommands() []*cobra.Command {
 		}
 		return nil
 	}
-	return []*cobra.Command{onProfiles(requestCommand(), notDeal), onProfiles(respondCommand(), notDeal), composeCommand()}
+	return []*cobra.Command{onProfiles(requestCommand(), notDeal), onProfiles(respondCommand(), notDeal), dealHeldCommand(), dealDeclineCommand(), composeCommand()}
 }
 
 // onProfiles runs check on the selected profile before cmd's own RunE.
