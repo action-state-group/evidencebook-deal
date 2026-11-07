@@ -121,7 +121,7 @@ My recommendation: split it.
   and the user who wants to keep the deal and drop the body); I found no user request. The cost
   is a new sibling book, a changed `deal_local` shape, about a dozen `Raw` call sites, a new verb, and
   moving the header and order id commitments out of the text-derived path (open point 1). Build it when a user asks for
-  a drop, with open points 1 and 3 decided first. Until then the note is the design of record.
+  a drop; the scope and the mechanism are settled above. Until then the note is the design of record.
 
 Sherlock2 also notes that "new steps only" leaves every step sealed before the build undroppable,
 and that landing the held-book storage shape early (with any other `deal_local` shape change)
@@ -132,9 +132,9 @@ a reason to build now.
 
 - Option A: no store API, no wire change, no release. The `deal_local` shape is a local, versionless
   detail of this plugin (new steps only; old steps read as today).
-- Needs routing if built: the final confirmation wording (Sherlock2 has given the text above); what a drop
-  removes beyond the bytes (open point 3) and the irreversible deletion of a user's evidence
-  (Steven, as a user-visible disclosure and deletion rule).
+- Needs routing if built: the final confirmation wording (Sherlock2 has given the text above) and the irreversible
+  deletion of a user's evidence (Steven, as a user-visible disclosure and deletion rule), which
+  Sherlock2 places at the point a drop ships, not before.
 - `deal verify-object` keeps `object_digest: NOT_PRESENT` after a drop, per the issue.
 
 ## Tests the build would need
