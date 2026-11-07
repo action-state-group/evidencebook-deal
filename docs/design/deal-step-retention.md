@@ -67,8 +67,8 @@ with a clear message.
   the sealed digest. `verify-email` and the other `Raw` readers (below) report the email as
   dropped and, where a copy is given, check it against `RawDigest`.
 - **Size.** The held record holds raw bytes (`Prepare` counts `len(Content)`), so its limit is
-  8 MiB less the Capsule and envelope. The email cap becomes 7 MiB, the object cap rises from
-  4 MiB to 7 MiB only if wanted; nothing else forces it. 10 MB cannot fit in any single record.
+  8 MiB less the Capsule and envelope. With the bytes in a held record the email cap can be
+  7 MiB; the object cap rises from 4 MiB only if wanted. 10 MB cannot fit in any single record.
 - **New steps only.** A step already sealed carries its bytes inside `deal_local`, and the store
   cannot purge one original. It stays droppable only together with the deal, as today.
 - **Verb.** `deal drop --deal <id> --step <n>` (name for Sherlock2), asking the user to confirm first and then running `SetRetention(DELETED, reason)` on the held record. It is irreversible.
@@ -86,19 +86,30 @@ with a clear message.
    (company OSS, an additive API), so it is routed there, not decided here.
 2. **`Raw` has many readers.** `e.Raw`/`m.Raw` is read in deal_merchant_email.go:974-978 and
    :1218, deal_share.go:260,277, deal_share_gate.go:500, deal_deferred_email.go:265,
-   deal_verifier_statement.go:111,134,148 and deal_profile.go:536. Each must handle a dropped
+   deal_verifier_statement.go:111,134,148 and deal_profile.go:536. The held object has readers
+   too: both share checks (deal_share.go:218, deal_share_gate.go:520) scan its octets and headers as
+   private values, and `verify-object --out` exports them (`writeHeld`, deal_wrapped.go:582).
+   Each must resolve the held record (and handle a dropped one) on its own path; a new step
+   that skipped the share scan would leak what the scan exists to catch. Each must handle a dropped
    email (the digest from `RawDigest`; no re-check of DKIM, which needs the bytes). The share
    gate loses the email text as a private-value source after a drop, which is correct because the
    bytes are gone, but means a later share cannot be checked against them.
-3. **Parsed fields.** `merchantEmail.Parsed` (items, order id, totals) stays in the local event.
-   Whether a drop removes it too is a user-facing choice, not an engineering default.
+3. **The record depends on more than the digests.** The re-derivation also reads `Headers != nil`
+   (whether `carrier_headers_commitment` is emitted, deal_wrapped.go:313) and, for an email, the
+   parsed totals, currency, dates and item count (deal_profile.go:552-577), which are in the
+   sealed payload. So after a drop the local event must keep a headers-present flag and the
+   headers text for the commitment's opening (or the opening stays in the step, point 1), and the
+   parsed values; a drop cannot remove them without breaking the byte-equal check. What a drop
+   removes beyond the raw message is therefore limited to the headers (if point 1(a) lands) and
+   the order id text; this is a user-facing choice to put to Sherlock2.
 
 ## Is the build wanted?
 
 My recommendation: split it.
 
-- **Cap fix (S), do now, separate task.** Lower `maxEmail` to 7 MiB with a clear input error that
-  names the limit. That removes the "cannot be stored" case without any retention change.
+- **Cap fix (S), do now, separate task.** Lower `maxEmail` to about 5 MiB (the email is base64 in the step's
+  opening, so 7 MiB is already 9.8 MB against the 8 MiB limit; Codex's arithmetic) and check the
+  whole record's size before sealing, with a clear input error that names the limit. That removes the "cannot be stored" case without any retention change.
 - **Retention build (L), not yet.** The issue's own wording is "a likely ask" (the held object
   and the user who wants to keep the deal and drop the body); I found no user request. The cost
   is a new sibling book, a changed `deal_local` shape, about a dozen `Raw` call sites, a new verb, and
@@ -119,5 +130,5 @@ My recommendation: split it.
 A held object and an email sealed on a book deal; drop; the deal still loads and `deal report`
 reproduces; `verify-object` reports NOT_PRESENT for object and headers and still PASS for a copy;
 `verify-email` reports dropped; a second drop is idempotent (`SetRetention` retries a failed
-purge); a drop on an old step refuses with a clear message; a large email over 7 MiB is refused
+purge); a drop on an old step refuses with a clear message; a large email over the cap is refused
 with the limit named; the held book is absent from a copy of the deal.
