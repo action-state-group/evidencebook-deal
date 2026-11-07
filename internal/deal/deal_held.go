@@ -48,7 +48,7 @@ func (s *dealSession) heldRows(c *cobra.Command) (held []dealExchangeRow, decide
 }
 
 func dealHeldCommand() *cobra.Command {
-	return &cobra.Command{Use: "held", Short: "List the requests above the standard card that `deal respond` held for you and that you have not declined (state: held, can be declined). Serving a held request is not built yet: it comes with the first servable held derivation", Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) (err error) {
+	return &cobra.Command{Use: "held", Short: "List the requests above the standard card that `deal respond` held for you and that you have not declined", Long: "List the requests above the standard card that `deal respond` held for you and that you have not declined. Each is held, can be declined with `deal decline`.\n\nServing a held request is not built yet: it comes with the first servable held derivation.", Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) (err error) {
 		p, err := cli.Selected(c)
 		if err != nil {
 			return err
