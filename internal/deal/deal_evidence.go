@@ -669,8 +669,8 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 	if req.Derivation != "" {
 		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
 		// holder does not serve automatically is above the standard card.
-		// It is not refused and not answered; the holder decides, whatever
-		// the coverage would say today.
+		// It is not refused and not answered, whatever the coverage would
+		// say today. Deciding a held item has no CLI surface yet (#178).
 		return s.holdRequest(c, dealID, answered, req.Derivation)
 	}
 	if (req.Coverage.ExpectedPin == nil) == (req.Coverage.MinFreshness == nil) {
