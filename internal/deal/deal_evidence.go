@@ -640,6 +640,15 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		check.Request.Derivation = derivation
 		return s.respondStandardHistory(c, check, raw, requester, path, signer)
 	}
+	// Any other derivation asked in evidence-interop's request shape is above
+	// the standard card too: held, once the request reads as well formed.
+	if _, interop := members["profile"]; interop && derivation != "" {
+		check := evidencerequest.ParseRequest(evidencerequest.Message{Octets: raw, MediaType: evidencerequest.MediaTypeJSON})
+		if check.Reason == "" {
+			answered["subject_kind"] = string(check.Request.Subject.Kind)
+			return s.holdRequest(c, "", answered, derivation)
+		}
+	}
 	req, e := parseDealRequest(raw)
 	if e != nil || !dealSubject(req.Subject) {
 		if e == nil && req.Subject.Kind != "" {
@@ -657,6 +666,13 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		return refuse(evidencebook.ReasonNoSuchSubject)
 	}
 	dealID = req.Subject.Value
+	if req.Derivation != "" {
+		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
+		// holder does not serve automatically is above the standard card.
+		// It is not refused and not answered; the holder decides, whatever
+		// the coverage would say today.
+		return s.holdRequest(c, dealID, answered, req.Derivation)
+	}
 	if (req.Coverage.ExpectedPin == nil) == (req.Coverage.MinFreshness == nil) {
 		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 	}
@@ -673,12 +689,6 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 		if notBefore.After(cli.DealClock()) {
 			return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 		}
-	}
-	if req.Derivation != "" {
-		// "Ask me" (F4.10, Steven's 2026-11-01 ruling): a derivation the
-		// holder does not serve automatically is above the standard card.
-		// It is not refused and not answered; the holder decides.
-		return s.holdRequest(c, dealID, answered, req.Derivation)
 	}
 	if e = s.useDeal(ctx, dealID, false); e != nil {
 		return e

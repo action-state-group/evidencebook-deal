@@ -428,6 +428,18 @@ func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
 	assert.Equal(t, "held", again["outcome"])
 	assert.Equal(t, first["record_id"], again["record_id"], "the same request is one pending item")
 	assert.NoFileExists(t, out)
+	// A future time floor does not refuse it first; the same request is held
+	// before and after the floor passes.
+	future := writeJSONFile(t, "future.json", map[string]any{"subject": map[string]any{"kind": "correlation", "value": held},
+		"coverage": map[string]any{"min_freshness": map[string]any{"time": "2099-01-01T00:00:00Z"}}, "derivation": "outcome/1"})
+	assert.Equal(t, "held", runJSON(t, "deal", "respond", "--request", future, "--requester", "x", "--output", out)["outcome"])
+
+	// The interop request shape (full_history subject) is held too.
+	interop := filepath.Join(t.TempDir(), "interop.json")
+	require.NoError(t, os.WriteFile(interop, []byte(`{"subject":{"full_history":null},"coverage":{"min_freshness":1},"derivation":"outcome/1","profile":"evidence-interop/0"}`), 0o600))
+	got := runJSON(t, "deal", "respond", "--request", interop, "--requester", "x", "--output", out)
+	assert.Equal(t, "held", got["outcome"])
+	assert.NoFileExists(t, out)
 	p, err := cli.LoadProfile("deal")
 	require.NoError(t, err)
 	s, err := openDealSession(t.Context(), p)
@@ -435,7 +447,7 @@ func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
 	defer func() { require.NoError(t, s.close()) }()
 	rows, err := s.exchangeRows(t.Context(), `kind=?`, dealExchangeHeld)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Len(t, rows, 3, "the plain, future-floor and interop requests are three items")
 	assert.Equal(t, "outcome/1", rows[0].record["derivation"])
 }
 
