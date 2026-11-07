@@ -846,7 +846,11 @@ func (s *dealSession) holdRequest(c *cobra.Command, dealID string, held map[stri
 	}
 	for _, r := range prior {
 		if r.record["request_digest"] == digest {
-			if _, decided, e := s.heldRows(c); e == nil && decided[digest] {
+			_, decided, e := s.heldRows(c)
+			if e != nil {
+				return e
+			}
+			if decided[digest] {
 				return cli.InputError("this request was declined: `deal decline --request-digest " + digest + " --output FILE` writes the refusal again")
 			}
 			return cli.Output(c, cli.EvidenceRespondResult{RecordID: r.digest, RequestDigest: digest, Outcome: dealOutcomeHeld, Relationship: evidencebook.RelationshipIdentified})

@@ -124,10 +124,14 @@ func (s *dealSession) declineHeld(c *cobra.Command, digest, path string) error {
 	if err != nil {
 		return err
 	}
-	refusal := evidencebook.Refusal{RequestDigest: digest, Reason: evidencebook.ReasonPolicyDeclined, IssuedAt: cli.DealClock().UTC().Format(time.RFC3339Nano), KeyID: evidencebook.KeyID(signer)}
+	now := cli.DealClock().UTC()
+	refusal := evidencebook.Refusal{RequestDigest: digest, Reason: evidencebook.ReasonPolicyDeclined, KeyID: evidencebook.KeyID(signer)}
 	var encoded []byte
 	if row.dealID == "" {
-		// Held in evidence-interop's request shape: answered in its reply.
+		// Held in evidence-interop's request shape: answered in its reply,
+		// whose issued_at is the profile's whole-second form (as
+		// answerStandardHistory writes it).
+		refusal.IssuedAt = evidencerequest.ProfileTime(now)
 		if refusal, err = refusal.Sign(ctx, signer); err != nil {
 			return err
 		}
@@ -137,6 +141,7 @@ func (s *dealSession) declineHeld(c *cobra.Command, digest, path string) error {
 		}
 		encoded = reply.Octets
 	} else {
+		refusal.IssuedAt = now.Format(time.RFC3339Nano)
 		body, e := refusal.SigningBody()
 		if e != nil {
 			return e
@@ -150,16 +155,15 @@ func (s *dealSession) declineHeld(c *cobra.Command, digest, path string) error {
 			return err
 		}
 	}
-	result := cli.EvidenceRespondResult{RequestDigest: digest, Outcome: evidencebook.OutcomeRefusal, Reason: evidencebook.ReasonPolicyDeclined, Relationship: evidencebook.RelationshipIdentified, Output: path}
 	if !decided[digest] {
 		answered := map[string]interface{}{"request_digest": digest, "requester": row.record["requester"], "outcome": evidencebook.OutcomeRefusal, "reason": evidencebook.ReasonPolicyDeclined}
 		if k, ok := row.record["subject_kind"]; ok {
 			answered["subject_kind"] = k
 		}
-		if result.RecordID, err = s.recordExchange(ctx, row.dealID, dealExchangeAnswered, "", answered); err != nil {
-			return err
-		}
+		return s.writeAnswerBytes(c, row.dealID, answered, encoded, path)
 	}
+	// Declined before: a fresh refusal is written and nothing more recorded.
+	result := cli.EvidenceRespondResult{RequestDigest: digest, Outcome: evidencebook.OutcomeRefusal, Reason: evidencebook.ReasonPolicyDeclined, Relationship: evidencebook.RelationshipIdentified, Output: path}
 	if err = cli.AtomicFile(path, encoded, false); err != nil {
 		result.Output, result.Response = "", encoded
 		return errors.Join(err, cli.Output(c, result))
