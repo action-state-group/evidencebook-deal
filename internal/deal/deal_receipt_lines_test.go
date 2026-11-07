@@ -258,7 +258,7 @@ func TestTheComposedWitnessLineNamesWhatWasChecked(t *testing.T) {
 	assert.Regexp(t, fmt.Sprintf(yours, "not checked", "the other side's is not checked"), line(both, "witness:PASS,NOT_CHECKED"))
 	assert.Regexp(t, fmt.Sprintf(yours, "failed", "the other side's witness signature did not verify"), line(both, "witness:PASS,FAIL"))
 	assert.Equal(t, label+" · failed · the witness's signature did not verify", line(both, "witness:FAIL,PASS"), "yours failed: failed whatever theirs says")
-	assert.Regexp(t, fmt.Sprintf(yours, "missing", "the other side's has no witness receipt"), line(both, "witness:PASS,NOT_PRESENT"), "theirs has none: missing, not unchecked")
+	assert.Regexp(t, fmt.Sprintf(yours, "missing", "the other side's has no witness signature"), line(both, "witness:PASS,NOT_PRESENT"), "theirs has none: missing, not unchecked")
 	for _, edit := range []string{"witness:NOT_CHECKED,PASS", "no-checks"} {
 		assert.Equal(t, asIs, line(both, edit), "yours is not passed: "+edit+" leaves the line as it was")
 	}

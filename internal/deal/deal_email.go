@@ -93,7 +93,7 @@ func dealDidLineOf(b map[string]interface{}) string {
 // It names no witness state of its own: the attached page's verification
 // section is the one verdict, and the email does not give a second
 // (capsule-cli#341; the report's JSON keeps the rung for the agent).
-const dealEmailVerifyLine = "The attached page checks itself when it is opened. To check every seal and signature, run capsulectl verify --bundle bundle.json; to check the witness receipt too, add --witness-directory with a witness directory you trust."
+const dealEmailVerifyLine = "The attached page checks itself when it is opened. To check every seal and signature, run capsulectl verify --bundle bundle.json; to check the witness signature too, add --witness-directory with a witness directory you trust."
 
 // dealAssurance names the rung the report stands on, from the bundle itself,
 // and says the witness state truthfully. "witnessed" needs a receipt in the
@@ -150,7 +150,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 			sealed += "Witness pending. A receipt is not witnessed at the moment it is made: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(cadence) + ", and only then can it be witnessed. Until then it is sealed on this device only. "
 		case "unverified":
 			out["witness_state"] = "unverified"
-			sealed += "Witness receipt did not verify: a receipt from the witness is held, but the check against the witness this profile names now failed, so the record is sealed on this device only and is not shown as witnessed. "
+			sealed += "Witness signature did not verify: the witness's signature is held, but the check against the witness this profile names now failed, so the record is sealed on this device only and is not shown as witnessed. "
 		case "pending":
 			out["witness_state"] = "pending"
 			// The cadence's text says whether and why it is retried; a
@@ -283,7 +283,7 @@ var dealEmailNotClaimed = []string{
 const dealEmailVerify = "capsulectl verify --bundle bundle.json"
 
 var dealEmailHTML = template.Must(template.New("email").Parse(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Deal receipt</title></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Receipt</title></head>
 <body style="margin:0;padding:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;background:#ffffff;">
 <div style="max-width:640px;margin:0 auto;">
 <h1 style="font-size:20px;margin:0 0 8px;">Receipt{{if .Demo}} <span style="font-size:13px;border:1px solid #b45309;color:#b45309;padding:0 6px;border-radius:4px;">DEMO</span>{{end}}</h1>

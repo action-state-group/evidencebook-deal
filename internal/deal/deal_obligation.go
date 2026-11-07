@@ -323,7 +323,7 @@ func deadlinesICS(ds []dealDeadline, deals []dealOpenListing, remindDays int, no
 			continue
 		}
 		event(l.DealID+"-close", l.ExpectCloseBy, "Close receipt "+l.DealID+"? (open, expected to close by "+l.ExpectCloseBy+")",
-			l.Text+" Close it with capsulectl deal close when it is resolved.", "Open receipt "+l.DealID)
+			l.Text+" Close it with capsulectl deal close when it is resolved.", "Receipt "+l.DealID+" is open")
 	}
 	b.WriteString("END:VCALENDAR\r\n")
 	return b.String()

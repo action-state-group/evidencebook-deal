@@ -193,7 +193,7 @@ func TestDealPurchaseLifecycleReadsHonestly(t *testing.T) {
 
 	at0 := lifecycle()
 	assert.Equal(t, "open", at0["state"])
-	assert.Equal(t, "Open: waiting for the merchant's receipt. It is expected to close by Oct 17, 2026.", at0["text"])
+	assert.Equal(t, "Open: waiting for the merchant's confirmation. It is expected to close by Oct 17, 2026.", at0["text"])
 	assert.Len(t, openDeals(), 1)
 
 	setDealClock(t, "2026-10-03T22:00:00Z")

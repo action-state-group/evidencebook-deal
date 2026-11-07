@@ -263,7 +263,7 @@ func TestDealReceiptUnderAnotherKeyIsUnverified(t *testing.T) {
 	assurance := report["assurance"].(map[string]any)
 	assert.Equal(t, "unverified", assurance["witness_state"])
 	assert.Equal(t, "self_attested", assurance["rung"])
-	assert.Contains(t, assurance["text"], "Witness receipt did not verify")
+	assert.Contains(t, assurance["text"], "Witness signature did not verify")
 	assert.Equal(t, "unverified", asGrade(t, report["grade"]).Witness.State)
 }
 

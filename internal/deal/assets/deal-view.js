@@ -198,7 +198,7 @@ const DEAL_VIEW_WORDS = {
   "page.detail.witness_other_absent": "no record of the other side's is here",
   "page.detail.witness_other_did_not_verify": "the other side's witness signature did not verify",
   "page.detail.witness_other_failed": "the other side's record did not check",
-  "page.detail.witness_other_none": "the other side's has no witness receipt",
+  "page.detail.witness_other_none": "the other side's has no witness signature",
   "page.detail.witness_other_unchecked": "the other side's is not checked",
   "page.detail.witness_recorded": "recorded by {witness}",
   "page.detail.witness_recorded_at": "recorded by {witness} at {time}",

@@ -408,11 +408,11 @@ for every later email.
    deal", with its expected date. Pass that on as written; it is not a sign
    that anything went wrong.
 5. In your own words to the user: an open deal still waiting on the
-   merchant's confirmation is "waiting for the merchant's receipt"; at the
+   merchant's confirmation is "waiting for the merchant's confirmation"; at the
    close, say "matched" or "nothing left to match". When the merchant's email
-   arrives after the close, say "The merchant's receipt arrived. It matches
-   what you approved." or, when it does not, "The merchant's receipt arrived.
-   It differs: you approved $4.54; their receipt says $5.20." with the real
+   arrives after the close, say "The merchant's confirmation arrived. It matches
+   what you approved." or, when it does not, "The merchant's confirmation arrived.
+   It differs: you approved $4.54; their confirmation says $5.20." with the real
    amounts.
 
 ### Cancellation (proving "I cancelled")
