@@ -30,7 +30,7 @@ The step's record carries digests and flags, not the bytes: `wrapped[{type, dige
 `wrapped_octets`, `wrapped_held`, `carrier_headers_commitment` (`wrappedBody`, deal_wrapped.go:309)
 and `merchant_email.message_digest` (`merchantEmailBody`, deal_profile.go:530). `loadBook`
 re-derives the record from the local event and requires it to equal the sealed payload byte for
-byte (deal_books.go:859-866). So a step stays loadable after a drop exactly when its local event
+byte (deal_books.go:863). So a step stays loadable after a drop exactly when its local event
 still yields the same record without the bytes.
 
 ## Options
