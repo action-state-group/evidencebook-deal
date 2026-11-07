@@ -77,7 +77,7 @@ func TestDealReceiptEmailIsReadableWithoutADownloadAndCheckable(t *testing.T) {
 	assert.Empty(t, msg.Header.Get("To"))
 	subject, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
 	require.NoError(t, err)
-	assert.Equal(t, "DEMO · Deal receipt: Order the cat sticker in my cart at Example Stickers", subject)
+	assert.Equal(t, "DEMO · Receipt: Order the cat sticker in my cart at Example Stickers", subject)
 
 	// Readable in the message itself, on any mail app, with nothing to open.
 	text, page := bodies["text/plain"], bodies["text/html"]

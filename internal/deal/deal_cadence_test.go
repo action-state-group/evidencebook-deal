@@ -650,7 +650,7 @@ func TestDealIsWitnessPendingUntilATick(t *testing.T) {
 	a := report["assurance"].(map[string]any)
 	assert.Equal(t, "scheduled", a["witness_state"])
 	assert.Equal(t, "self_attested", a["rung"])
-	assert.Contains(t, a["text"], "Witness pending. A deal is not witnessed at the moment it happens: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence, within about 7m (every 5m, give or take 2m)")
+	assert.Contains(t, a["text"], "Witness pending. A receipt is not witnessed at the moment it is made: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence, within about 7m (every 5m, give or take 2m)")
 	assert.NotContains(t, a["text"], "an hour by default", "the profile's own cadence, not the default")
 	html := string(mustRead(t, page))
 	assert.NotContains(t, html, "Sealed by my agent, witness pending.", "the page states no witness of its own (capsule-cli#341)")

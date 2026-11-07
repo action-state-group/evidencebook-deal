@@ -95,7 +95,7 @@ func openDealListing(events []sealedEvent, now time.Time) *dealOpenListing {
 	// merchant's receipt; one that has it is waiting only to be closed.
 	l.Text = "Open: waiting for the merchant's receipt."
 	if hasMerchantEmail(events) {
-		l.Text = "Open: the merchant's email is sealed; no close is sealed on this deal yet."
+		l.Text = "Open: the merchant's email is sealed; no close is sealed on this receipt yet."
 	}
 	switch {
 	case o.ExpectCloseBy == "":
@@ -188,7 +188,7 @@ type dealLateRecord struct {
 	Text      string `json:"text"`
 }
 
-const dealMayChange = "Records can be linked to this deal after this receipt was made (a merchant's confirmation, a shipping notice, a refund). This receipt shows those sealed when it was made; to see later ones, make a new report with `capsulectl deal report`."
+const dealMayChange = "Records can be linked to this receipt after it was made (a merchant's confirmation, a shipping notice, a refund). This receipt shows those sealed when it was made; to see later ones, make a new report with `capsulectl deal report`."
 
 // authorizedCancelAt is when the latest act was an authorized cancel, or ""
 // when the latest act is not one (a later pay reopens the business).

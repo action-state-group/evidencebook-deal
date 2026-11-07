@@ -147,10 +147,10 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 		switch state {
 		case "scheduled":
 			out["witness_state"] = "scheduled"
-			sealed += "Witness pending. A deal is not witnessed at the moment it happens: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(cadence) + ", and only then can it be witnessed. Until then it is sealed on this device only. "
+			sealed += "Witness pending. A receipt is not witnessed at the moment it is made: its checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(cadence) + ", and only then can it be witnessed. Until then it is sealed on this device only. "
 		case "unverified":
 			out["witness_state"] = "unverified"
-			sealed += "Witness receipt did not verify: a receipt for this deal is held, but the check against the witness this profile names now failed, so the record is sealed on this device only and is not shown as witnessed. "
+			sealed += "Witness receipt did not verify: a receipt from the witness is held, but the check against the witness this profile names now failed, so the record is sealed on this device only and is not shown as witnessed. "
 		case "pending":
 			out["witness_state"] = "pending"
 			// The cadence's text says whether and why it is retried; a
@@ -286,7 +286,7 @@ var dealEmailHTML = template.Must(template.New("email").Parse(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Deal receipt</title></head>
 <body style="margin:0;padding:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;background:#ffffff;">
 <div style="max-width:640px;margin:0 auto;">
-<h1 style="font-size:20px;margin:0 0 8px;">Deal receipt{{if .Demo}} <span style="font-size:13px;border:1px solid #b45309;color:#b45309;padding:0 6px;border-radius:4px;">DEMO</span>{{end}}</h1>
+<h1 style="font-size:20px;margin:0 0 8px;">Receipt{{if .Demo}} <span style="font-size:13px;border:1px solid #b45309;color:#b45309;padding:0 6px;border-radius:4px;">DEMO</span>{{end}}</h1>
 <p style="margin:0 0 8px;font-weight:600;">{{.Scope}}</p>
 <h2 style="font-size:16px;margin:16px 0 4px;">What you asked</h2>
 <p style="margin:0;">&ldquo;{{.Asked}}&rdquo;</p>
@@ -301,7 +301,7 @@ var dealEmailHTML = template.Must(template.New("email").Parse(`<!DOCTYPE html>
 <p style="margin:0 0 16px;color:#444;">{{.Countersign}}</p>
 <h2 style="font-size:16px;margin:16px 0 4px;">Anomalies</h2>
 <ul style="margin:0;padding-left:20px;">{{range .Anomalies}}<li>{{if .Side}}{{.Side}} side: {{end}}{{.Text}}</li>{{else}}<li>None found.</li>{{end}}</ul>
-<h2 style="font-size:16px;margin:16px 0 4px;">Where this deal stands</h2>
+<h2 style="font-size:16px;margin:16px 0 4px;">Where this receipt stands</h2>
 <p style="margin:0 0 4px;">{{.Lifecycle.Text}}</p>
 {{if .Lifecycle.Later}}<ul style="margin:0;padding-left:20px;">{{range .Lifecycle.Later}}<li>{{.At}} &middot; confirms the close: {{.Text}}</li>{{end}}</ul>{{end}}
 <p style="margin:4px 0 0;color:#444;">{{.Lifecycle.MayChange}} (as of {{.Lifecycle.AsOf}})</p>
@@ -353,7 +353,7 @@ func dealEmail(view dealEmailView, page, bundle []byte, at time.Time) (eml []byt
 	if r := []rune(asked); len(r) > 60 {
 		asked = string(r[:59]) + "…"
 	}
-	subject = "Deal receipt: " + asked
+	subject = "Receipt: " + asked
 	if view.Demo {
 		subject = "DEMO · " + subject
 	}
@@ -402,7 +402,7 @@ func dealEmail(view dealEmailView, page, bundle []byte, at time.Time) (eml []byt
 		}
 		fmt.Fprintf(&tb, "- %s%s\n", side, a.Text)
 	}
-	fmt.Fprintf(&tb, "\nWhere this deal stands:\n%s\n", view.Lifecycle.Text)
+	fmt.Fprintf(&tb, "\nWhere this receipt stands:\n%s\n", view.Lifecycle.Text)
 	for _, l := range view.Lifecycle.Later {
 		fmt.Fprintf(&tb, "- %s · confirms the close: %s\n", l.At, l.Text)
 	}
