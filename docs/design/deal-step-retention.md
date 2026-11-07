@@ -75,33 +75,32 @@ with a clear message.
 
 ## What the issue's framing leaves open (found in the code)
 
-1. **Headers and order id stay in the step.** Every `Entry.Fields` text is written as an opening
-   into the step's own originals (evidencebook `commitment.go:101-110`). `carrier_headers`
-   (deal_profile.go:67) and the email's `order_id` (deal_profile.go:61) are such fields, so even
-   with the bytes in a held record, the step still carries the header text in the clear. A held
-   object's headers can be the personal part (request ids, tokens; the share gate treats them as
-   private values, deal_wrapped.go:347). Options: (a) evidencebook gains an additive entry option
-   whose field openings the caller stores elsewhere, and the held record stores them; (b) the drop
-   removes the bytes only and says so (headers and order id stay). (a) is an evidencebook change
-   (company OSS, an additive API), so it is routed there, not decided here.
+1. **Headers and order id sit in `deal_local`, and the record needs their commitments.** The step's
+   `Entry.Fields` are only `deal_local`, `amount` and `currency` (evidencebook `dealprofile/step.go:123`);
+   `carrier_headers` (deal_profile.go:67) and the email's `order_id` (deal_profile.go:61) are not
+   fields but texts the record commits with salted nonces held in the local event
+   (`buildDealRecord`'s `commit`, deal_profile.go:615-621), so their text lives only inside the
+   `deal_local` opening. A held object's headers can be the personal part (request ids, tokens;
+   the share gate treats them as private values, deal_wrapped.go:347). To drop them the re-derivation
+   must stop needing the text: the local event keeps the commitment values and a presence flag
+   (`Headers != nil` decides whether `carrier_headers_commitment` is emitted, deal_wrapped.go:313)
+   and the held record keeps the text and its nonce. That is a change inside this plugin, no
+   evidencebook change.
 2. **`Raw` has many readers.** `e.Raw`/`m.Raw` is read in deal_merchant_email.go:974-978 and
    :1218, deal_share.go:260,277, deal_share_gate.go:500, deal_deferred_email.go:265,
    deal_verifier_statement.go:111,134,148 and deal_profile.go:536. The held object has readers
    too: both share checks (deal_share.go:218, deal_share_gate.go:520) scan its octets and headers as
    private values, and `verify-object --out` exports them (`writeHeld`, deal_wrapped.go:582).
    Each must resolve the held record (and handle a dropped one) on its own path; a new step
-   that skipped the share scan would leak what the scan exists to catch. Each must handle a dropped
-   email (the digest from `RawDigest`; no re-check of DKIM, which needs the bytes). The share
+   that skipped the share scan would leak what the scan exists to catch. A dropped email
+   reads its digest from `RawDigest` and cannot re-check DKIM, which needs the bytes. The share
    gate loses the email text as a private-value source after a drop, which is correct because the
    bytes are gone, but means a later share cannot be checked against them.
-3. **The record depends on more than the digests.** The re-derivation also reads `Headers != nil`
-   (whether `carrier_headers_commitment` is emitted, deal_wrapped.go:313) and, for an email, the
-   parsed totals, currency, dates and item count (deal_profile.go:552-577), which are in the
-   sealed payload. So after a drop the local event must keep a headers-present flag and the
-   headers text for the commitment's opening (or the opening stays in the step, point 1), and the
-   parsed values; a drop cannot remove them without breaking the byte-equal check. What a drop
-   removes beyond the raw message is therefore limited to the headers (if point 1(a) lands) and
-   the order id text; this is a user-facing choice to put to Sherlock2.
+3. **Parsed values stay.** For an email the re-derivation also reads the parsed totals, currency,
+   dates and item count (deal_profile.go:552-577), which are in the sealed payload, so a drop
+   cannot remove `Parsed` without breaking the byte-equal check (deal_books.go:863). What a drop
+   removes is the raw message, the object octets, the carrier headers and the order id text; whether
+   that is enough is a user-facing choice to put to Sherlock2.
 
 ## Is the build wanted?
 
@@ -113,7 +112,7 @@ My recommendation: split it.
 - **Retention build (L), not yet.** The issue's own wording is "a likely ask" (the held object
   and the user who wants to keep the deal and drop the body); I found no user request. The cost
   is a new sibling book, a changed `deal_local` shape, about a dozen `Raw` call sites, a new verb, and
-  an evidencebook change to make headers droppable (open point 1). Build it when a user asks for
+  moving the header and order id commitments out of the text-derived path (open point 1). Build it when a user asks for
   a drop, with open points 1 and 3 decided first. Until then the note is the design of record.
 
 ## Doors and routing
@@ -122,7 +121,7 @@ My recommendation: split it.
   detail of this plugin (new steps only; old steps read as today).
 - Needs routing if built: the drop verb and the confirmation wording (Sherlock2); what a drop
   removes beyond the bytes (open point 3) and the irreversible deletion of a user's evidence
-  (Steven, as a user-visible disclosure and deletion rule); the evidencebook option (open point 1).
+  (Steven, as a user-visible disclosure and deletion rule).
 - `deal verify-object` keeps `object_digest: NOT_PRESENT` after a drop, per the issue.
 
 ## Tests the build would need
