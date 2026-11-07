@@ -451,6 +451,10 @@ func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
 	got := runJSON(t, "deal", "respond", "--request", interop, "--requester", "x", "--output", out)
 	assert.Equal(t, "held", got["outcome"])
 	assert.NoFileExists(t, out)
+	// An interop request with no coverage member is held too, not refused.
+	nocov := filepath.Join(t.TempDir(), "nocov.json")
+	require.NoError(t, os.WriteFile(nocov, []byte(`{"subject":{"full_history":null},"coverage":{},"derivation":"outcome/1","profile":"evidence-interop/0"}`), 0o600))
+	assert.Equal(t, "held", runJSON(t, "deal", "respond", "--request", nocov, "--requester", "x", "--output", out)["outcome"])
 	p, err := cli.LoadProfile("deal")
 	require.NoError(t, err)
 	s, err := openDealSession(t.Context(), p)
@@ -458,7 +462,7 @@ func TestDealRespondHoldsADerivationAboveTheStandard(t *testing.T) {
 	defer func() { require.NoError(t, s.close()) }()
 	rows, err := s.exchangeRows(t.Context(), `kind=?`, dealExchangeHeld)
 	require.NoError(t, err)
-	require.Len(t, rows, 3, "the plain, future-floor and interop requests are three items")
+	require.Len(t, rows, 4, "the plain, future-floor and two interop requests are four items")
 	assert.Equal(t, "outcome/1", rows[0].record["derivation"])
 }
 
