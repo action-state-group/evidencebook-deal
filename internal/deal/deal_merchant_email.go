@@ -339,9 +339,9 @@ type keysUnreachableError struct {
 // (deal-skill README, "Merchant email"): add codes, never rename one. The raw
 // reason stays the diagnostic.
 const (
-	reasonResolverProxied = "resolver_proxied" // the system resolver hands out placeholder addresses, and no DoH endpoint answered
-	reasonDoHOff          = "doh_off"          // CAPSULECTL_DOH=off, and the system resolver could not be reached
-	reasonDoHInvalid      = "doh_invalid"      // CAPSULECTL_DOH is malformed, and the system resolver could not be reached
+	reasonDoHOff          = "doh_off"          // CAPSULECTL_DOH=off, so DoH could not rescue the capture
+	reasonDoHInvalid      = "doh_invalid"      // CAPSULECTL_DOH is malformed, so DoH could not rescue the capture
+	reasonResolverProxied = "resolver_proxied" // the system resolver hands out placeholder addresses, and DoH did not answer
 	reasonDoHUnreachable  = "doh_unreachable"  // the system resolver and every DoH endpoint failed
 	reasonDNSUnreachable  = "dns_unreachable"  // no resolver could be reached, none of the causes above
 	keyAbsentUnchecked    = "key_absent_unchecked"
@@ -351,12 +351,12 @@ const (
 // in the order the codes are listed.
 func unreachableCode(why error, dohFailed bool) string {
 	switch {
-	case errors.Is(why, errResolverProxied):
-		return reasonResolverProxied
 	case errors.Is(why, errDoHOff):
 		return reasonDoHOff
 	case errors.Is(why, errDoHInvalid):
 		return reasonDoHInvalid
+	case errors.Is(why, errResolverProxied):
+		return reasonResolverProxied
 	case dohFailed:
 		return reasonDoHUnreachable
 	}

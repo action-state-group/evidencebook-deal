@@ -331,6 +331,16 @@ func TestReasonCodeNamesTheCauseOfEachDeferral(t *testing.T) {
 		proxiedResolver(t, "198.19.255.1", map[string]string{dmarcName: merchantDMARC(t)})
 		assert.Equal(t, "resolver_proxied", codeOf(t))
 	})
+	t.Run("doh_off wins over a proxied resolver", func(t *testing.T) {
+		t.Setenv(dohEnv, "off")
+		proxiedResolver(t, "198.19.255.1", map[string]string{dmarcName: merchantDMARC(t)})
+		assert.Equal(t, "doh_off", codeOf(t))
+	})
+	t.Run("doh_invalid wins over a proxied resolver", func(t *testing.T) {
+		t.Setenv(dohEnv, "http://insecure.example")
+		proxiedResolver(t, "198.19.255.1", map[string]string{dmarcName: merchantDMARC(t)})
+		assert.Equal(t, "doh_invalid", codeOf(t))
+	})
 	t.Run("dns_unreachable is the default", func(t *testing.T) {
 		assert.Equal(t, "dns_unreachable", unreachableCode(errors.New("no route"), false))
 		assert.Equal(t, "dns_unreachable", (&keysUnreachableError{}).reasonCode())
