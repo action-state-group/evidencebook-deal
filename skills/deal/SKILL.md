@@ -388,7 +388,7 @@ for every later email.
    default 14 days for a purchase, 1 for a booking, 7 for a rental, 30 for a
    service). Set it when you know better, for example the delivery estimate.
 2. `deal deadlines` lists every open deal under `open_deals`, against that
-   date (and `--ics` writes a "Close deal …?" event for it into the file).
+   date (and `--ics` writes a "Close receipt …?" event for it into the file).
    Hand those to the host's tracking like any other date. When you see a
    deal there that is done, close it.
 3. Evidence that arrives after the close (the merchant's confirmation, a
@@ -1196,7 +1196,7 @@ confirmed, independent or notarized. When it covers part of the deal, say
 "through step k of n".
 
 Every page opens with its scope (this one exchange, not a record of everything the agent did), whether it is countersigned, and what it does not claim. What
-was verified, the witness receipt included, is the page's own verification
+was verified, the witness signature included, is the page's own verification
 section, said once; anyone can also run `capsulectl verify --bundle
 deal-report.html` on the file.
 

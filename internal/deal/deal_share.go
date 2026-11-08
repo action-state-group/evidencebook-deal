@@ -1032,7 +1032,7 @@ func sharedDifferenceText(rule, text string) string {
 
 var dealShareAnomaly = map[string]string{
 	"changed_identifier":       "A payee or contact detail changed after first contact",
-	"materiality_changed":      "The rule for which of the agent's picks need an answer changed during the receipt",
+	"materiality_changed":      "The rule for which of the agent's picks need an answer changed while this receipt was open",
 	"recourse_changed":         "The way to pay changed after it was agreed",
 	"irreversible_rail":        "Payment by a rail with no card protection",
 	"domain_recent":            "The website was registered recently",

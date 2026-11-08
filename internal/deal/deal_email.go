@@ -201,7 +201,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 		case "scheduled":
 			rest = "Witness pending for the rest: the current checkpoint goes to the witness at the next tick of this profile's checkpoint cadence" + cadencePhrase(r) + ". "
 		case "unverified":
-			rest = "The rest did not verify: a receipt for the current checkpoint is held, but the check against the witness this profile names now failed. "
+			rest = "The rest did not verify: the witness's signature for the current checkpoint is held, but the check against the witness this profile names now failed. "
 		}
 		out["text"] = fmt.Sprintf(
 			"Witnessed in part: %s, an independent log, signed a receipt for %s, covering steps 1 to %d of %d: those existed, unchanged, by then. Steps %d to %d are sealed by my agent on this device only. %s%sIt does not confirm what the agent did. The receipt is in the attached bundle; check it with capsulectl verify --bundle bundle.json --witness-directory DIRECTORY.json, using a witness directory you trust. %s",
@@ -277,7 +277,7 @@ var dealEmailNotClaimed = []string{
 	"Tamper-evident against ourselves and the agent, not non-repudiation: it shows the record was not changed after it was made, not who made it.",
 	"It covers this skill's own records only, never the agent host's own store: a change there is not detected.",
 	"It records what the agent reported doing; it does not prove what the merchant charged or shipped.",
-	"Calling the deal check is advisory: steps the agent never sealed are not in it.",
+	"Calling `deal check` is advisory: steps the agent never sealed are not in it.",
 }
 
 const dealEmailVerify = "capsulectl verify --bundle bundle.json"
