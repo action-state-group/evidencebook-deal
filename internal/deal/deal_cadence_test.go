@@ -195,7 +195,7 @@ func TestDealWitnessStatesAreShownAsTheyAre(t *testing.T) {
 	pending := report("down")
 	assert.Equal(t, "pending", pending["assurance"].(map[string]any)["witness_state"])
 	assert.Equal(t, "self_attested", pending["assurance"].(map[string]any)["rung"], "pending is never shown as witnessed")
-	assert.Contains(t, pending["assurance"].(map[string]any)["text"], "This checkpoint was sent at a cadence tick, but no receipt has come back yet. Witness pending")
+	assert.Contains(t, pending["assurance"].(map[string]any)["text"], "This checkpoint was sent at a cadence tick, but no witness signature has come back yet. Witness pending")
 
 	deliver(t, p, cadenceSize(t, p), key)
 	witnessed := report("up")
@@ -670,7 +670,7 @@ func TestDealIsWitnessPendingUntilATick(t *testing.T) {
 	a = report["assurance"].(map[string]any)
 	assert.Equal(t, "witnessed", a["rung"])
 	assert.Equal(t, "2026-09-27T18:07:00Z", a["checkpoint_at"], "the tick's time, coarsened to the minute")
-	assert.Contains(t, a["text"], "signed a receipt for this receipt's checkpoint, cut at 2026-09-27T18:07:00Z at a cadence tick after the receipt's steps")
+	assert.Contains(t, a["text"], "signed this receipt's checkpoint, cut at 2026-09-27T18:07:00Z at a cadence tick after its steps")
 	cadence := embeddedBundle(t, string(mustRead(t, page)))["extensions"].(map[string]any)[cli.DealCadenceExtension].(map[string]any)
 	assert.Equal(t, "2026-09-27T18:07:00Z", cadence["checkpoint_at"], "the page reads it from the bundle")
 }
