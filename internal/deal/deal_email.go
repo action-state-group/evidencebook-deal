@@ -277,7 +277,7 @@ var dealEmailNotClaimed = []string{
 	"Tamper-evident against ourselves and the agent, not non-repudiation: it shows the record was not changed after it was made, not who made it.",
 	"It covers this skill's own records only, never the agent host's own store: a change there is not detected.",
 	"It records what the agent reported doing; it does not prove what the merchant charged or shipped.",
-	"Calling `deal check` is advisory: steps the agent never sealed are not in it.",
+	"Running capsulectl deal check is advisory: steps the agent never sealed are not in it.",
 }
 
 const dealEmailVerify = "capsulectl verify --bundle bundle.json"
