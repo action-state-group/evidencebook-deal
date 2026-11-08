@@ -204,7 +204,7 @@ func dealAssuranceRung(b map[string]interface{}) map[string]any {
 			rest = "The rest did not verify: the witness's signature for the current checkpoint is held, but the check against the witness this profile names now failed. "
 		}
 		out["text"] = fmt.Sprintf(
-			"Witnessed in part: %s, an independent log, signed %s, covering steps 1 to %d of %d: those existed, unchanged, by then. Steps %d to %d are sealed by my agent on this device only. %s%sIt does not confirm what the agent did. The witness signature is in the attached bundle; check it with capsulectl verify --bundle bundle.json --witness-directory DIRECTORY.json, using a witness directory you trust. %s",
+			"Witnessed in part: %s, an independent log, signed %s. That signature covers steps 1 to %d of %d: those existed, unchanged, by then. Steps %d to %d are sealed by my agent on this device only. %s%sIt does not confirm what the agent did. The witness signature is in the attached bundle; check it with capsulectl verify --bundle bundle.json --witness-directory DIRECTORY.json, using a witness directory you trust. %s",
 			host, when, k, n, k+1, n, coverageSentence(b, k, n), rest, dealDidLineOf(b))
 		return out
 	}

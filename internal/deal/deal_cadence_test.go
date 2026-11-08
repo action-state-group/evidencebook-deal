@@ -711,7 +711,7 @@ func TestDealReportRungWitnessedInPart(t *testing.T) {
 	assert.Equal(t, "witnessed_in_part", part["rung"])
 	k, n := part["steps_witnessed"].(float64), part["steps"].(float64)
 	assert.Equal(t, k+1, n)
-	assert.Contains(t, part["text"], fmt.Sprintf("covering steps 1 to %d of %d", int(k), int(n)))
+	assert.Contains(t, part["text"], fmt.Sprintf("That signature covers steps 1 to %d of %d", int(k), int(n)))
 	assert.Contains(t, part["text"], fmt.Sprintf("Steps %d to %d are sealed by my agent on this device only", int(k)+1, int(n)))
 	assert.Contains(t, part["text"], "Witness pending for the rest: the current checkpoint goes to the witness at the next tick")
 	// What the page shows a reader is checked rendered, in Chrome

@@ -2098,7 +2098,7 @@ func trailLine(e dealEvent) string {
 	case "counterparty_profile":
 		return "noted the payee for this profile's own history (never shared)"
 	case "open":
-		line := fmt.Sprintf("began %s exchange: %q", e.Open.Type, e.Open.Intent.Verbatim)
+		line := fmt.Sprintf("began a %s exchange: %q", e.Open.Type, e.Open.Intent.Verbatim)
 		if e.Open.Demo {
 			line = "DEMO · " + line
 		}

@@ -254,7 +254,7 @@ func dealDeadlines(events []sealedEvent, now time.Time, remindDays int) []dealDe
 			d.Holds = strings.ToUpper(when[:1]) + when[1:] + "; nothing resolving it is sealed on this receipt yet."
 			if d.Carried {
 				d.Status = "carried_at_close"
-				d.Holds = "Carried at the close of this receipt: " + when + "; nothing resolving it is sealed on this receipt yet."
+				d.Holds = "Carried at the close of this exchange: " + when + "; nothing resolving it is sealed on this receipt yet."
 			}
 			by, _ := time.Parse("2006-01-02", o.date())
 			today, _ := time.Parse("2006-01-02", day)
@@ -474,7 +474,7 @@ func dealDeadlinesCommand() *cobra.Command {
 		out := map[string]any{
 			"deadlines": list, "open_deals": deals, "enforced": false, "note": deadlineNotEnforced,
 			"as_of":  now.UTC().Format("2006-01-02T15:04:05Z"),
-			"states": "deadlines: OPEN (on an open receipt), CARRIED AT CLOSE (on a closed receipt, still open), RESOLVED, CANCEL SEALED and DATE PASSED (with --all). open_deals: receipts with no close sealed, against their expected close date.",
+			"states": "deadlines: OPEN (on an open exchange), CARRIED AT CLOSE (on a closed exchange, still open), RESOLVED, CANCEL SEALED and DATE PASSED (with --all). open_deals: exchanges with no close sealed, against their expected close date.",
 		}
 		if icsPath != "" {
 			if err := cli.AtomicFile(icsPath, []byte(deadlinesICS(list, deals, remind, now)), false); err != nil {
