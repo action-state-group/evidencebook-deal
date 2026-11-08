@@ -89,7 +89,7 @@ jobs:
     name: test (${{ matrix.part.pass }} ${{ matrix.part.shard }})
     runs-on: ubuntu-latest
     # The nightly runs every case under the race detector; two cases alone take
-    # about ten minutes there, and its shards ran 12-17 minutes, over the push
+    # about ten minutes there, and its shard jobs ran 7-17 minutes, up to the push
     # runs' 15-minute go test timeout (seven nightly runs in a row failed).
     timeout-minutes: ${{ github.event_name == 'schedule' && 40 || 20 }}
     env:
