@@ -19,7 +19,7 @@ import (
 //
 // A counterparty copy carries the record only when the holder's share policy
 // says so (a node shares, a person does not, by default); otherwise the record
-// is withheld, and a reader says "not shared".
+// is withheld (listed, contents withheld), and a reader that finds no readable verdict says "not shared".
 
 // dealRulesVerdict is a rules_verdict step: the word and the pack's
 // definition digest. The pack is named by its digest alone, always: a name
@@ -120,7 +120,8 @@ func rulesVerdictPolicyCommand() *cobra.Command {
 (` + "`deal report --share counterparty`, `deal respond`" + `) and a person's is not to, as for the
 History card; a profile that has not declared its holder kind
 (` + "`deal standard-history declare`" + `) shares none. When it is not shared the copy
-withholds the record and the other side's receipt reads "not shared".`, Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+lists the record as withheld, contents withheld, and says nothing of what it is: the other side's receipt
+has no verdict to read and says "not shared".`, Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		share, _ := c.Flags().GetBool("share")
 		noShare, _ := c.Flags().GetBool("no-share")
 		if share && noShare {

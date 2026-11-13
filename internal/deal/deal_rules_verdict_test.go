@@ -15,7 +15,7 @@ import (
 
 // The party's own overall rules verdict (evidencebook-deal#191, Steven's ruling Buzz 8b6aaecf):
 // a sealed rules_verdict record, carried by a counterparty copy only when the holder's share
-// policy says so, naming the pack only when it is published.
+// policy says so, naming the pack by its digest alone, never by a name.
 
 const publishedPackName = "example/travel-deal/1.2.0"
 
@@ -152,6 +152,7 @@ func TestACounterpartyCutCarriesTheVerdictOnlyWhenTheHoldersPolicySaysSo(t *test
 		if !h.carried {
 			assert.NotContains(t, cut, "rules_verdict", name+": a withheld verdict does not say what it is")
 			assert.NotContains(t, cut, "their rules", name)
+			assert.NotContains(t, cut, packDigest, name+": nor the pack's digest")
 		}
 		// The holder's own copy always carries it.
 		assert.Contains(t, bundleText(t, id), "out_of_scope", name)

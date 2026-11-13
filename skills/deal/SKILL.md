@@ -423,7 +423,7 @@ host's, never derived, re-run, counted or combined here; it is bound to the deal
 the deal's checks ran under, and a deal takes one). Whether a counterparty copy (made with `deal report --share counterparty` or answered by `deal respond`) carries it is the holder's choice, `deal rules-verdict policy [--share|--no-share]`:
 a node shares it by default and a person does not, and a profile with no declared holder kind (`deal
 standard-history declare`) shares none. When it is not shared the copy withholds the record and says nothing
-of what it is; the other side's receipt reads "not shared". The pack is named by its digest alone, never by a name. It is never on a History
+of what it is (listed, contents withheld); the other side's receipt has no verdict to read and says "not shared". The pack is named by its digest alone, never by a name. It is never on a History
 card. Say it as "their own check (their rules)", never as the deal's result.
 
 ### Cancellation (proving "I cancelled")

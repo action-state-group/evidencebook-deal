@@ -2195,6 +2195,8 @@ func trailLine(e dealEvent) string {
 			line = "⚠️ " + line + " without your approval (" + e.Disclosure.Reason + ")"
 		}
 		return line
+	case "rules_verdict":
+		return "your own rules verdict sealed: " + strings.ReplaceAll(e.RulesVerdict.Word, "_", " ")
 	default:
 		return e.Kind
 	}
