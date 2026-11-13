@@ -799,6 +799,9 @@ type dealEvent struct {
 	// fingerprinted under the profile's key (dealprofile.ProfileKey), sealed right
 	// after the check, for this profile's own records only.
 	CounterpartyProfile *dealCounterpartyProfile `json:"counterparty_profile,omitempty"`
+	// RulesVerdict is a rules_verdict step: the party's own overall rules word
+	// for the finished deal (deal_rules_verdict.go).
+	RulesVerdict *dealRulesVerdict `json:"rules_verdict,omitempty"`
 }
 
 // dealCounterpartyProfile names a check by capsule id and its payee's
