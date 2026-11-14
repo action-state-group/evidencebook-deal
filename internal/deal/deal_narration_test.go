@@ -385,7 +385,9 @@ func TestTheReceiptNeverClaimsAnApprovalThatWasNotSealed(t *testing.T) {
 		"sealed approval": {[]sealedEvent{open, check, sealed}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			lines := receiptLines(cli.BuiltinWording(), tc.events)
+			w := cli.BuiltinWording()
+			// The first receipt adds its own keep line: it must not imply a yes either.
+			lines := append(receiptLines(w, tc.events), firstReceiptLines(w, tc.events)...)
 			joined := strings.Join(lines, "\n")
 			assert.Contains(t, lines, saved)
 			assert.Equal(t, tc.okd, strings.Contains(joined, "OK'd"), joined)
