@@ -408,7 +408,7 @@ func TestNoCardButtonIsARawOptionID(t *testing.T) {
 	}
 	amount := int64(2000)
 	for action := range actions {
-		for _, rule := range []string{"", "over_limit"} {
+		for _, rule := range []string{"", "over_limit", "under_floor"} {
 			r := &dealCheckResult{Options: []dealOption{{ID: "hold"}, {ID: "proceed"}}}
 			if rule != "" {
 				r.Differences = []dealDifference{{Rule: rule}}
