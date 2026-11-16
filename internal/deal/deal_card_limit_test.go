@@ -55,9 +55,11 @@ func TestAFailedLimitWithNoCheckNameFallsBackToTheLimit(t *testing.T) {
 
 func TestAFailedFindingWithoutALimitStaysAnOrdinaryAsk(t *testing.T) {
 	for name, f := range map[string]dealRulesFinding{
-		"no limit or value": {ID: "r06", Verdict: "fail"},
-		"no value":          {ID: "r05", Check: "per_purchase", Verdict: "fail", Limit: json.RawMessage("2500")},
-		"not a number":      {ID: "r05", Verdict: "fail", Limit: json.RawMessage(`"2500"`), Value: json.RawMessage("3200")},
+		"no limit or value":              {ID: "r06", Verdict: "fail"},
+		"no value":                       {ID: "r05", Check: "per_purchase", Verdict: "fail", Limit: json.RawMessage("2500")},
+		"not a number":                   {ID: "r05", Verdict: "fail", Limit: json.RawMessage(`"2500"`), Value: json.RawMessage("3200")},
+		"a floor: value under the limit": {ID: "r09", Check: "account_age", Verdict: "fail", Limit: json.RawMessage("30"), Value: json.RawMessage("5")},
+		"value equal to the limit":       {ID: "r05", Check: "per_purchase", Verdict: "fail", Limit: json.RawMessage("2500"), Value: json.RawMessage("2500")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			card, _ := limitCard(t, f, true)
@@ -74,4 +76,13 @@ func TestAPassedLimitIsNotBroken(t *testing.T) {
 	assert.Contains(t, card.Facts, "within your $35 limit")
 	assert.Equal(t, "Pay $32", card.Options[1].Label)
 	assert.False(t, strings.Contains(strings.Join(card.Why, " "), "per-purchase"))
+}
+
+// A failed finding on rules that allowed is not an ask: nothing breaks.
+func TestAFailedLimitUnderAnAllowingVerdictIsNotBroken(t *testing.T) {
+	f := dealRulesFinding{ID: "r05", Check: "per_purchase", Verdict: "fail", Limit: json.RawMessage("2500"), Value: json.RawMessage("3200")}
+	_, ok := brokenLimit(&dealRules{Status: "evaluated", Verdict: "allow", Findings: []dealRulesFinding{f}}, func(int64) string { return "$25" })
+	assert.False(t, ok)
+	_, ok = brokenLimit(&dealRules{Status: "evaluated", Verdict: "deny", Findings: []dealRulesFinding{f}}, func(int64) string { return "$25" })
+	assert.True(t, ok)
 }

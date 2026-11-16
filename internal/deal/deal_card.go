@@ -255,15 +255,19 @@ func limitWords(key string, f cardFacts) string {
 	return f.limit
 }
 
-// brokenLimit is, for a check against the user's rules, a limit that failed:
-// the first failed finding that carries both its limit and the value, as
-// whole amounts in the deal's currency (the checker's minor units). It is
-// said as "$25 per-purchase", the checker's check name giving the kind when
-// it is a plain identifier. Rule ids are never read: a checker that sends
-// no limit and value for a failed rule says nothing here (the card then
-// keeps "your rules ask for your OK"). ok reports a broken limit.
+// brokenLimit is, for a check against the user's rules that asked or denied,
+// a spending limit that was exceeded: the first failed finding whose limit
+// and value are both whole numbers with the value over the limit, read as
+// minor units of the deal's currency. The profile defines no unit or
+// direction for a finding's limit and value, so this is the interim contract
+// (evidencebook-deal#203): a checker sends them, in minor units, only for a
+// cap the value went over; a floor or a count rule sends none, and then the
+// card keeps "your rules ask for your OK". It is said as "$25 per-purchase",
+// the check name giving the kind when it is a plain identifier. Only the first
+// such finding is named, in the checker's order, not the binding one. Rule
+// ids are never read. ok reports a broken limit.
 func brokenLimit(r *dealRules, money func(int64) string) (words string, ok bool) {
-	if r == nil || r.Status != "evaluated" {
+	if r == nil || r.Status != "evaluated" || (r.Verdict != "escalate" && r.Verdict != "deny") {
 		return "", false
 	}
 	for _, f := range r.Findings {
@@ -271,8 +275,8 @@ func brokenLimit(r *dealRules, money func(int64) string) (words string, ok bool)
 			continue
 		}
 		limit, lok := minorAmount(f.Limit)
-		_, vok := minorAmount(f.Value)
-		if !lok || !vok {
+		value, vok := minorAmount(f.Value)
+		if !lok || !vok || value <= limit {
 			continue
 		}
 		words = money(limit)
