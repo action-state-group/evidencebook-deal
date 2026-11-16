@@ -121,6 +121,7 @@
     "card.why.no_way_back": "the way to get your money back changed",
     "card.why.not_asked": "it's not what you asked for",
     "card.why.off_platform": "they asked to move off the platform",
+    "card.why.limit_failed": "it's over your {limit} limit",
     "card.why.over_limit": "it's over your {limit} limit",
     "card.why.over_limit_asked": "you asked for this one, but it's over your {limit} limit",
     "card.why.pay_before_seeing": "you haven't seen the item yet",
