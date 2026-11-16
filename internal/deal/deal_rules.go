@@ -2681,6 +2681,17 @@ func buildDealReport(events []sealedEvent, pin cli.ProfileRulesChecker) dealRepo
 			}
 		case "close":
 			r.Did = append(r.Did, dealReportItem{Kind: "close", Text: closeLine(*e.Close), Steps: []string{se.CapsuleID}, At: e.At, Self: se.CapsuleID})
+		case "claim":
+			// A claim the agent made to the buyer that no represent check
+			// authorized is sealed anyway, since the words may already be
+			// said: the seller sees it here, not only in the trail.
+			if c := e.Claim; c.SourceKind == "agent" && c.Unchecked {
+				why, ok := representationRuleWords[c.Rule]
+				if !ok {
+					why = strings.ReplaceAll(c.Rule, "_", " ")
+				}
+				agent("unapproved_representation", fmt.Sprintf("Your agent said this without your authority: “%s” (%s)", c.Text, why), se.CapsuleID)
+			}
 		case "disclosure":
 			d := e.Disclosure
 			item := dealToldItem{At: e.At, To: d.recipient(first), ToKind: d.To, Fields: d.Fields, Authority: "approval", Steps: []string{se.CapsuleID}}
