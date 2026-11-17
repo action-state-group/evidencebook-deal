@@ -59,8 +59,8 @@ func TestTheSellersReceiptShowsAClaimMadeWithoutAuthority(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{
-		"agent/unapproved_representation: Your agent said this without your authority: “The frame has no scratches at all” (no check was named for it)",
-		"agent/unapproved_representation: Your agent said this without your authority: “I will cover the gears for 90 days” (no check was named for it)",
+		"agent/unapproved_representation: Your agent said this without your authority: “The frame has no scratches at all” (you weren't asked about it)",
+		"agent/unapproved_representation: Your agent said this without your authority: “I will cover the gears for 90 days” (you weren't asked about it)",
 	}, said, "each unchecked agent claim, none of the user's own")
 
 	raw, err := os.ReadFile(page)

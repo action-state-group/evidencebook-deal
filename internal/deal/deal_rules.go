@@ -2688,9 +2688,13 @@ func buildDealReport(events []sealedEvent, pin cli.ProfileRulesChecker) dealRepo
 			if c := e.Claim; c.SourceKind == "agent" && c.Unchecked {
 				why, ok := representationRuleWords[c.Rule]
 				if !ok {
-					why = strings.ReplaceAll(c.Rule, "_", " ")
+					why = "nothing you approved covers it"
 				}
-				agent("unapproved_representation", fmt.Sprintf("Your agent said this without your authority: “%s” (%s)", c.Text, why), se.CapsuleID)
+				words := "“" + c.Text + "”"
+				if c.Text == "" {
+					words = "(the words were not kept)"
+				}
+				agent("unapproved_representation", fmt.Sprintf("Your agent said this without your authority: %s (%s)", words, why), se.CapsuleID)
 			}
 		case "disclosure":
 			d := e.Disclosure

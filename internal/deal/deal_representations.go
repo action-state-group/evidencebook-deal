@@ -32,16 +32,17 @@ import (
 // representationRuleWords say, in the seller's own terms, why an agent's
 // claim was sealed unchecked: the closed set of rules authorizeClaim returns
 // (a test holds the table to it). The seller's Receipt shows them beside the
-// claim's words (capsule-cli#333).
+// claim's words (capsule-cli#333), in the seller's terms: an approval they gave
+// or did not give, never "the check".
 var representationRuleWords = map[string]string{
-	"no_check":            "no check was named for it",
-	"differs_from_check":  "it is not the words that were checked",
-	"denied":              "the check denied it",
-	"changed_after_check": "details changed after the check",
-	"check_expired":       "the check had gone stale",
-	"authority_changed":   "what you asked the agent to say changed after the check",
-	"approval_used":       "that approval already covered an earlier claim",
-	"not_approved":        "you had not approved it",
+	"no_check":            "you weren't asked about it",
+	"not_approved":        "you hadn't approved it",
+	"denied":              "you or your rules said no to it",
+	"differs_from_check":  "it isn't what you approved",
+	"changed_after_check": "details changed after you approved it",
+	"check_expired":       "your approval had expired",
+	"authority_changed":   "what you allowed the agent to say changed after you approved it",
+	"approval_used":       "that approval was already used for an earlier claim",
 }
 
 // representAction is the check a seller's agent runs before it tells the
