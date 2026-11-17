@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/action-state-group/capsule-cli/cli"
+	"github.com/action-state-group/evidencebook/dealprofile"
 	"github.com/spf13/cobra"
 )
 
@@ -107,8 +108,9 @@ func dealSaleUnpostCommand() *cobra.Command {
 		if !cli.SaleIDPattern.MatchString(saleID) {
 			return cli.InputError("--sale (a sale id as printed by `deal sale new`) is required")
 		}
-		if strings.TrimSpace(platform) == "" {
-			return cli.InputError("--platform (the site's domain, as the post named it) is required")
+		platform, err := dealprofile.Normalize("domain", strings.TrimSpace(platform))
+		if err != nil {
+			return cli.InputError("--platform is the site the listing was on, by its domain (for example \"marketplace.example\")")
 		}
 		return runDeal(c, false, func(ctx context.Context, s *dealSession, _ string, _ []sealedEvent) error {
 			if _, _, err := s.saleOf(ctx, saleID); err != nil {
@@ -121,7 +123,7 @@ func dealSaleUnpostCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			se, err := s.sealUnpost(ctx, saleID, strings.TrimSpace(platform), events)
+			se, err := s.sealUnpost(ctx, saleID, platform, events)
 			if err != nil {
 				return err
 			}
@@ -131,7 +133,7 @@ func dealSaleUnpostCommand() *cobra.Command {
 			}
 			out := stepOutput(saleID, se)
 			out["sale_id"] = saleID
-			out["platform"] = strings.TrimSpace(platform)
+			out["platform"] = platform
 			out["checkpoint"] = cp
 			out["live_platforms"] = livePlatforms(append(events, se))
 			return cli.Output(c, out)
@@ -327,6 +329,27 @@ func (s *dealSession) threadState(ctx context.Context, threadID string) (opened,
 	return opened, opened && !closed, nil
 }
 
+// threadSold is whether a buyer's thread finally closed with the item handed
+// over (completed, or received with differences), read from its sealed steps
+// like soldSale reads its events: the latest close whose outcome is not open.
+func (s *dealSession) threadSold(ctx context.Context, threadID string) (bool, error) {
+	steps, err := s.index.steps(ctx, stepFilter{DealID: threadID, Kinds: []string{"close"}})
+	if err != nil {
+		return false, err
+	}
+	sold := false
+	for _, st := range steps {
+		var ev dealEvent
+		if err := json.Unmarshal([]byte(st.Local), &ev); err != nil {
+			return false, cli.ErrConflict
+		}
+		if c := ev.Close; c != nil && c.Outcome != "open" {
+			sold = c.Outcome == "completed" || c.Outcome == "mismatch"
+		}
+	}
+	return sold, nil
+}
+
 func dealSaleExportCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "export", Short: "Write the sale's sealed records as one JSON array, in order", Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		saleID, _ := c.Flags().GetString("sale")
@@ -509,6 +532,24 @@ func (s *dealSession) registerThread(ctx context.Context, saleID, threadID strin
 	// already open goes on after its sale closes.
 	if saleClosed(events) {
 		return "", "", cli.InputError("the sale " + saleID + " is closed: no buyer's thread opens on it")
+	}
+	// A sold sale takes no new buyer either, though it stays open while a
+	// listing is up (a takedown never follows the close): the one item is
+	// gone, as soldSale reads a thread's final close.
+	for _, se := range events {
+		if th := se.Event.Thread; th != nil {
+			sold, err := s.threadSold(ctx, th.ThreadID)
+			if err != nil {
+				return "", "", err
+			}
+			if sold {
+				msg := "the sale " + saleID + "'s item is sold: no buyer's thread opens on it"
+				if live, err := s.liveListings(ctx, saleID); err == nil && len(live) > 0 {
+					msg += "; its listing is still up on " + strings.Join(live, ", ") + ": take it down, `deal sale unpost` it, then close the sale"
+				}
+				return "", "", cli.InputError(msg)
+			}
+		}
 	}
 	for _, se := range events {
 		th := se.Event.Thread

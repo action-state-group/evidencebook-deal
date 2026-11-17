@@ -634,23 +634,13 @@ func authorizePost(events []sealedEvent, p dealPosting, now time.Time) (authoriz
 // is sealed under, so no post act is sealed between this read and the
 // check's own seal.
 func (s *dealSession) listingClasses(ctx context.Context, saleID string) (*[]string, error) {
-	steps, err := s.index.steps(ctx, stepFilter{DealID: saleID, Kinds: []string{"act", "sale_unpost"}})
+	live, err := s.liveFromIndex(ctx, saleID)
 	if err != nil {
 		return nil, err
 	}
 	latest := map[string][]string{}
-	for _, st := range steps {
-		var ev dealEvent
-		if err := json.Unmarshal([]byte(st.Local), &ev); err != nil {
-			return nil, cli.ErrConflict
-		}
-		if u := ev.SaleUnpost; u != nil {
-			delete(latest, u.Platform)
-			continue
-		}
-		if a := ev.Act; a != nil && a.Action == postAction && !a.Unchecked && a.Posting != nil {
-			latest[a.Posting.Platform] = a.Posting.Classes
-		}
+	for platform, l := range live {
+		latest[platform] = l.Classes
 	}
 	if len(latest) == 0 {
 		return nil, nil
@@ -680,30 +670,85 @@ type dealSaleUnpost struct {
 	Post     string `json:"post"`
 }
 
-// livePosts is the live listing of each platform on a sale's log: the record
-// digest of its latest post act, unless a takedown followed it. A later post
-// on a taken-down platform makes it live again.
-func livePosts(events []sealedEvent) map[string]string {
-	live := map[string]string{}
-	for _, se := range events {
-		if a := se.Event.Act; a != nil && a.Action == postAction && !a.Unchecked && a.Posting != nil {
-			live[a.Posting.Platform] = se.Digest
+// liveListing is a platform's live listing on a sale's log: the record digest
+// of its latest post act and the classes it states.
+type liveListing struct {
+	Digest  string
+	Classes []string
+}
+
+// liveStep is one step of a sale's log as the live-listing fold reads it.
+type liveStep struct {
+	Event  dealEvent
+	Digest string
+}
+
+// foldLive is the one definition of a live listing: the latest checked post
+// act of each platform, unless a takedown followed it. A later post on a
+// taken-down platform makes it live again.
+func foldLive(steps []liveStep) map[string]liveListing {
+	live := map[string]liveListing{}
+	for _, st := range steps {
+		if a := st.Event.Act; a != nil && a.Action == postAction && !a.Unchecked && a.Posting != nil {
+			live[a.Posting.Platform] = liveListing{Digest: st.Digest, Classes: a.Posting.Classes}
 		}
-		if u := se.Event.SaleUnpost; u != nil {
+		if u := st.Event.SaleUnpost; u != nil {
 			delete(live, u.Platform)
 		}
 	}
 	return live
 }
 
-// livePlatforms is the platforms livePosts holds, sorted.
-func livePlatforms(events []sealedEvent) []string {
-	var out []string
-	for p := range livePosts(events) {
+// livePosts is foldLive over a loaded log, as platform to post digest.
+func livePosts(events []sealedEvent) map[string]string {
+	steps := make([]liveStep, len(events))
+	for i, se := range events {
+		steps[i] = liveStep{se.Event, se.Digest}
+	}
+	live := map[string]string{}
+	for p, l := range foldLive(steps) {
+		live[p] = l.Digest
+	}
+	return live
+}
+
+// liveFromIndex is foldLive over this device's index of the sale's steps,
+// without opening the sale.
+func (s *dealSession) liveFromIndex(ctx context.Context, saleID string) (map[string]liveListing, error) {
+	steps, err := s.index.steps(ctx, stepFilter{DealID: saleID, Kinds: []string{"act", "sale_unpost"}})
+	if err != nil {
+		return nil, err
+	}
+	read := make([]liveStep, len(steps))
+	for i, st := range steps {
+		if err := json.Unmarshal([]byte(st.Local), &read[i].Event); err != nil {
+			return nil, cli.ErrConflict
+		}
+		read[i].Digest = st.Digest
+	}
+	return foldLive(read), nil
+}
+
+// sortedPlatforms is the platforms of a live map, sorted.
+func sortedPlatforms[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for p := range m {
 		out = append(out, p)
 	}
 	sort.Strings(out)
 	return out
+}
+
+// livePlatforms is the platforms livePosts holds, sorted.
+func livePlatforms(events []sealedEvent) []string { return sortedPlatforms(livePosts(events)) }
+
+// liveListings is the platforms with a live listing, read from the index.
+func (s *dealSession) liveListings(ctx context.Context, saleID string) ([]string, error) {
+	live, err := s.liveFromIndex(ctx, saleID)
+	if err != nil {
+		return nil, err
+	}
+	return sortedPlatforms(live), nil
 }
 
 // sealUnpost seals a sale's takedown of the live listing on platform, and is
@@ -722,32 +767,4 @@ func (s *dealSession) sealUnpost(ctx context.Context, saleID, platform string, e
 		return sealedEvent{}, cli.InputError("the sale " + saleID + " has no live listing on " + platform + "; live on: " + strings.Join(live, ", "))
 	}
 	return s.seal(ctx, saleID, events, dealEvent{Kind: "sale_unpost", SaleUnpost: &dealSaleUnpost{Platform: platform, Post: digest}})
-}
-
-// liveListings is the platforms with a live listing on a sale's log, read
-// from this device's index like listingClasses, without opening the sale.
-func (s *dealSession) liveListings(ctx context.Context, saleID string) ([]string, error) {
-	steps, err := s.index.steps(ctx, stepFilter{DealID: saleID, Kinds: []string{"act", "sale_unpost"}})
-	if err != nil {
-		return nil, err
-	}
-	live := map[string]bool{}
-	for _, st := range steps {
-		var ev dealEvent
-		if err := json.Unmarshal([]byte(st.Local), &ev); err != nil {
-			return nil, cli.ErrConflict
-		}
-		if u := ev.SaleUnpost; u != nil {
-			delete(live, u.Platform)
-		}
-		if a := ev.Act; a != nil && a.Action == postAction && !a.Unchecked && a.Posting != nil {
-			live[a.Posting.Platform] = true
-		}
-	}
-	out := make([]string, 0, len(live))
-	for p := range live {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out, nil
 }

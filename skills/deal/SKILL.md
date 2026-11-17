@@ -280,7 +280,9 @@ explained once where they are defined; this is the order to follow.
     `received` (outcome `completed` or `mismatch`) closes
     its sale on its own, since the one item is gone, unless a listing is still
     up: the result then lists `sale_open_listings` and the sale stays open
-    until you take them down, record them and run `deal sale close`. Otherwise
+    until you take them down, record them and run `deal sale close`. Take them
+    down promptly: buyers can still see them, and `deal open --sale` refuses a
+    new buyer on a sold sale ("item is sold"). Otherwise
     do not close the sale again,
     and open no other deal for it. If the close reports that closing the sale
     failed, run the same `deal close` again: it finishes the sale and prints

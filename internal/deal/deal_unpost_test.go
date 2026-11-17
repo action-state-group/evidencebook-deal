@@ -36,7 +36,8 @@ func TestAnUnpostIsRefusedWithoutALivePost(t *testing.T) {
 	require.ErrorIs(t, err, cli.ErrInput)
 	assert.Contains(t, err.Error(), "live on: marketplace.example")
 
-	out, err := unpost(t, saleID, "marketplace.example")
+	// The platform is read as a post reads it: scheme, case and path go.
+	out, err := unpost(t, saleID, "https://Marketplace.Example/listing/1")
 	require.NoError(t, err)
 	assert.Equal(t, "marketplace.example", out["platform"])
 	// Already down: a second takedown has nothing to take down.
@@ -81,12 +82,17 @@ func TestListingClassesLeaveOutATakenDownPlatformAndRepostMakesItLive(t *testing
 	assert.Nil(t, classes())
 
 	// The sale's chain, takedowns included, passes the profile checker, and
-	// so do the thread's sealed values against it.
+	// the thread's sealed values are established against it (the sale's log
+	// runs past the check's second once the sale closes).
+	setDealClock(t, "2026-09-27T18:10:00Z")
+	dealRun(t, "sale", "close", "--sale", saleID)
 	_, salePath := exportSale(t, saleID)
 	_, threadPath := exportRecords(t, thread)
 	out, err := runProfileChecker(t, salePath, threadPath)
 	require.NoError(t, err, out)
+	assert.Contains(t, out, "matches the sale's listings", out)
 	assert.NotContains(t, out, "mismatch")
+	assert.NotContains(t, out, "not independently established")
 }
 
 func TestACloseRequiresEachLivePostsTakedown(t *testing.T) {
@@ -138,7 +144,14 @@ func TestASoldThreadLeavesTheSaleOpenWhileAListingIsUp(t *testing.T) {
 	assert.Equal(t, []any{"marketplace.example"}, closed["sale_open_listings"])
 	assert.Contains(t, closed["next"], "deal sale unpost")
 
-	_, err := unpost(t, saleID, "marketplace.example")
+	// The item is gone: the open sale takes no new buyer.
+	_, err := invoke(t, "", "--profile", "deal", "deal", "open", "--sale", saleID, "--input", writeJSON(t,
+		`{"channel": "marketplace", "who": {"name": "Late Buyer", "domain": "buyer-b.example"}, "terms": {"price_minor": 190000}}`))
+	require.ErrorIs(t, err, cli.ErrInput)
+	assert.Contains(t, err.Error(), "item is sold")
+	assert.Contains(t, err.Error(), "marketplace.example", "the refusal names the listing still up")
+
+	_, err = unpost(t, saleID, "marketplace.example")
 	require.NoError(t, err)
 	dealRun(t, "sale", "close", "--sale", saleID)
 }
