@@ -280,10 +280,6 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
 
 1. **Verb names, the setting name and the input files** (sections 3 and 5) are proposals;
    Sherlock2 confirms the names, and the offer input's field names are evidencebook's (§3.3).
-4. **One verb or two for the migration** (section 3a): the twin prefers a separate explicit
-   store-migration verb that `declare` refuses without, because `declare` reads as setting a
-   preference; the note keeps one verb with the `--migrate` flag and a help line saying it moves
-   the store. Sherlock2 or Steven decides.
 2. **Where `deal agree` gets the admission and intent digests** it must cite (design §3.3,
    `admit`, `intent`): from the journal's own records. The plugin writes `admit` today only as v0
    `verdict`/`approval` steps; whether the existing admission flow produces a v1 `admit` is
@@ -291,3 +287,7 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
 3. **The journal overlay for the sale flow** (`sale`, `thread`, `thread_opened`, `sale_unpost`,
    `counterparty_profile`, `disclosure`): sealed in the journal on a v1 deal (design §3.2). This
    note does not move the sale verbs; a following slice does.
+4. **One verb or two for the migration** (section 3a): the twin prefers a separate explicit
+   store-migration verb that `declare` refuses without, because `declare` reads as setting a
+   preference; the note keeps one verb with the `--migrate` flag and a help line saying it moves
+   the store. Sherlock2 or Steven decides.
