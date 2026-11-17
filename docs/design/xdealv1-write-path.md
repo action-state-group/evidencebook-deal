@@ -79,7 +79,9 @@ to recognise v1 log ids. A test
 
 ## 3a. The deal store migration (a one-way door)
 
-**Decided** (evidencebook shelf note §4, acceptance 8, Steven's #461 confirmation): the journal,
+**Decided** (evidencebook shelf note §4, acceptance 8, Steven's written confirmation of the #461
+target, buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=28a481d9b8c3adc23d21cd73f7452d907815c437cfb0f88feae7dcc2ab8f06e2&thread=8a42e93c728b417ddb1a4a0f3669a2faaa4e0bd0e4016497dd6afdf862a33619;
+the migration itself is the library's, so this door only carries out that confirmation): the journal,
 stamps and facts exist only on a shelf of book facts. `Shelf.Journal` refuses an unmigrated shelf
 ("call Migrate", `shelf.go:221`), so no v1 record that goes to the journal (offer, decline,
 cancellation, check, intent) can be written on a deal store as it is today, and the plugin never
@@ -103,7 +105,16 @@ file, and a downgrade needs the backup.
    card and tick tests run once on a migrated store as the check that nothing a v0 deal does
    changed. This is the one place the setting touches v0 behaviour, and it does so only after the
    user's explicit `--migrate`.
-4. The demo (`examples/ard-commerce`) does not use the plugin's store, so it is not affected.
+4. **The wording the user reads** (Sherlock2's to confirm; the verb, the flag and both texts are
+   new user-facing text). Without `--migrate`, `deal declare --deal-version x-deal-v1` prints and
+   exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a new
+   layout. Moving it is one-way: older capsulectl builds will not open it afterwards, and going
+   back means restoring the backup, which is written first to <db>.v1.bak. Your open deals keep
+   working. Run again with --migrate to move it." A v1 verb on an unmigrated store prints: "This
+   deal store is not in the layout x-deal-v1 deals need. Run `deal declare --deal-version
+   x-deal-v1 --migrate`; it is one-way, see its help." With `--migrate` it prints, after the
+   move: "Moved. The backup is <db>.v1.bak."
+5. The demo (`examples/ard-commerce`) does not use the plugin's store, so it is not affected.
 
 ## 4. The writers
 
