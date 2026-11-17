@@ -83,38 +83,53 @@ to recognise v1 log ids. A test
 target, buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=28a481d9b8c3adc23d21cd73f7452d907815c437cfb0f88feae7dcc2ab8f06e2&thread=8a42e93c728b417ddb1a4a0f3669a2faaa4e0bd0e4016497dd6afdf862a33619;
 the migration itself is the library's, so this door only carries out that confirmation): the journal,
 stamps and facts exist only on a shelf of book facts. `Shelf.Journal` refuses an unmigrated shelf
-("call Migrate", `shelf.go:221`), so no v1 record that goes to the journal (offer, decline,
+("call Migrate", `shelf.go:233`), so no v1 record that goes to the journal (offer, decline,
 cancellation, check, intent) can be written on a deal store as it is today, and the plugin never
-calls `Migrate` today. `Cadence.Migrate(ctx, now)` is explicit and one-way: the shelf file's
-version becomes 2, a backup `<db>.v1.bak` is written first, an older pinned build refuses the
-file, and a downgrade needs the backup.
+calls `Migrate` today. `Cadence.Migrate(ctx, now)` is explicit, one-way and idempotent (a migrated
+shelf is a no-op). Its order matters (`shelf_stamp.go:111-125`): it first commits the shelf file's
+version 2, from which an older pinned build refuses the file, and only then writes the backup
+`<db>.v1.bak`; a failed backup (no disk space, a file already at that name) leaves the store in
+state `backing_up`, unopenable by older builds, until the same call is run again, which resumes. The
+backup is the version 1 file as it was before the move, so restoring it drops every record written
+after.
 
 **Proposed:**
 
-1. The plugin migrates in exactly one place: `deal declare --deal-version x-deal-v1`, which
-   refuses unless the user also passes `--migrate`, and says, before it does anything, that the
-   deal store moves to the new layout, that older capsulectl builds will no longer open it, and
-   where the backup is. With `--migrate` it calls `Migrate` once (a store already migrated is not
-   migrated again) and then records the setting. Declaring `x-deal-v0` never migrates and a store
-   that was migrated keeps working at v0.
-2. Every v1 verb refuses on an unmigrated store with that same explanation, never by surfacing the
-   library's error.
-3. Deals already open are unchanged: they stay v0 and keep working on the migrated store. The
+1. The plugin migrates in exactly one place: `deal declare --deal-version x-deal-v1`. On an
+   unmigrated store it refuses unless the user also passes `--migrate`, and changes nothing. On a
+   store already migrated (the library says so), it records the setting and needs no `--migrate`.
+   The one verb keeps the flag, and its one-line help says it also moves the deal store, one-way;
+   whether the move should be a separate explicit verb instead is Sherlock2's call (open question 4).
+   Declaring `x-deal-v0` never migrates, and a migrated store keeps working at v0.
+2. Before `Migrate` runs, the plugin runs `coverLiveSteps` (`deal_books.go:751`), as `deal tick`
+   does: `Migrate`'s genesis facts cut a checkpoint at the migration's time for any book, and a
+   v0 step stored without its checkpoint after a crash must get the checkpoint stamped with its own
+   time first, since a later cut at the same size cannot replace one (`deal_books.go:705-710`).
+   A test crashes a v0 step before its checkpoint, migrates, and checks the step's checkpoint time.
+3. Every v1 verb refuses on an unmigrated store with the explanation of item 5, never by
+   surfacing the library's error.
+4. Deals already open are unchanged: they stay v0 and keep working on the migrated store. The
    library serves `/1` and `/2` History cards from stamps after migration (evidencebook shelf note
-   §4), the plugin's `tick` stamps instead of building a tree, and the existing suite's History
+   §4; a card's anchor is then a stamp's checkpoint, so the first card after the move can differ in
+   timing), the plugin's `tick` stamps instead of building a tree, and the existing suite's History
    card and tick tests run once on a migrated store as the check that nothing a v0 deal does
    changed. This is the one place the setting touches v0 behaviour, and it does so only after the
-   user's explicit `--migrate`.
-4. **The wording the user reads** (Sherlock2's to confirm; the verb, the flag and both texts are
-   new user-facing text). Without `--migrate`, `deal declare --deal-version x-deal-v1` prints and
-   exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a new
-   layout. Moving it is one-way: older capsulectl builds will not open it afterwards, and going
-   back means restoring the backup, which is written first to <db>.v1.bak. Your open deals keep
-   working. Run again with --migrate to move it." A v1 verb on an unmigrated store prints: "This
-   deal store is not in the layout x-deal-v1 deals need. Run `deal declare --deal-version
-   x-deal-v1 --migrate`; it is one-way, see its help." With `--migrate` it prints, after the
-   move: "Moved. The backup is <db>.v1.bak."
-5. The demo (`examples/ard-commerce`) does not use the plugin's store, so it is not affected.
+   user's explicit `--migrate`. The user-facing text says "your open deals keep working" only once
+   that test passes.
+5. **The wording the user reads** (Sherlock2's to confirm; the verb, the flag and the texts are new
+   user-facing text). Without `--migrate`, on an unmigrated store, `deal declare --deal-version
+   x-deal-v1` prints and exits non-zero without changing anything: "Declaring x-deal-v1 also moves
+   this profile's deal store to a new layout, and that cannot be undone. After it, older capsulectl
+   versions, and any app that uses this profile folder, will no longer open it. A backup of the
+   current store is written to <full path>.v1.bak; restoring it brings the old layout back but
+   discards everything recorded after the move, and deleting or moving it ends that way back. Your
+   open deals keep working. Run the same command with --migrate to go ahead." A v1 verb on an
+   unmigrated store prints: "This deal store is not yet in the layout x-deal-v1 deals need. See
+   `deal declare --help`; moving it is one-way." With `--migrate` it prints, after the move: "Moved.
+   The backup is <full path>.v1.bak, kept beside the store; if this stops part-way, run the same
+   command again."
+6. The demo (`examples/ard-commerce`) does not use the plugin's store (no `capsulectl` or
+   `evidencebook-deal` reference in it), so it is not affected.
 
 ## 4. The writers
 
@@ -140,10 +155,10 @@ standalone Capsule under `action_id` `<deal_id>/sent`. A journal record that doe
 (intent, check, verdict, approval, admit, the journey and the sale overlays) is appended to the
 journal book with `CheckSealed`.
 
-**Proposed:** `sealJournalV1` appends to `shelf.Journal(ctx)`; `sealSentV1` calls `SealSent`,
-stores the returned pair (`xdealv1.Pair`) in a local `deal_sent (record_digest, pair, written)`
-table at once, and writes the file from it. On `SealSent`'s partial-failure result (a Record with
-an error) it stores and writes the returned Capsule and does not seal again, as the library says.
+**Proposed:** `sealJournalV1` appends to `shelf.Journal(ctx)`; `sealSentV1` stores the send as an
+operation before calling `SealSent`, stores the returned pair (`xdealv1.Pair`) when the call
+returns, and writes the file from it. On `SealSent`'s partial-failure result (a Record with an
+error) it stores and writes the returned Capsule and does not seal again, as the library says.
 Each send is one operation keyed by its fixed record, not by the deal id (an offer and its
 cancellation share a deal id, `sent.go:185`): before calling `SealSent` the verb stores the
 operation, `deal_sent (record_digest, payload, state, pair, written)`, with the record's JCS
@@ -265,6 +280,10 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
 
 1. **Verb names, the setting name and the input files** (sections 3 and 5) are proposals;
    Sherlock2 confirms the names, and the offer input's field names are evidencebook's (§3.3).
+4. **One verb or two for the migration** (section 3a): the twin prefers a separate explicit
+   store-migration verb that `declare` refuses without, because `declare` reads as setting a
+   preference; the note keeps one verb with the `--migrate` flag and a help line saying it moves
+   the store. Sherlock2 or Steven decides.
 2. **Where `deal agree` gets the admission and intent digests** it must cite (design §3.3,
    `admit`, `intent`): from the journal's own records. The plugin writes `admit` today only as v0
    `verdict`/`approval` steps; whether the existing admission flow produces a v1 `admit` is
