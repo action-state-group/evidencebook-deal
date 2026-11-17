@@ -133,26 +133,32 @@ the v1 decline is a subcommand of `offer`.
 | Verb | Writes | Where | Notes |
 |---|---|---|---|
 | `deal offer --input FILE --out FILE` | `propose` (offer or counter-offer, `--counter-to DIGEST`) | journal, sent | the input holds terms, rows, named records, pack digest, witnesses, adjudicator, `agree_by` |
-| `deal offer decline OFFER_DIGEST --reason not_selected --out FILE` | `agree` kind `decline` | journal, sent | Sherlock2 2a004e65: the declined buyer's copy says so and verifies |
-| `deal offer cancel ... --out FILE` | `agree` kind `cancellation` | journal, sent | before the deal starts (design §3.5) |
+| `deal offer decline OFFER_DIGEST [--reason not_selected\|other] --out FILE` | `agree` kind `decline` | journal, sent | Sherlock2 2a004e65: the declined buyer's copy says so and verifies |
+| `deal offer cancel OFFER_DIGEST --out FILE` | `agree` kind `cancellation` | journal, sent | before the deal starts (design §3.5) |
 | `deal agree OFFER --deal ID` | `agree` kind `agreement` | deal book, `seq` 1 | opens the deal book, cites the intent and admission, checks `CheckAgreement` |
 | `deal receive FILE` | nothing | the store | section 4.3 |
-| `deal act` | `perform` | deal book | a delivery or any other act; `--check DIGEST` cites the passing check |
-| `deal pay` | `settle` | deal book | a payment leg (`--leg payer\|payee`), a refund (`--reverses DIGEST`); `--check` on a payer leg. New verbs: v0 has neither (it records both through `deal note --kind act`) |
-| `deal statement --row ROW --value met\|not_met\|cannot_tell` | `statement` | deal book | |
-| `deal dispute --row ROW`, `... --withdraw`, `... --challenge RULING` | `dispute` | deal book | `forum` from the agreement's adjudicator |
+| `deal perform` | `perform` | deal book | a delivery or any other act; `--check DIGEST` cites the passing check; names are the record names (Sherlock2 a864342c) |
+| `deal settle` | `settle` | deal book | a payment leg (`--leg payer\|payee`) or a refund (`--reverses DIGEST`, `--remedy-for ROW`); `--check` on a payer leg. `deal perform` and `deal settle` are new verbs: v0 has neither (it records both through `deal note --kind act`) |
+| `deal statement --row ROW --value met\|not_met\|cannot_tell [--remedy ROW]` | `statement` | deal book | `--remedy` for a statement that chooses a remedy |
+| `deal dispute --row ROW [--forum F]`, `... --withdraw`, `... --challenge RULING` | `dispute` | deal book | `--forum` only picks among the forums the agreement names, and defaults to the only one; an agreement with `adjudicator: null` names none, so `deal dispute` refuses with a message |
 | `deal check`, `deal note` | the journal overlay and journey kinds | journal | unchanged flags; on a v1 deal they seal the v1 records |
 
 The rows' vocabulary and the statement words are rowstatus's, used exactly (Sherlock2 2a004e65,
-capsule-viewer#322 answer): the plugin adds no label of its own. `settle` is the record's name and
-stays out of user text: no message says a payment "settles" a row, since **settled** is the
-computed status of section 6. The help of `deal statement` says `cannot_tell` records no stance on
+capsule-viewer#322 answer): the plugin adds no label of its own. The verb names are the record names
+(Sherlock2 a864342c), and `settle` also carries a refund. No message says a payment "settles" a
+row: **settled** is the computed status of section 6. The help of `deal statement` says `cannot_tell` records no stance on
 the row and counts as no statement (evidencebook design §9). The help of `deal decline` (a held
 evidence request) and of `deal offer decline` each say which one it is and name the other.
 `--reason` on a decline is optional, as the design has it, with `not_selected` the only token
 until Sherlock2 words another (Q11); what the decline prints and what the declined buyer's copy
 shows for it is Sherlock2's wording, and neither shows the winning terms or amount
 (PRD_SELLER.md:306-308 as evidencebook design §3.5 cites it).
+
+**Forums** (Sherlock2 6c12438b, Steven's #404): the offer and the agreement carry the accepted
+forums next to `adjudicator` (the agreement takes them from the offer, as it takes witnesses), the
+terms pack states them, and a dispute and a ruling must name one of them. The `forums` member
+and its check are an evidencebook follow-up (eb-461); `deal offer` takes `--forum F` (repeatable)
+once it lands, and `deal dispute --forum` is blocked on it.
 
 ## 6. Settled and local
 
@@ -165,9 +171,12 @@ passes them through once evidencebook PRs 3 to 5 land.
 ## 7. `deal close` and `deal terms-result` on a v1 deal
 
 **Decided** (Sherlock2 2a004e65, evidencebook-deal#212 How ack): on a v1 deal they print a
-message and exit non-zero without sealing, before the deal loads (section 3, item 4): "this deal
-has no close; its status is computed from its rows: see `deal report` and `deal statement`"
-(wording is Sherlock2's call; this is a placeholder until it confirms). `deal --help` and each command's help say which deals still
+message and exit non-zero without sealing, before the deal loads (section 3, item 4). The text is
+Sherlock2's (a864342c): `deal close`: "deal <id> is an x-deal-v1 deal and has no close. Each row is
+decided by statements, dates and disputes, and the deal is settled once every row is agreed,
+uncontested, or ruled with its remedy done. Record a row with `deal statement`." `deal
+terms-result`: the same text with "has no terms result". "See `deal report`" is added only once
+the v1 report is served. `deal --help` and each command's help say which deals still
 have them (v0 deals). A v0 deal keeps both verbs unchanged.
 
 ## 8. Old deals, the demo and the pin
