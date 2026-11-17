@@ -100,14 +100,20 @@ journal book with `CheckSealed`.
 stores the returned pair (`xdealv1.Pair`) in a local `deal_sent (record_digest, pair, written)`
 table at once, and writes the file from it. On `SealSent`'s partial-failure result (a Record with
 an error) it stores and writes the returned Capsule and does not seal again, as the library says.
-A failure after the pair is stored is retried by re-running the verb with the same deal id, which
-finds the stored pair and writes the file again, sealing nothing. One window the plugin cannot
-close: a process that dies inside `SealSent` after the journal record is stored and before it
-returns leaves a record whose Capsule cannot be rebuilt (the library seals a new Capsule on every
-call, stamped with the call's time, `shelf_sent.go:75`). The verb marks the deal id `sealing`
-before the call, so a re-run that finds that state says the offer was sealed but its file was not
-made, and the way out is `deal offer cancel` and a new offer under a new deal id, never a second
-`SealSent` for the same deal id.
+Each send is one operation keyed by its fixed record, not by the deal id (an offer and its
+cancellation share a deal id, `sent.go:185`): before calling `SealSent` the verb stores the
+operation, `deal_sent (record_digest, payload, state, pair, written)`, with the record's JCS
+payload fixed once, state `sealing`. A failure after the pair is stored is retried by re-running
+the same verb, which finds the operation by its digest and writes the file again, sealing nothing.
+A re-run that finds state `sealing` with no pair reads the journal for a record whose payload
+commitment is that digest: none (the process died before the call, or `SealSent` returned an empty
+Record, which the library says left nothing and may be retried) means it calls `SealSent` again
+with the stored payload; one found means the process died inside `SealSent` after the journal
+record was stored and before it returned, a window the plugin cannot close, because the library
+seals a new Capsule on every call, stamped with the call's time (`shelf_sent.go:75`), so that
+record's Capsule cannot be rebuilt. The verb then says the record was sealed but its file was not
+made, and the way out is `deal offer cancel` for an offer (a decline or a cancellation is
+repeated as a new operation), never a second `SealSent` for the same record.
 
 ### 4.3 Sending and receiving
 
@@ -200,7 +206,9 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
   `deal close`; a v0 deal refuses `deal statement`; changing the setting does not change an open
   deal.
 - A crash after the pair is stored: re-running the verb writes the same file and seals nothing. A
-  crash inside `SealSent`: the re-run refuses with the `sealing` message and seals nothing.
+  crash before `SealSent` or an empty-Record error: the re-run seals the stored payload once; a
+  crash inside `SealSent` after the journal write: the re-run refuses with the `sealing` message
+  and seals nothing. An offer, then its cancellation, then a retried cancellation each seal once.
 - A mixed shelf (legacy deal, v0 book deal, v1 book deal): `deal list` and every v0 verb on the
   first two are unchanged; `deal close` on the v1 deal prints the section 7 message, not a store
   error.
