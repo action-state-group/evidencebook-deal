@@ -222,9 +222,11 @@ shows for it is Sherlock2's wording, and neither shows the winning terms or amou
 
 **Forums** (Sherlock2 6c12438b, Steven's #404): the offer and the agreement carry the accepted
 forums next to `adjudicator` (the agreement takes them from the offer, as it takes witnesses), the
-terms pack states them, and a dispute and a ruling must name one of them. The `forums` member
-and its check are an evidencebook follow-up (eb-461); `deal offer` takes `--forum F` (repeatable)
-once it lands, and `deal dispute --forum` is blocked on it.
+terms pack states them, and a dispute and a ruling must name one of them. The `forums` member and its checks landed in evidencebook (#493, `bc082697`): the offer and the
+agreement carry `forums`, `CheckDispute` and `CheckRuling` keep a dispute or ruling inside them, and
+a dispute must cite its agreement. `deal offer` takes `--forum F` (repeatable). `deal dispute`
+writes into the deal book, so it lands with the deal book writers after `deal agree` (evidencebook
+PR 4).
 
 ## 6. Settled and local
 
