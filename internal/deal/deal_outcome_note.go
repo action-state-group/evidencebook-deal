@@ -11,7 +11,8 @@ import (
 // TEMPORARY (evidencebook#462; evidencebook#461's computed row status
 // supersedes it): the book owner's own note that the deal did not hold, sealed
 // as an outcome_note record in the owner's own book after the deal's final
-// close, which it confirms. Ethan and Steven's phone agreement of 2026-11-17,
+// close, which it confirms. Each reason is the owner's own failure; a buyer whose
+// seller failed does not write one, since the card counts it on the writer's card. Ethan and Steven's phone agreement of 2026-11-17,
 // so a History card can count a deal did_not_hold. The note is the holder's:
 // nothing here derives it, and a counterparty's record is never appended to
 // the book. It is kept for the holder only, in no shared copy.
@@ -33,8 +34,11 @@ func dealOutcomeNoteCommand() *cobra.Command {
 func outcomeNoteSealCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "seal", Short: "Seal your own note that a closed deal did not hold", Long: `TEMPORARY (evidencebook#462, until the target design's computed row status):
 seal one outcome_note record in your own book, after the deal's final close, saying
-an outcome arrived against you and the deal did not hold (--reason: dispute_lost,
-settled_against, not_delivered or other). The History card then counts the deal
+the deal did not hold and the failure is your own (--reason: dispute_lost, you lost
+a dispute; settled_against, a dispute settled against you; not_delivered, you did not
+deliver; other, any other way it did not hold for you). A buyer whose seller failed
+does not write it: the card counts it on the writer's own card. The reason is your own
+statement, not checked against any ruling. The History card then counts the deal
 did_not_hold. The note is yours alone: it is never in a shared copy, and a
 counterparty never writes one into your book. A deal takes one.`, Args: cli.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
 		reason, _ := c.Flags().GetString("reason")

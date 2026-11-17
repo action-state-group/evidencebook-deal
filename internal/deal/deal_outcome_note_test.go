@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/action-state-group/evidencebook/dealprofile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +51,33 @@ func TestAnOutcomeNoteRefusesWhatTheProfileDoesNotAllow(t *testing.T) {
 		_, err := invoke(t, "", append([]string{"--profile", "deal", "deal"}, args...)...)
 		require.Error(t, err, name)
 	}
+}
+
+// The note is sealed only after the final close: an open deal and an `open` close are refused, and
+// nothing is appended; a sealed note confirms the final close.
+func TestAnOutcomeNoteIsSealedOnlyAfterTheFinalClose(t *testing.T) {
+	dealFixture(t)
+	id := retailDeal(t)
+	seal := func() error {
+		_, err := invoke(t, "", "--profile", "deal", "deal", "outcome-note", "seal", "--deal", id, "--reason", "other")
+		return err
+	}
+	err := seal()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "close")
+	dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"pending","reason":"awaiting_delivery"}`))
+	err = seal()
+	require.Error(t, err, "a close that is not final is no close for the note")
+	assert.Empty(t, recordsOfType(t, id, "outcome_note"))
+
+	dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"not_received","reason":"not_delivered"}`))
+	require.NoError(t, seal())
+	events, recs := recordsOf(t, id)
+	closeAt := finalClose(events)
+	notes := recordsOfType(t, id, "outcome_note")
+	require.Len(t, notes, 1)
+	refs := notes[0][dealprofile.Profile].(map[string]any)["refs"].([]any)
+	require.Len(t, refs, 1)
+	assert.Equal(t, events[closeAt].Digest, refs[0].(map[string]any)["digest"], "it confirms the final close")
+	assert.Equal(t, "outcome_note", recs[len(recs)-1][dealprofile.Profile].(map[string]any)["record_type"])
 }
