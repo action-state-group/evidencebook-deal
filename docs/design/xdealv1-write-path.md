@@ -44,9 +44,9 @@ selectable by setting.
 **Proposed:**
 
 1. **The setting** is the profile's `deal_version`, `x-deal-v0` (default) or `x-deal-v1`, set once
-   with a new top-level `capsulectl deal declare --deal-version x-deal-v1` (there is no
-   `deal declare` today; the existing one is `deal standard-history declare`; not `--profile`,
-   which is the global flag naming the profile). Declaring v1 migrates the deal store, as section
+   with a new top-level `capsulectl deal set-version x-deal-v1` (a positional value; Sherlock2's
+   name: `deal declare` would read as the same act as `deal standard-history declare` and hides that
+   this one can move the store; not `--profile`, which is the global flag naming the profile). Declaring v1 migrates the deal store, as section
    3a says. It governs only the offers this profile writes. Every deal after
    that follows its offer's version (evidencebook design §2.3): a profile reads both versions
    whatever its setting, so a v0-setting profile that receives a v1 offer reads it and answers in
@@ -95,11 +95,11 @@ after.
 
 **Proposed:**
 
-1. The plugin migrates in exactly one place: `deal declare --deal-version x-deal-v1`. On an
+1. The plugin migrates in exactly one place: `deal set-version x-deal-v1 --migrate`. On an
    unmigrated store it refuses unless the user also passes `--migrate`, and changes nothing. On a
    store already migrated (the library says so), it records the setting and needs no `--migrate`.
    The one verb keeps the flag, and its one-line help says it also moves the deal store, one-way;
-   whether the move should be a separate explicit verb instead is Sherlock2's call (open question 4).
+   Sherlock2 chose one verb with `--migrate` (the flag says what it costs).
    Declaring `x-deal-v0` never migrates, and a migrated store keeps working at v0.
 2. Before `Migrate` runs, the plugin runs `coverLiveSteps` (`deal_books.go:751`), as `deal tick`
    does: `Migrate`'s genesis facts cut a checkpoint at the migration's time for any book, and a
@@ -116,18 +116,21 @@ after.
    changed. This is the one place the setting touches v0 behaviour, and it does so only after the
    user's explicit `--migrate`. The user-facing text says "your open deals keep working" only once
    that test passes.
-5. **The wording the user reads** (Sherlock2's to confirm; the verb, the flag and the texts are new
-   user-facing text). Without `--migrate`, on an unmigrated store, `deal declare --deal-version
-   x-deal-v1` prints and exits non-zero without changing anything: "Declaring x-deal-v1 also moves
-   this profile's deal store to a new layout, and that cannot be undone. After it, older capsulectl
-   versions, and any app that uses this profile folder, will no longer open it. A backup of the
-   current store is written to <full path>.v1.bak; restoring it brings the old layout back but
-   discards everything recorded after the move, and deleting or moving it ends that way back. Your
-   open deals keep working. Run the same command with --migrate to go ahead." A v1 verb on an
-   unmigrated store prints: "This deal store is not yet in the layout x-deal-v1 deals need. See
-   `deal declare --help`; moving it is one-way." With `--migrate` it prints, after the move: "Moved.
-   The backup is <full path>.v1.bak, kept beside the store; if this stops part-way, run the same
-   command again."
+5. **The wording the user reads** (Sherlock2's texts, buzz ac973473, with the full path always
+   printed, never `<db>`). Without `--migrate`, on an unmigrated store, `deal set-version x-deal-v1`
+   prints and exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a
+   new layout. The move is one-way: afterwards, older capsulectl builds, including one an app such
+   as Muse or Goose bundles, will not open the store, and going back means restoring the backup,
+   written first to <full path>.v1.bak. Your open deals keep working. Your History card will count
+   from the move: deals before it still show, but the card no longer claims they are complete. Run
+   again with --migrate to move it." A v1 verb on an unmigrated store prints: "This deal store is
+   not yet in the layout x-deal-v1 deals need. See `deal set-version --help`; moving it is
+   one-way." After the move: "Moved. Backup: <full path>.v1.bak. Your History card now counts from
+   <coverage start, year and month>." The note adds two facts the library fixes: restoring the
+   backup discards everything recorded after the move, and deleting or moving it ends the way
+   back; and if the move stops part-way, running the same command again resumes it (help text,
+   not the warning). "Your open deals keep working" is printed only once the migrated-store test
+   of item 4 passes.
 6. The demo (`examples/ard-commerce`) does not use the plugin's store (no `capsulectl` or
    `evidencebook-deal` reference in it), so it is not affected.
 
@@ -289,7 +292,6 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
 3. **The journal overlay for the sale flow** (`sale`, `thread`, `thread_opened`, `sale_unpost`,
    `counterparty_profile`, `disclosure`): sealed in the journal on a v1 deal (design §3.2). This
    note does not move the sale verbs; a following slice does.
-4. **One verb or two for the migration** (section 3a): the twin prefers a separate explicit
-   store-migration verb that `declare` refuses without, because `declare` reads as setting a
-   preference; the note keeps one verb with the `--migrate` flag and a help line saying it moves
-   the store. Sherlock2 or Steven decides.
+4. **One verb or two for the migration** (section 3a): settled. The twin preferred a separate
+   store-migration verb; Sherlock2 chose `deal set-version x-deal-v1 --migrate` (one verb, the
+   flag says what it costs). No Steven door (Sherlock2, ac973473).
