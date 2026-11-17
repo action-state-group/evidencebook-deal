@@ -409,7 +409,8 @@ func checkCard(w cli.Wording, state dealState, snap dealSnapshot, r dealCheckRes
 		// stopped (u245: "will not do it and will not ask").
 		ask.Question, ask.WhyKey = cardDenial(w, snap, vals), "card.why.label_stopped"
 	}
-	ask.Facts = cardFactsLine(w, state, snap, r, terms, money)
+	broken, _ := brokenLimit(r.Rules, money)
+	ask.Facts = cardFactsLine(w, state, snap, r, terms, money, broken)
 	ask.Terms = cardTermsLine(w, state, snap, r)
 	askedOver := false
 	if total, field := limitBound(terms, snap); total != nil {
@@ -424,7 +425,6 @@ func checkCard(w cli.Wording, state dealState, snap dealSnapshot, r dealCheckRes
 	// pickup area needs none).
 	acceptanceOld := isShare(snap.Action) && snap.DisclosingTo == "counterparty" && slices.ContainsFunc(snap.Disclosing, func(c string) bool { return c != "pickup_area" }) &&
 		state.saleThread() && state.acceptanceOutsideHistory(state.historySince) && acceptanceRuleVerdict(r.Rules) != ""
-	broken, _ := brokenLimit(r.Rules, money)
 	ask.Why = cardWhy(w, r, snap, cardFacts{brokenLimit: broken, limit: limit, floor: floor, picked: pickedWords(r), told: disclosureWords(w, told), payee: payee, askedOver: askedOver, acceptanceOld: acceptanceOld, acceptanceRefused: acceptanceOld && acceptanceRuleVerdict(r.Rules) == "fail"})
 	ask.GoodToKnow = cardGoodToKnow(w, r)
 	// A share before a payment is the first of two stops; the charge is not
@@ -529,7 +529,7 @@ func disclosureWords(w cli.Wording, classes []string) string {
 
 // cardFactsLine is the money line: the amount (with what it adds to the price),
 // the rail, whether it comes back, and whether it is within the limit.
-func cardFactsLine(w cli.Wording, state dealState, snap dealSnapshot, r dealCheckResult, terms dealTerms, money func(int64) string) string {
+func cardFactsLine(w cli.Wording, state dealState, snap dealSnapshot, r dealCheckResult, terms dealTerms, money func(int64) string, broken string) string {
 	amount := snap.AmountMinor
 	if amount == nil && (snap.Action == "commit" || snap.Action == "pay") {
 		// A commitment says its price.
@@ -563,7 +563,6 @@ func cardFactsLine(w cli.Wording, state dealState, snap dealSnapshot, r dealChec
 		}
 		parts = append(parts, w.Line(key, nil))
 	}
-	broken, _ := brokenLimit(r.Rules, money)
 	if m := state.intent.MaxTotalMinor; m != nil {
 		// Over exactly when the check found it over (its over_limit
 		// difference), so the facts and the reason never disagree. "Within"
