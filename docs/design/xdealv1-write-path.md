@@ -68,7 +68,10 @@ selectable by setting.
    a v1 book's records have no v0 `deal_local` opening, so `bookSteps` (`deal_books.go:383-455`)
    would otherwise report a corrupt store.
 5. **Mixed shelves.** `bookDealIDs` and every scan of the whole shelf (`deal list`,
-   `deal_list.go:232`) skip a deal whose table row is v1; a v1 listing is a later slice. A test
+   `deal_list.go:232`) skip a deal whose table row is v1; a v1 listing is a later slice. Because a v1 book's log id (`deal/` plus 32 random hex) does not
+match `dealOfBook`'s `deal-<16 hex>` pattern (`deal_books.go:320-323`), the tick paths
+(`records`, `coverLiveSteps`, `settleEnded`) already never see it; `dealOfBook` must not be changed
+to recognise v1 log ids. A test
    holds one shelf with a legacy deal, a v0 book deal and a v1 book deal and reads the first two
    unchanged.
 
@@ -105,7 +108,8 @@ cancellation share a deal id, `sent.go:185`): before calling `SealSent` the verb
 operation, `deal_sent (record_digest, payload, state, pair, written)`, with the record's JCS
 payload fixed once, state `sealing`. A failure after the pair is stored is retried by re-running
 the same verb, which finds the operation by its digest and writes the file again, sealing nothing.
-A re-run that finds state `sealing` with no pair reads the journal for a record whose payload
+The operation is looked up by the verb's own inputs (deal id, kind and the stored payload's
+digest), so a re-run needs no digest from the user. A re-run that finds state `sealing` with no pair reads the journal for a record whose payload
 commitment is that digest: none (the process died before the call, or `SealSent` returned an empty
 Record, which the library says left nothing and may be retried) means it calls `SealSent` again
 with the stored payload; one found means the process died inside `SealSent` after the journal
@@ -155,8 +159,8 @@ capsule-viewer#322 answer): the plugin adds no label of its own. The verb names 
 row: **settled** is the computed status of section 6. The help of `deal statement` says `cannot_tell` records no stance on
 the row and counts as no statement (evidencebook design §9). The help of `deal decline` (a held
 evidence request) and of `deal offer decline` each say which one it is and name the other.
-`--reason` on a decline is optional, as the design has it, with `not_selected` the only token
-until Sherlock2 words another (Q11); what the decline prints and what the declined buyer's copy
+`--reason` on a decline is optional, as the design has it, with `not_selected` and `other` the
+only tokens until Sherlock2 words another (Q11); what the decline prints and what the declined buyer's copy
 shows for it is Sherlock2's wording, and neither shows the winning terms or amount
 (PRD_SELLER.md:306-308 as evidencebook design §3.5 cites it).
 
