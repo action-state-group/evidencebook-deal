@@ -12,7 +12,7 @@ import (
 // supersedes it): the book owner's own note that the deal did not hold, sealed
 // as an outcome_note record in the owner's own book after the deal's final
 // close, which it confirms. Each reason is the owner's own failure; a buyer whose
-// seller failed does not write one, since the card counts it on the writer's card. Ethan and Steven's phone agreement of 2026-11-17,
+// seller failed does not write one, since the card counts it on the writer's card. Ethan and Steven's phone agreement (relayed by Ethan, evidencebook#462),
 // so a History card can count a deal did_not_hold. The note is the holder's:
 // nothing here derives it, and a counterparty's record is never appended to
 // the book. It is kept for the holder only, in no shared copy.
