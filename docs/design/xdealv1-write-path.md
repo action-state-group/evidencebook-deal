@@ -13,18 +13,21 @@ Each rule is marked **Decided** (a source is named) or **Proposed** (this note's
 
 The part of #212 that lets the plugin write and send v1 records: version selection, the
 deal-book writer, the journal writer, seal-and-send, receiving, and what `deal close` and
-`deal terms-result` do on a v1 deal. Not covered, because the library parts are not on main yet
-(`Start`, `StatusProvider`, `ReceiveProfile`, `PaymentCheck`, `CanAct`, the v1 report, evidencebook
-PRs 3 to 5): row status in `deal report`/`list`/`settlement`, the stamp-proof order, the v1
-report, and `standard_history`. A later note covers them.
+`deal terms-result` do on a v1 deal. The library's `ReceiveProfile` interface is on main
+(`shelf_receive.go:47`), but its x-deal-v1 implementation, `Start`, `StatusProvider`,
+`PaymentCheck`, `CanAct` and the v1 report are evidencebook PRs 3 to 5 and are not (design §8.3,
+§11.1). So the write verbs and `deal offer`'s sent file can land first; `deal receive` and the
+offerer's `deal agree` (which needs the acceptor's agreement received) are specified here and
+land after PR 3 and 4. Not covered: row status in `deal report`/`list`/`settlement`, the
+stamp-proof order, the v1 report and `standard_history`; a later note covers them.
 
 ## 2. What exists
 
 - The deal engine is a v0 event fold: `dealEvent`, `foldDeal`, `sealedEvent` (`deal.go`), sealed
   as one `x-deal-v0` record per step through `sealBookStep` (`deal_books.go:612`) onto the deal's
   book (`s.book`), whose header comes from `dealprofile.StepCapsule`.
-- A deal's layout is chosen per deal in `useDeal` (`deal.go:211-263`): legacy SQLite index, or a
-  book; `shelfDealIndex` (`deal_books.go:50`) answers reads for both.
+- A deal's layout is chosen per deal in `useDeal` (`deal.go:208-292`): legacy SQLite index, or a
+  book; `shelfDealIndex` (`deal_books.go:49`) answers reads for both.
 - Nothing sends a record to the other side. A copy is a file (`deal report --share`,
   `disclose --out`), and the counterparty verifies it with `verify`.
 - The shelf already has `SealSent`, `Receive`, `CountedPrefix`, `Stamp` and `HeldFirst`
@@ -40,16 +43,34 @@ selectable by setting.
 
 **Proposed:**
 
-1. The setting is the profile's `deal_profile` value, `x-deal-v0` (default) or `x-deal-v1`, set
-   once with `capsulectl deal declare --profile x-deal-v1` beside the existing `declare`, and read
-   at a new deal's start. A deal already open keeps its version: it is read from the deal's first
-   record, never from the setting, so changing the setting never touches an open deal.
-2. `useDeal` gains one branch after the legacy test: a book whose first record decodes as
-   `x-deal-v1` is a v1 deal (`s.version == "x-deal-v1"`). Every verb that is v0-only refuses a v1
-   deal with the message of section 7; every v1 verb refuses a v0 deal the same way, naming the
-   deal's version.
-3. A v1 deal is a book on the shelf (`deal/<deal_id>`), never in the legacy SQLite index
-   (`isLegacy` is false: there are no `deal_steps` rows).
+1. **The setting** is the profile's `deal_version`, `x-deal-v0` (default) or `x-deal-v1`, set once
+   with `capsulectl deal declare --deal-version x-deal-v1` (not `--profile`, which is the global
+   flag naming the profile). It governs only the offers this profile writes. Every deal after
+   that follows its offer's version (evidencebook design §2.3): a profile reads both versions
+   whatever its setting, so a v0-setting profile that receives a v1 offer reads it and answers in
+   v1, and a v1-setting profile that receives a v0 offer answers in v0.
+2. **A local version table**, `deal_versions (deal_id, version, own_log_id, counterparty_log_id,
+   state)`, is written at `deal offer` or at the first received offer, before any book exists.
+   Version is read from this table, never by opening a book: a v1 deal has no book until its
+   agreement (design §3.5, a declined offer opens none), and `Shelf.Open` creates a book on first
+   use (`shelf.go:195`), so `useDeal` must not open one for a deal whose table row says no
+   agreement yet.
+3. **The deal book's log id** is `deal/` plus 32 lowercase hex of fresh randomness, minted by
+   each side when it seals its agreement and stored as `own_log_id`; it is never derived from the
+   deal id, and the two sides' ids differ (evidencebook design §3.1, "The deal book's log id").
+   `counterparty_log_id` is learned from the `evidence_record_header` of the first record received
+   from the counterparty's book. `useDeal` and `shelfDealIndex` (`bookDealIDs`, `dealOfBook`,
+   `deal_books.go:289-323`) read the log id from this table for a v1 deal; they never parse
+   `deal/<deal_id>`.
+4. **One dispatch point.** `useDeal` reads the table (and, for an old deal with no row, treats it
+   as v0) and sets `s.version` before `runDeal` calls `s.load` (`deal.go:957-960`). A verb that
+   does not serve that version refuses there with the message of section 7, before anything loads:
+   a v1 book's records have no v0 `deal_local` opening, so `bookSteps` (`deal_books.go:383-455`)
+   would otherwise report a corrupt store.
+5. **Mixed shelves.** `bookDealIDs` and every scan of the whole shelf (`deal list`,
+   `deal_list.go:232`) skip a deal whose table row is v1; a v1 listing is a later slice. A test
+   holds one shelf with a legacy deal, a v0 book deal and a v1 book deal and reads the first two
+   unchanged.
 
 ## 4. The writers
 
@@ -75,20 +96,33 @@ standalone Capsule under `action_id` `<deal_id>/sent`. A journal record that doe
 (intent, check, verdict, approval, admit, the journey and the sale overlays) is appended to the
 journal book with `CheckSealed`.
 
-**Proposed:** `sealJournalV1` appends to `shelf.Journal(ctx)`; `sealSentV1` calls `SealSent` and
-writes the standalone Capsule (`xdealv1.Pair`) to the file the user names. On `SealSent`'s
-partial-failure result (a Record with an error) the verb sends the returned Capsule and does not
-seal again, as the library says. A write that fails after the journal record is stored is retried
-by re-running the verb, which finds the record by its digest and writes the file again.
+**Proposed:** `sealJournalV1` appends to `shelf.Journal(ctx)`; `sealSentV1` calls `SealSent`,
+stores the returned pair (`xdealv1.Pair`) in a local `deal_sent (record_digest, pair, written)`
+table at once, and writes the file from it. On `SealSent`'s partial-failure result (a Record with
+an error) it stores and writes the returned Capsule and does not seal again, as the library says.
+A failure after the pair is stored is retried by re-running the verb with the same deal id, which
+finds the stored pair and writes the file again, sealing nothing. One window the plugin cannot
+close: a process that dies inside `SealSent` after the journal record is stored and before it
+returns leaves a record whose Capsule cannot be rebuilt (the library seals a new Capsule on every
+call, stamped with the call's time, `shelf_sent.go:75`). The verb marks the deal id `sealing`
+before the call, so a re-run that finds that state says the offer was sealed but its file was not
+made, and the way out is `deal offer cancel` and a new offer under a new deal id, never a second
+`SealSent` for the same deal id.
 
 ### 4.3 Sending and receiving
 
 **Proposed:** the plugin has no transport and gains none here. "Sent when sealed" means the
 standalone Capsule is written, as a file, at the moment the record is sealed (`--out FILE`, or
-stdout), so the host (Goose, Muse) sends it by its own means. `deal receive FILE` reads one
-standalone Capsule, runs `xdealv1.VerifySent` (with an `OfferContext` when the deal's offer is
-held), then `Shelf.Receive`, and prints what the library says changed (the deal ids whose counted
-prefix grew, shrank or forked). It seals nothing and appends nothing to a book.
+stdout), so the host (Goose, Muse) sends it by its own means. `deal receive FILE` reads either of
+the two forms a record arrives in (evidencebook design §8.3, `Read`): a sent journal record (the
+standalone Capsule; offer, decline, cancellation), checked with `xdealv1.VerifySent` (with an
+`OfferContext` when the deal's offer is held); or a deal-book record with its stamp proof (the
+agreement and every later record), checked by the v1 `ReceiveProfile`'s `Read`. Both then go
+through `Shelf.Receive`, which refuses any call without a `ReceiveProfile`, so the plugin's
+`openShelf` (`deal_shelf.go:76-91`) wires one at open once evidencebook PR 4 provides it. The
+verb prints, in plain words, which records are newly counted, whether a record is still missing
+before a counted one, and whether two different records were received at one place, with no
+statement of which is right. It seals nothing and appends nothing to a book.
 
 ## 5. The verbs
 
@@ -103,13 +137,22 @@ the v1 decline is a subcommand of `offer`.
 | `deal offer cancel ... --out FILE` | `agree` kind `cancellation` | journal, sent | before the deal starts (design §3.5) |
 | `deal agree OFFER --deal ID` | `agree` kind `agreement` | deal book, `seq` 1 | opens the deal book, cites the intent and admission, checks `CheckAgreement` |
 | `deal receive FILE` | nothing | the store | section 4.3 |
-| `deal act`, `deal pay` | `perform`, `settle` | deal book | the v0 `note --action` forms, mapped; `--check DIGEST` cites the passing check |
+| `deal act` | `perform` | deal book | a delivery or any other act; `--check DIGEST` cites the passing check |
+| `deal pay` | `settle` | deal book | a payment leg (`--leg payer\|payee`), a refund (`--reverses DIGEST`); `--check` on a payer leg. New verbs: v0 has neither (it records both through `deal note --kind act`) |
 | `deal statement --row ROW --value met\|not_met\|cannot_tell` | `statement` | deal book | |
 | `deal dispute --row ROW`, `... --withdraw`, `... --challenge RULING` | `dispute` | deal book | `forum` from the agreement's adjudicator |
 | `deal check`, `deal note` | the journal overlay and journey kinds | journal | unchanged flags; on a v1 deal they seal the v1 records |
 
 The rows' vocabulary and the statement words are rowstatus's, used exactly (Sherlock2 2a004e65,
-capsule-viewer#322 answer): the plugin adds no label of its own.
+capsule-viewer#322 answer): the plugin adds no label of its own. `settle` is the record's name and
+stays out of user text: no message says a payment "settles" a row, since **settled** is the
+computed status of section 6. The help of `deal statement` says `cannot_tell` records no stance on
+the row and counts as no statement (evidencebook design §9). The help of `deal decline` (a held
+evidence request) and of `deal offer decline` each say which one it is and name the other.
+`--reason` on a decline is optional, as the design has it, with `not_selected` the only token
+until Sherlock2 words another (Q11); what the decline prints and what the declined buyer's copy
+shows for it is Sherlock2's wording, and neither shows the winning terms or amount
+(PRD_SELLER.md:306-308 as evidencebook design §3.5 cites it).
 
 ## 6. Settled and local
 
@@ -122,9 +165,9 @@ passes them through once evidencebook PRs 3 to 5 land.
 ## 7. `deal close` and `deal terms-result` on a v1 deal
 
 **Decided** (Sherlock2 2a004e65, evidencebook-deal#212 How ack): on a v1 deal they print a
-message and exit non-zero without sealing: "this deal has no close; its rows are settled by
-statements and dates: see `deal report` and `deal statement`" (wording is Sherlock2's call; this is
-a placeholder until it confirms). `deal --help` and each command's help say which deals still
+message and exit non-zero without sealing, before the deal loads (section 3, item 4): "this deal
+has no close; its status is computed from its rows: see `deal report` and `deal statement`"
+(wording is Sherlock2's call; this is a placeholder until it confirms). `deal --help` and each command's help say which deals still
 have them (v0 deals). A v0 deal keeps both verbs unchanged.
 
 ## 8. Old deals, the demo and the pin
@@ -147,12 +190,19 @@ have them (v0 deals). A v0 deal keeps both verbs unchanged.
 - Version isolation: with the default setting, the existing suite is unchanged; a v1 deal refuses
   `deal close`; a v0 deal refuses `deal statement`; changing the setting does not change an open
   deal.
-- A crash after `SealSent` stored the journal record: re-running the verb writes the same file.
+- A crash after the pair is stored: re-running the verb writes the same file and seals nothing. A
+  crash inside `SealSent`: the re-run refuses with the `sealing` message and seals nothing.
+- A mixed shelf (legacy deal, v0 book deal, v1 book deal): `deal list` and every v0 verb on the
+  first two are unchanged; `deal close` on the v1 deal prints the section 7 message, not a store
+  error.
+- A v1 deal's two log ids differ and neither contains its deal id.
+- `deal receive` of a sent offer (before PR 4: refused with a clear message), of an agreement and
+  of a statement (after PR 4).
 
 ## 10. Open questions
 
-1. **Verb names and input files** (section 5) are proposals; Sherlock2 confirms the names, and
-   the offer input's field names are evidencebook's (§3.3).
+1. **Verb names, the setting name and the input files** (sections 3 and 5) are proposals;
+   Sherlock2 confirms the names, and the offer input's field names are evidencebook's (§3.3).
 2. **Where `deal agree` gets the admission and intent digests** it must cite (design §3.3,
    `admit`, `intent`): from the journal's own records. The plugin writes `admit` today only as v0
    `verdict`/`approval` steps; whether the existing admission flow produces a v1 `admit` is
