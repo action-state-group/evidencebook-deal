@@ -44,8 +44,10 @@ selectable by setting.
 **Proposed:**
 
 1. **The setting** is the profile's `deal_version`, `x-deal-v0` (default) or `x-deal-v1`, set once
-   with `capsulectl deal declare --deal-version x-deal-v1` (not `--profile`, which is the global
-   flag naming the profile). It governs only the offers this profile writes. Every deal after
+   with a new top-level `capsulectl deal declare --deal-version x-deal-v1` (there is no
+   `deal declare` today; the existing one is `deal standard-history declare`; not `--profile`,
+   which is the global flag naming the profile). Declaring v1 migrates the deal store, as section
+   3a says. It governs only the offers this profile writes. Every deal after
    that follows its offer's version (evidencebook design §2.3): a profile reads both versions
    whatever its setting, so a v0-setting profile that receives a v1 offer reads it and answers in
    v1, and a v1-setting profile that receives a v0 offer answers in v0.
@@ -74,6 +76,34 @@ match `dealOfBook`'s `deal-<16 hex>` pattern (`deal_books.go:320-323`), the tick
 to recognise v1 log ids. A test
    holds one shelf with a legacy deal, a v0 book deal and a v1 book deal and reads the first two
    unchanged.
+
+## 3a. The deal store migration (a one-way door)
+
+**Decided** (evidencebook shelf note §4, acceptance 8, Steven's #461 confirmation): the journal,
+stamps and facts exist only on a shelf of book facts. `Shelf.Journal` refuses an unmigrated shelf
+("call Migrate", `shelf.go:221`), so no v1 record that goes to the journal (offer, decline,
+cancellation, check, intent) can be written on a deal store as it is today, and the plugin never
+calls `Migrate` today. `Cadence.Migrate(ctx, now)` is explicit and one-way: the shelf file's
+version becomes 2, a backup `<db>.v1.bak` is written first, an older pinned build refuses the
+file, and a downgrade needs the backup.
+
+**Proposed:**
+
+1. The plugin migrates in exactly one place: `deal declare --deal-version x-deal-v1`, which
+   refuses unless the user also passes `--migrate`, and says, before it does anything, that the
+   deal store moves to the new layout, that older capsulectl builds will no longer open it, and
+   where the backup is. With `--migrate` it calls `Migrate` once (a store already migrated is not
+   migrated again) and then records the setting. Declaring `x-deal-v0` never migrates and a store
+   that was migrated keeps working at v0.
+2. Every v1 verb refuses on an unmigrated store with that same explanation, never by surfacing the
+   library's error.
+3. Deals already open are unchanged: they stay v0 and keep working on the migrated store. The
+   library serves `/1` and `/2` History cards from stamps after migration (evidencebook shelf note
+   §4), the plugin's `tick` stamps instead of building a tree, and the existing suite's History
+   card and tick tests run once on a migrated store as the check that nothing a v0 deal does
+   changed. This is the one place the setting touches v0 behaviour, and it does so only after the
+   user's explicit `--migrate`.
+4. The demo (`examples/ard-commerce`) does not use the plugin's store, so it is not affected.
 
 ## 4. The writers
 
