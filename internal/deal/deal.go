@@ -236,6 +236,9 @@ func (s *dealSession) useDeal(ctx context.Context, dealID string, create bool) e
 	} else {
 		err := s.db.QueryRowContext(ctx, `SELECT deal_key FROM deal_keys WHERE deal_id=?`, dealID).Scan(&s.dkey)
 		if errors.Is(err, sql.ErrNoRows) {
+			if v1, verr := s.isV1Deal(ctx, dealID); verr == nil && v1 {
+				return cli.InputError("deal " + dealID + " is an x-deal-v1 deal: this command is not served for x-deal-v1 deals yet")
+			}
 			return cli.InputError("unknown deal: " + dealID)
 		}
 		if err != nil {
@@ -919,7 +922,7 @@ func (s *dealSession) milestone(ctx context.Context) (map[string]any, error) {
 
 func dealCommands() *cobra.Command {
 	deal := &cobra.Command{Use: "deal", Short: "Seal a deal's baseline and check every point of no return against it"}
-	deal.AddCommand(dealInitCommand(), dealOpenCommand(), dealNoteCommand(), dealCheckCommand(), dealCloseCommand(), dealReportCommand(), dealCountersignCommand(), dealExportCommand(), dealSaleCommands(), dealAuditHostCommand(), dealReconcileAlias(), dealTickCommand(), dealVerifyEmailCommand(), dealVerifyObjectCommand(), dealVerifierStatementCommand(), dealVerifyStatementCommand(), dealDeadlinesCommand(), dealCheckpointCommands(), dealDisclosuresCommand(), dealListCommand(), dealSettlementCommand(), dealTermsLegCommand(), dealHistoryCommand(), dealStandardHistoryCommand(), dealTermsResultCommand(), dealRulesVerdictCommand(), dealOutcomeNoteCommand())
+	deal.AddCommand(dealInitCommand(), dealOpenCommand(), dealNoteCommand(), dealCheckCommand(), dealCloseCommand(), dealReportCommand(), dealCountersignCommand(), dealExportCommand(), dealSaleCommands(), dealAuditHostCommand(), dealReconcileAlias(), dealTickCommand(), dealVerifyEmailCommand(), dealVerifyObjectCommand(), dealVerifierStatementCommand(), dealVerifyStatementCommand(), dealDeadlinesCommand(), dealCheckpointCommands(), dealDisclosuresCommand(), dealListCommand(), dealSettlementCommand(), dealTermsLegCommand(), dealHistoryCommand(), dealStandardHistoryCommand(), dealTermsResultCommand(), dealRulesVerdictCommand(), dealOutcomeNoteCommand(), dealSetVersionCommand(), dealOfferCommand())
 	// A deal profile's copies: asked for, answered, composed.
 	deal.AddCommand(dealEvidenceCommands()...)
 	// A scheduled demo deal and the watcher that alarms when it stops.
@@ -954,6 +957,13 @@ func runDeal(c *cobra.Command, needDeal bool, fn func(ctx context.Context, s *de
 	defer func() { err = errors.Join(err, s.close()) }()
 	var events []sealedEvent
 	if needDeal {
+		// An x-deal-v1 deal has no v0 form: refuse before anything loads, since
+		// a v1 book's records have no v0 opening (xdealv1-write-path §3, §7).
+		if v1, verr := s.isV1Deal(ctx, dealID); verr != nil {
+			return verr
+		} else if v1 {
+			return v1Refusal(c.Name(), dealID)
+		}
 		if err = s.useDeal(ctx, dealID, false); err != nil {
 			return err
 		}
