@@ -147,12 +147,10 @@ The dispute names the adjudicator and the forum your agreement accepts:
 only one. An agreement with no adjudicator names no forum, so it allows no
 dispute. The dispute cites your own statements on the row that exist now.
 
---withdraw takes back your open dispute on the row, and says so in the same
-file form. Running a command again with the same --out writes the same file
-and seals nothing twice, while a later dispute or withdrawal on the row is
-not yet on the book; with no --out, or after the row has moved on, the
-command is read afresh, so a repeated --withdraw takes back the newer
-dispute. Needs your agreement (deal agree) and an x-deal-v1 deal.`,
+--withdraw takes back your open dispute on the row, in the same file form.
+Run again with the same --out, a command rewrites the same file and seals
+nothing new. An --out file that already exists is refused for a new dispute
+or withdrawal. Needs your agreement (deal agree) and an x-deal-v1 deal.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			dealID, _ := c.Flags().GetString("deal")
