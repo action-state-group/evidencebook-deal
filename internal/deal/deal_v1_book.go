@@ -11,7 +11,6 @@ import (
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook"
-	"github.com/action-state-group/evidencebook/dealprofile"
 	"github.com/action-state-group/evidencebook/dealprofile/xdealv1"
 	"github.com/spf13/cobra"
 )
@@ -257,12 +256,8 @@ func (s *dealSession) sealBookV1(ctx context.Context, dealID string, in bookReco
 		if err != nil {
 			return bookSealed{}, err
 		}
-		// The header's record type is deal_step for every deal-book record
-		// (design §3.1); evidencebook v0.18.0's BookEntry sets the record's own
-		// type instead, which eb-461 is correcting (evidencebook#530). Until a
-		// release carries that, it is set here: no reader checks it, and an
-		// agreement sealed before (#221) already says deal_step.
-		entry.RecordType = dealprofile.StepRecordType
+		// BookEntry seals the header's record type as deal_step (design §3.1;
+		// evidencebook v0.18.1, #531), which the test below pins.
 		bookAppendHook()
 		// The record names its own place, so it is appended only as the book's
 		// next record: a write that landed since the tail was read (Receive names a
