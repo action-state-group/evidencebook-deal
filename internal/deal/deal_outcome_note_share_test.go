@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,11 +38,18 @@ func TestNoSharedCopyIsMadeOfADealThatHoldsAnOutcomeNote(t *testing.T) {
 		assert.NoFileExists(t, page, audience)
 	}
 
+	// A shared history may not pick it either; the holder's own history may.
+	h := filepath.Join(t.TempDir(), "h.json")
+	_, err := invoke(t, "", "--profile", "deal", "deal", "history", "--out", h, "--deal", id, "--audience", "history", "--to", "x")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "u597")
+	assert.NoFileExists(t, h)
+
 	// The holder's own copy is not a shared copy.
 	page := filepath.Join(t.TempDir(), "own.html")
 	dealRun(t, "report", "--deal", id, "--html", page)
-	raw, err := os.ReadFile(page)
-	require.NoError(t, err)
+	raw, rerr := os.ReadFile(page)
+	require.NoError(t, rerr)
 	assert.NotEmpty(t, raw)
 }
 
@@ -94,11 +102,15 @@ func TestARequestForANotedDealIsDeclinedWithTheReasonWordAlone(t *testing.T) {
 		return m
 	}
 	fresh := map[string]any{"min_freshness": map[string]any{"size": 1}}
-	before := ask(fresh)
+	future := map[string]any{"min_freshness": map[string]any{"time": "2099-01-01T00:00:00Z"}}
+	both := map[string]any{"min_freshness": map[string]any{"size": 1}, "expected_pin": map[string]any{"root": strings.Repeat("a", 64), "mmr_size": 1}}
+	before := ask(future)
+	assert.Equal(t, "coverage_unsatisfiable", refusalOf(t, before)["reason"], "a deal with no note answers as before")
+	before = ask(fresh)
 	assert.Nil(t, before["refusal"], "a deal with no note answers")
 
 	dealRun(t, "outcome-note", "seal", "--deal", id, "--reason", "dispute_lost")
-	for name, coverage := range map[string]map[string]any{"fresh": fresh, "a floor past the log": {"min_freshness": map[string]any{"size": 999}}} {
+	for name, coverage := range map[string]map[string]any{"fresh": fresh, "a floor past the log": {"min_freshness": map[string]any{"size": 999}}, "a future time": future, "both coverages": both} {
 		got := ask(coverage)
 		refusal, ok := got["refusal"].(map[string]any)
 		require.True(t, ok, name+": a signed refusal, not an error: %v", got)
