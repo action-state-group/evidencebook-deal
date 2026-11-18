@@ -116,21 +116,29 @@ after.
    changed. This is the one place the setting touches v0 behaviour, and it does so only after the
    user's explicit `--migrate`. The user-facing text says "your open deals keep working" only once
    that test passes.
-5. **The wording the user reads** (Sherlock2's texts, buzz ac973473, with the full path always
-   printed, never `<db>`). Without `--migrate`, on an unmigrated store, `deal set-version x-deal-v1`
-   prints and exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a
-   new layout. The move is one-way: afterwards, older capsulectl builds, including one an app such
-   as Muse or Goose bundles, will not open the store, and going back means restoring the backup,
-   written first to <full path>.v1.bak. Your open deals keep working. Your History card will count
-   from the move: deals before it still show, but the card no longer claims they are complete. Run
-   again with --migrate to move it." A v1 verb on an unmigrated store prints: "This deal store is
-   not yet in the layout x-deal-v1 deals need. See `deal set-version --help`; moving it is
-   one-way." After the move: "Moved. Backup: <full path>.v1.bak. Your History card now counts from
-   <coverage start, year and month>." The note adds two facts the library fixes: restoring the
-   backup discards everything recorded after the move, and deleting or moving it ends the way
-   back; and if the move stops part-way, running the same command again resumes it (help text,
-   not the warning). "Your open deals keep working" is printed only once the migrated-store test
-   of item 4 passes.
+5. **The wording the user reads** (Sherlock2's texts, buzz ac973473, with two corrections made
+   against the library in round 4 and sent back to Sherlock2: the backup is not "written first"
+   (the library commits version 2, then writes the backup, `shelf_stamp.go:111-125`), and the
+   History sentence waits for a card that shows a coverage start; the full path is always printed,
+   never `<db>`). Without `--migrate`, on an unmigrated store, `deal set-version x-deal-v1` prints
+   and exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a new
+   layout. The move is one-way: afterwards, older capsulectl builds, including one an app such as
+   Muse or Goose bundles, will not open the store, and going back means restoring the backup,
+   written to <full path>.v1.bak during the move (if the move stops part-way, run the same command
+   again). Your open deals keep working. Run again with --migrate to move it." A v1 verb on an
+   unmigrated store prints: "This deal store is not yet in the layout x-deal-v1 deals need. See
+   `deal set-version --help`; moving it is one-way." After the move: "Moved. Backup:
+   <full path>.v1.bak."
+   **History sentence, deferred.** Sherlock2 asked the warning to say "Your History card will count
+   from the move: deals before it still show, but the card no longer claims they are complete" and
+   the Moved line to say "Your History card now counts from <coverage start, year and month>."
+   That is true of a card with a coverage start, which is `/3`. The plugin serves `/1` and `/2`
+   (unchanged by the migration, and out of scope here): their `FirstCheckpointTime` is still the
+   first tick (`cadence_standard_history.go:68-89`), so the sentence would be false today. It is
+   printed once the plugin serves a `/3` card, whose build and test it depends on, not before.
+   The library's two facts stay in help text: restoring the backup discards everything recorded
+   after the move, and deleting or moving it ends the way back. "Your open deals keep working" is
+   printed only once the migrated-store test of item 4 passes.
 6. The demo (`examples/ard-commerce`) does not use the plugin's store (no `capsulectl` or
    `evidencebook-deal` reference in it), so it is not affected.
 
