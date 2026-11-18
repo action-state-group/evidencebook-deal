@@ -3,6 +3,7 @@ package deal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -147,8 +148,11 @@ only one. An agreement with no adjudicator names no forum, so it allows no
 dispute. The dispute cites your own statements on the row that exist now.
 
 --withdraw takes back your open dispute on the row, and says so in the same
-file form. Running the same command again writes the same file and seals
-nothing twice. Needs your agreement (deal agree) and an x-deal-v1 deal.`,
+file form. Running a command again with the same --out writes the same file
+and seals nothing twice, while a later dispute or withdrawal on the row is
+not yet on the book; with no --out, or after the row has moved on, the
+command is read afresh, so a repeated --withdraw takes back the newer
+dispute. Needs your agreement (deal agree) and an x-deal-v1 deal.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			dealID, _ := c.Flags().GetString("deal")
@@ -271,8 +275,11 @@ func (s *dealSession) sealDispute(ctx context.Context, c *cobra.Command, d *v1De
 	// A file already at --out is never this new record's: an old command run
 	// again must not seal a record only to fail on its file.
 	if out != "" {
-		if _, err := os.Stat(out); err == nil {
+		// Lstat, so a dangling link at the path counts as there too.
+		if _, err := os.Lstat(out); err == nil {
 			return cli.InputError(out + " exists: --out names a new file, and this seals a new record")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 	sealed, err := s.sealBookV1(ctx, d.DealID, bookRecordIn{Body: body, Validate: validate})

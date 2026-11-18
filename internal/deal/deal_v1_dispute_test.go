@@ -1,6 +1,7 @@
 package deal
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -217,4 +218,39 @@ func TestARunStoppedBeforeTheFileIsFinishedByRunningAgain(t *testing.T) {
 	for _, f := range []string{dFile, wFile} {
 		assert.Equal(t, "kept, and counted", dealRun(t, "receive", f)["record"])
 	}
+}
+
+// The same command with the same --out is a rerun: it writes the same file
+// and the book does not grow; a forum that differs from the open dispute's is
+// refused; a link left at --out blocks a new record before it is sealed.
+func TestARerunWithTheSameOutIsTheSameFile(t *testing.T) {
+	h := agreedBoth(t, func(k string) string { return disputeOffer(k, "auto:twin", "external:court") })
+	h.buyer.act(t)
+	dir := t.TempDir()
+	d, w := filepath.Join(dir, "d.json"), filepath.Join(dir, "w.json")
+	args := []string{"dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--forum", "external:court"}
+	first := dealRun(t, append(args, "--out", d)...)
+	before := mustRead(t, d)
+	again := dealRun(t, append(args, "--out", d)...)
+	assert.Equal(t, first["dispute"], again["dispute"])
+	assert.Equal(t, before, mustRead(t, d), "the file is unchanged")
+	assert.Contains(t, v1Err(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--forum", "auto:twin", "--out", filepath.Join(dir, "o.json")), "take it back with --withdraw first")
+
+	wargs := []string{"dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--withdraw"}
+	one := dealRun(t, append(wargs, "--out", w)...)
+	wbefore := mustRead(t, w)
+	two := dealRun(t, append(wargs, "--out", w)...)
+	assert.Equal(t, one["dispute"], two["dispute"])
+	assert.Equal(t, wbefore, mustRead(t, w))
+
+	link := filepath.Join(dir, "dangling.json")
+	require.NoError(t, os.Symlink(filepath.Join(dir, "nowhere.json"), link))
+	assert.Contains(t, v1Err(t, append(args, "--out", link)...), "exists")
+	withSession(t, func(s *dealSession) {
+		dl, err := s.v1DealOf(t.Context(), h.dealID)
+		require.NoError(t, err)
+		book, err := s.ownBookV1(t.Context(), dl)
+		require.NoError(t, err)
+		assert.Len(t, book, 3, "agreement, dispute, withdrawal: the link sealed nothing")
+	})
 }
