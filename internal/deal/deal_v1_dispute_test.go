@@ -254,3 +254,12 @@ func TestARerunWithTheSameOutIsTheSameFile(t *testing.T) {
 		assert.Len(t, book, 3, "agreement, dispute, withdrawal: the link sealed nothing")
 	})
 }
+
+// A v1 deal takes no v0 dispute note: `deal note` is refused on it, so the
+// v0 stand-in cannot seal the wrong kind of record beside this verb.
+func TestAV1DealTakesNoV0DisputeNote(t *testing.T) {
+	h := agreedBoth(t, oneForum)
+	h.buyer.act(t)
+	msg := v1Err(t, "note", "--deal", h.dealID, "--kind", "dispute", "--row", "paid_as_agreed", "--words", "late")
+	assert.Contains(t, msg, "x-deal-v1 deal")
+}

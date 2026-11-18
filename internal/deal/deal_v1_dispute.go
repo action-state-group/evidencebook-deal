@@ -139,8 +139,8 @@ func dealDisputeCommand() *cobra.Command {
 		Short: "Dispute a row of an x-deal-v1 deal, or take the dispute back, and write the file to send",
 		Long: `Dispute a row of an x-deal-v1 deal: seal a dispute record in your deal book
 and write the file to send to --out (standard output with none). The other
-side counts it with deal receive, and the same record is what a row's status,
-the adjudicator and your history card's disputes raised and received read.
+side counts it with deal receive, and the same record is what a row's status
+and the adjudicator read.
 
 The dispute names the adjudicator and the forum your agreement accepts:
 --forum picks one of the agreement's forums and may be left out when it names
