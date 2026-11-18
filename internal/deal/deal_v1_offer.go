@@ -29,7 +29,8 @@ seal it in your journal, and write the Capsule that carries it whole to --out
 (standard output with none): send that file to the other side. The offer's
 time is taken from the clock, never from the input. Re-running the same
 command after a failure finds the offer it left and writes the file again; it
-never seals the same offer twice.
+never seals the same offer twice. Once it has succeeded, running it again
+writes a new offer under a new deal id.
 
 Needs a profile on x-deal-v1 (deal set-version x-deal-v1 --migrate).`,
 		Args: cli.NoArgs,

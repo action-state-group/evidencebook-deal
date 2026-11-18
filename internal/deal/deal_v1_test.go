@@ -403,3 +403,17 @@ func TestALostCancellationFileIsRepeatedAsANewOperation(t *testing.T) {
 	require.NoError(t, v1DB(t).QueryRow(`SELECT COUNT(*) FROM deal_sent WHERE kind=?`, xdealv1.KindCancellation).Scan(&n))
 	assert.Equal(t, 2, n)
 }
+
+func TestAnOfferWithNoOutGoesToStandardOutput(t *testing.T) {
+	v1Fixture(t)
+	dealRun(t, "set-version", "x-deal-v1", "--migrate")
+	out, err := invoke(t, "", "--profile", "deal", "deal", "offer", "--input", writeJSON(t, v1OfferInput))
+	require.NoError(t, err)
+	sent, err := xdealv1.VerifySent([]byte(strings.TrimSpace(out)), nil)
+	require.NoError(t, err)
+	var state string
+	require.NoError(t, v1DB(t).QueryRow(`SELECT state FROM deal_sent WHERE record_digest=?`, sent.Digest).Scan(&state))
+	assert.Equal(t, sentWritten, state)
+	// A v1 deal's checkpoint status says it is a v1 deal, not that it is unknown.
+	assert.Contains(t, v1Err(t, "report", "--deal", sent.Record.Block.DealID, "--read-only"), "x-deal-v1 deal")
+}
