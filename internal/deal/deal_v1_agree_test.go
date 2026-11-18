@@ -630,3 +630,27 @@ func TestABusyThatIsNotTheAppendIsNotRetried(t *testing.T) {
 		assert.Equal(t, before, book.Size(), "nothing appended")
 	})
 }
+
+// Every deal-book record's header says deal_step, as design §3.1 has it, not
+// the record's own type (evidencebook v0.18.0's BookEntry sets that; #530).
+func TestADealBookRecordsHeaderSaysDealStep(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "b.json"))
+	withSession(t, func(s *dealSession) {
+		_, err := s.sealBookV1(t.Context(), h.dealID, bookRecordIn{Body: xdealv1.StatementBody{Statements: []xdealv1.StatementItem{{Row: "paid_as_agreed", Value: "met"}}}})
+		require.NoError(t, err)
+		d, err := s.v1DealOf(t.Context(), h.dealID)
+		require.NoError(t, err)
+		book, err := s.shelf.Open(t.Context(), d.OwnLogID)
+		require.NoError(t, err)
+		all, err := book.Query(t.Context(), evidencebook.Filter{FromSeq: 1, ToSeq: book.Size()})
+		require.NoError(t, err)
+		require.Len(t, all, 2)
+		for _, r := range all {
+			assert.Equal(t, "deal_step", r.Header.RecordType, "seq %d", r.Seq)
+			assert.Equal(t, evidencebook.ProducerClaim, r.Header.EpistemicType)
+		}
+	})
+}
