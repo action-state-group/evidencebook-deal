@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook"
@@ -126,7 +127,7 @@ func (s *dealSession) receiveV1(ctx context.Context, c *cobra.Command, push v1Pu
 	if info == nil && push.StampProof == nil {
 		return cli.InputError("the file holds neither a record nor a stamp proof")
 	}
-	res, rerr := s.shelf.Receive(ctx, push.Record, push.StampProof)
+	res, rerr := receiveFromStore(ctx, s.shelf, push.Record, push.StampProof)
 	out := map[string]any{}
 	if info != nil {
 		out["record_type"], out["deal_id"] = info.kind, info.dealID
@@ -141,6 +142,10 @@ func (s *dealSession) receiveV1(ctx context.Context, c *cobra.Command, push v1Pu
 	}
 	if res.Proof != nil {
 		out["stamp_proof"] = proofWords(res.Proof)
+	}
+	if out["record"] == storeFault || out["stamp_proof"] == storeFault {
+		_ = cli.Output(c, out)
+		return errors.Join(rerr, fmt.Errorf("%w: %s", cli.ErrConflict, storeFault))
 	}
 	if rerr != nil {
 		out["refused"] = rerr.Error()
@@ -173,6 +178,17 @@ func (s *dealSession) refuseOwnDeal(ctx context.Context, info *receivedInfo) err
 	return nil
 }
 
+// storeFault is what is said when the store returns an outcome that is none of
+// the outcomes it defines: a fault, never a quiet "not kept" (Sherlock2, buzz
+// 694e4902). The verb exits non-zero on it.
+const storeFault = "not kept: the store returned no outcome, which is a fault; report it"
+
+// receiveFromStore is Shelf.Receive; a test replaces it to make the store
+// return an outcome with nothing set.
+var receiveFromStore = func(ctx context.Context, shelf *evidencebook.Shelf, record []byte, proof *evidencebook.StampProof) (evidencebook.ReceiveResult, error) {
+	return shelf.Receive(ctx, record, proof)
+}
+
 func recordWords(o *evidencebook.RecordOutcome) string {
 	switch {
 	case o.Refused != nil:
@@ -188,7 +204,7 @@ func recordWords(o *evidencebook.RecordOutcome) string {
 	case o.Stored:
 		return "kept"
 	}
-	return "not kept: the store gave no reason"
+	return storeFault
 }
 
 func proofWords(o *evidencebook.ProofOutcome) string {
@@ -200,7 +216,7 @@ func proofWords(o *evidencebook.ProofOutcome) string {
 	case o.Accepted:
 		return "kept"
 	}
-	return "not kept: the store gave no reason"
+	return storeFault
 }
 
 // noteReceived records what the plugin needs of a record the store took: the

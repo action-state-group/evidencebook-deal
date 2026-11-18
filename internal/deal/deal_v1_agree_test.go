@@ -379,3 +379,19 @@ func TestAnAgreementCitesAnAdmissionDecisionAndAnIntentOnly(t *testing.T) {
 	msg = v1Err(t, "agree", h.offer, "--admit", admit, "--intent", admit)
 	assert.Contains(t, msg, "is a record of type admit in your journal, not an intent")
 }
+
+// A store outcome with nothing set is a fault the verb says in words and
+// exits non-zero on, for a record and for a proof (Sherlock2, buzz 694e4902).
+func TestAnOutcomeNoneOfTheDefinedIsAFault(t *testing.T) {
+	h := newHandshakeV1(t)
+	real := receiveFromStore
+	t.Cleanup(func() { receiveFromStore = real })
+	receiveFromStore = func(context.Context, *evidencebook.Shelf, []byte, *evidencebook.StampProof) (evidencebook.ReceiveResult, error) {
+		return evidencebook.ReceiveResult{Record: &evidencebook.RecordOutcome{}, Proof: &evidencebook.ProofOutcome{}}, nil
+	}
+	h.buyer.act(t)
+	out, err := invoke(t, "", "--profile", "deal", "deal", "receive", h.sellerAgree)
+	require.Error(t, err, "a fault exits non-zero")
+	assert.Contains(t, out+err.Error(), "not kept: the store returned no outcome, which is a fault; report it")
+	assert.Equal(t, 2, strings.Count(out, "not kept: the store returned no outcome, which is a fault; report it"), "for the record and for the proof: %s", out)
+}
