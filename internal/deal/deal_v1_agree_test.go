@@ -602,3 +602,31 @@ func TestAWriterGivesUpWhenTheBookKeepsChanging(t *testing.T) {
 		assert.Equal(t, bookAppendTries, n)
 	})
 }
+
+// An ErrBusy that does not come from the append (here, from the caller's own
+// validation) is returned as it is: it is not retried, and nothing is
+// appended, so a retry can never seal a record twice.
+func TestABusyThatIsNotTheAppendIsNotRetried(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "b.json"))
+	withSession(t, func(s *dealSession) {
+		d, err := s.v1DealOf(t.Context(), h.dealID)
+		require.NoError(t, err)
+		book, err := s.shelf.Open(t.Context(), d.OwnLogID)
+		require.NoError(t, err)
+		before := book.Size()
+		calls := 0
+		_, err = s.sealBookV1(t.Context(), h.dealID, bookRecordIn{
+			Body: xdealv1.StatementBody{Statements: []xdealv1.StatementItem{{Row: "paid_as_agreed", Value: "met"}}},
+			Validate: func(xdealv1.Record) error {
+				calls++
+				return evidencebook.ErrBusy
+			},
+		})
+		require.ErrorIs(t, err, evidencebook.ErrBusy)
+		assert.Equal(t, 1, calls, "not retried")
+		assert.Equal(t, before, book.Size(), "nothing appended")
+	})
+}

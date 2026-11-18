@@ -263,6 +263,9 @@ func (s *dealSession) sealBookV1(ctx context.Context, dealID string, in bookReco
 		// caller reads the tail again and rebuilds the record.
 		stored, err := book.AppendAt(ctx, size+1, entry)
 		if err != nil {
+			if errors.Is(err, evidencebook.ErrBusy) {
+				return bookSealed{}, errPlaceTaken
+			}
 			return bookSealed{}, err
 		}
 		sealed, err := book.Sealed(ctx, stored.RecordID)
@@ -285,12 +288,19 @@ func (s *dealSession) sealBookV1(ctx context.Context, dealID string, in bookReco
 	}
 	for try := 0; try < bookAppendTries; try++ {
 		sealed, err := attempt()
-		if !errors.Is(err, evidencebook.ErrBusy) {
+		if !errors.Is(err, errPlaceTaken) {
 			return sealed, err
 		}
 	}
 	return bookSealed{}, fmt.Errorf("%w: the deal book kept changing while the record was sealed; run the command again", cli.ErrConflict)
 }
+
+// errPlaceTaken is what a try returns when the append itself was refused its
+// place (ErrBusy from AppendAt): the only error the writer retries. An ErrBusy
+// from anywhere else (the validation, a read, the sealed record after a
+// successful append) is returned as it is, never retried: a retry there could
+// append the record twice.
+var errPlaceTaken = errors.New("the record's place was taken")
 
 // bookAppendTries is how many times the writer rebuilds a record whose place
 // was taken by another write before it gives up.
