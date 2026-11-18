@@ -3,6 +3,7 @@ package deal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -463,4 +464,29 @@ func TestAnOfferWithoutADealRowIsRebuiltWhenTheAgreementArrives(t *testing.T) {
 	assert.Equal(t, "kept, and counted", got["record"])
 	out := dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "b.json"))
 	assert.Equal(t, "offerer", out["side"])
+}
+
+// A stop after the store took the offer and before the local rows were
+// committed leaves none of them; receiving the same file again finds the
+// offer already kept, writes the rows, and the deal can be agreed.
+func TestAnOfferWhoseRowsDidNotCommitIsRecoveredByReceivingItAgain(t *testing.T) {
+	seller := newV1Side(t)
+	buyer := newV1Side(t)
+	offerFile := filepath.Join(t.TempDir(), "offer.json")
+	res := dealRun(t, "offer", "--input", writeJSON(t, offerTo(seller.party.signer)), "--out", offerFile)
+
+	seller.act(t)
+	t.Cleanup(func() { v1NoteStops = func() error { return nil } })
+	v1NoteStops = func() error { return errors.New("stopped before the rows were committed") }
+	require.Error(t, errOf(t, "receive", offerFile))
+	var n int
+	require.NoError(t, v1DB(t).QueryRow(`SELECT (SELECT COUNT(*) FROM deal_versions) + (SELECT COUNT(*) FROM deal_v1) + (SELECT COUNT(*) FROM deal_v1_offers)`).Scan(&n))
+	assert.Zero(t, n, "all three rows rolled back together")
+
+	v1NoteStops = func() error { return nil }
+	got := dealRun(t, "receive", offerFile)
+	assert.Equal(t, "already kept", got["record"], "the store kept it the first time")
+	out := dealRun(t, "agree", res["offer"].(string), "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "a.json"))
+	assert.Equal(t, "acceptor", out["side"])
+	_ = buyer
 }

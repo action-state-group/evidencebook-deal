@@ -249,6 +249,9 @@ func (s *dealSession) noteReceived(ctx context.Context, info *receivedInfo) erro
 		if _, err = tx.ExecContext(ctx, `INSERT INTO deal_v1_offers (offer_digest, deal_id, signer_key, payload) VALUES (?, ?, ?, ?) ON CONFLICT(offer_digest) DO NOTHING`, digest, info.dealID, info.sent.KeyID, payload); err != nil {
 			return err
 		}
+		if err := v1NoteStops(); err != nil {
+			return err
+		}
 		return tx.Commit()
 	case info.sent != nil:
 		state := "declined"
@@ -289,6 +292,11 @@ func firstNonEmpty(a, b string) string {
 	}
 	return b
 }
+
+// v1NoteStops is a seam for tests: it stops the bookkeeping of a received offer
+// after its rows were written and before they are committed, as a crash there
+// would.
+var v1NoteStops = func() error { return nil }
 
 // ensureOfferedRow gives an offer this profile sent before the deal's own row
 // existed (slice 1 wrote only deal_versions) the row `deal agree` and the
