@@ -2,6 +2,7 @@ package deal
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -261,6 +262,9 @@ func (s *dealSession) noteReceived(ctx context.Context, info *receivedInfo) erro
 		if err != nil || d == nil {
 			return err
 		}
+		if err = s.ensureOfferedRow(ctx, d); err != nil {
+			return err
+		}
 		if d.CounterpartyLogID == "" {
 			if _, err = s.db.ExecContext(ctx, `UPDATE deal_versions SET counterparty_log_id=? WHERE deal_id=?`, info.book.LogID, info.dealID); err != nil {
 				return err
@@ -284,4 +288,36 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// ensureOfferedRow gives an offer this profile sent before the deal's own row
+// existed (slice 1 wrote only deal_versions) the row `deal agree` and the
+// receive bookkeeping update, rebuilt from the stored offer.
+func (s *dealSession) ensureOfferedRow(ctx context.Context, d *v1Deal) error {
+	if d.Side != "" {
+		return nil
+	}
+	var payload []byte
+	var digest string
+	err := s.db.QueryRowContext(ctx, `SELECT payload, record_digest FROM deal_sent WHERE deal_id=? AND kind=? ORDER BY id LIMIT 1`, d.DealID, xdealv1.TypePropose).Scan(&payload, &digest)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	rec, err := xdealv1.Decode(payload)
+	if err != nil {
+		return err
+	}
+	prop, ok := proposeOf(rec)
+	if !ok {
+		return nil
+	}
+	if _, err = s.db.ExecContext(ctx, `INSERT INTO deal_v1 (deal_id, side, role, offer_digest, counterparty_key, counterparty_agreement, own_agreement_id, own_agreement_digest) VALUES (?, ?, ?, ?, '', '', '', '') ON CONFLICT(deal_id) DO NOTHING`,
+		d.DealID, xdealv1.SideOfferer, prop.Role, digest); err != nil {
+		return err
+	}
+	d.Side, d.Role, d.OfferDigest = xdealv1.SideOfferer, prop.Role, digest
+	return nil
 }

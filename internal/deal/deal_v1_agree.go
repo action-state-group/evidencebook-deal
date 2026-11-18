@@ -153,6 +153,9 @@ act. Needs the deal store in the new layout (deal set-version x-deal-v1
 					}
 				}
 				if d.OwnAgreementID != "" {
+					if _, err := s.db.ExecContext(ctx, `UPDATE deal_versions SET state='agreed' WHERE deal_id=? AND state='agreeing'`, dealID); err != nil {
+						return err
+					}
 					return s.writeAgreement(ctx, c, cad, d, out)
 				}
 				for _, want := range []struct{ flag, digest, typ, what string }{
@@ -289,12 +292,16 @@ func (s *dealSession) writeAgreement(ctx context.Context, c *cobra.Command, cad 
 	}
 	push := v1Push{Record: pair}
 	if d.Side == xdealv1.SideAcceptor {
-		if _, err := cad.Stamp(ctx, cli.DealClock()); err != nil {
-			return err
-		}
+		// The stamp is taken once, right after the agreement: a re-run reuses the
+		// newest proof that covers it and stamps only when none exists yet.
 		proof, err := cad.StampProof(ctx, d.OwnAgreementID, 0, evidencebook.AudienceCounterparty)
 		if err != nil {
-			return err
+			if _, err := cad.Stamp(ctx, cli.DealClock()); err != nil {
+				return err
+			}
+			if proof, err = cad.StampProof(ctx, d.OwnAgreementID, 0, evidencebook.AudienceCounterparty); err != nil {
+				return err
+			}
 		}
 		push.StampProof = &proof
 	}

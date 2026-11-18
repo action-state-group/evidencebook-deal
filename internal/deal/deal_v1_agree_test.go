@@ -232,6 +232,10 @@ func TestTheFirstActWaitsForTheOtherSidesStampProof(t *testing.T) {
 	assert.True(t, g.Allowed, "the proof covers the acceptor's agreement: %+v", g)
 
 	assert.False(t, gate("deal-cadence/ffffffffffffffff").Allowed, "a commitment naming another shelf log closes it")
+	sellerAgreement, err := xdealv1.VerifyBook(push.Record)
+	require.NoError(t, err)
+	named, _ := agreeOf(sellerAgreement.Record)
+	assert.True(t, gate(named.ShelfLogID).Allowed, "a commitment naming the agreement's own shelf log keeps it open")
 
 	// The acceptor's own first act is gated on the offerer's proof too, which
 	// the offerer has not sent: refused.
@@ -394,4 +398,69 @@ func TestAnOutcomeNoneOfTheDefinedIsAFault(t *testing.T) {
 	require.Error(t, err, "a fault exits non-zero")
 	assert.Contains(t, out+err.Error(), "not kept: the store returned no outcome, which is a fault; report it")
 	assert.Equal(t, 2, strings.Count(out, "not kept: the store returned no outcome, which is a fault; report it"), "for the record and for the proof: %s", out)
+}
+
+// A cancellation the offerer sends is received against the offer it names; the
+// state follows, and the deal is not agreed to.
+func TestACancellationIsReceivedAgainstItsOffer(t *testing.T) {
+	seller := newV1Side(t)
+	buyer := newV1Side(t)
+	offerFile := filepath.Join(t.TempDir(), "offer.json")
+	res := dealRun(t, "offer", "--input", writeJSON(t, offerTo(seller.party.signer)), "--out", offerFile)
+	cancelFile := filepath.Join(t.TempDir(), "cancel.json")
+	dealRun(t, "offer", "cancel", res["offer"].(string), "--out", cancelFile)
+
+	// The offerer holds its own offer: echoed back to it, the offer is refused.
+	assert.Contains(t, v1Err(t, "receive", offerFile), "already holds deal")
+
+	seller.act(t)
+	dealRun(t, "receive", offerFile)
+	again := dealRun(t, "receive", offerFile)
+	assert.Equal(t, "already kept", again["record"], "an offer received twice is a duplicate, not a refusal")
+	got := dealRun(t, "receive", cancelFile)
+	assert.Equal(t, "agree", got["record_type"])
+	var state string
+	require.NoError(t, v1DB(t).QueryRow(`SELECT state FROM deal_versions WHERE deal_id=?`, res["deal_id"]).Scan(&state))
+	assert.Equal(t, "cancelled", state)
+	assert.Contains(t, v1Err(t, "agree", res["offer"].(string), "--admit", sealAdmit(t, "GO")), "is cancelled")
+	_ = buyer
+}
+
+// The acceptor's stamp is taken once: running `deal agree` again writes the
+// same stamp proof.
+func TestARerunOfTheAcceptorsAgreeTakesNoSecondStamp(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.seller.act(t)
+	again := filepath.Join(t.TempDir(), "again.json")
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", again)
+	first, second := readPush(t, h.sellerAgree), readPush(t, again)
+	require.NotNil(t, second.StampProof)
+	assert.Equal(t, first.StampProof.ShelfCheckpoint, second.StampProof.ShelfCheckpoint, "the same shelf checkpoint: no second stamp")
+}
+
+// A book record for a deal the profile does not hold is not taken.
+func TestABookRecordForADealNotHeldIsNotTaken(t *testing.T) {
+	h := newHandshakeV1(t)
+	_ = h
+	newV1Side(t) // a third profile that holds no such deal
+	assert.Error(t, errOf(t, "receive", h.sellerAgree))
+}
+
+func errOf(t *testing.T, args ...string) error {
+	t.Helper()
+	_, err := invoke(t, "", append([]string{"--profile", "deal", "deal"}, args...)...)
+	return err
+}
+
+// An offer written by slice 1 (no deal_v1 row) is rebuilt from the stored
+// offer when the acceptor's agreement arrives, and the offerer can agree.
+func TestAnOfferWithoutADealRowIsRebuiltWhenTheAgreementArrives(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.buyer.act(t)
+	_, err := openWritableDB(t).Exec(`DELETE FROM deal_v1 WHERE deal_id=?`, h.dealID)
+	require.NoError(t, err)
+	got := dealRun(t, "receive", h.sellerAgree)
+	assert.Equal(t, "kept, and counted", got["record"])
+	out := dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "b.json"))
+	assert.Equal(t, "offerer", out["side"])
 }
