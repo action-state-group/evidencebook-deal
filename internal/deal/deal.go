@@ -970,6 +970,9 @@ func runDeal(c *cobra.Command, needDeal bool, fn func(ctx context.Context, s *de
 		if v1, verr := s.isV1Deal(ctx, dealID); verr != nil {
 			return verr
 		} else if v1 {
+			if kind, _ := c.Flags().GetString("kind"); c.Name() == "note" && kind == noteKindDispute {
+				return cli.InputError("deal " + dealID + " is an x-deal-v1 deal: its disputes are sealed with `deal dispute`, not `deal note --kind dispute`")
+			}
 			return v1Refusal(c.Name(), dealID)
 		}
 		if err = s.useDeal(ctx, dealID, false); err != nil {

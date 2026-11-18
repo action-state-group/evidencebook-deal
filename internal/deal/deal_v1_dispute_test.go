@@ -262,4 +262,5 @@ func TestAV1DealTakesNoV0DisputeNote(t *testing.T) {
 	h.buyer.act(t)
 	msg := v1Err(t, "note", "--deal", h.dealID, "--kind", "dispute", "--row", "paid_as_agreed", "--words", "late")
 	assert.Contains(t, msg, "x-deal-v1 deal")
+	assert.Contains(t, msg, "`deal dispute`", "the refusal names the verb to use")
 }
