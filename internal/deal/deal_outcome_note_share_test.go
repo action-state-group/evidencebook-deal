@@ -1,8 +1,12 @@
 package deal
 
 import (
+	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/stretchr/testify/assert"
@@ -10,63 +14,122 @@ import (
 )
 
 // u597 (evidencebook-deal#218): the temporary outcome_note is never in a
-// shared copy. A counterparty copy lists the record withheld, as it lists a
-// withheld rules_verdict, so the log's records are all accounted for; the
-// listed entry must not say which late record it is.
-func TestAWithheldOutcomeNoteIsListedLikeAWithheldRulesVerdict(t *testing.T) {
+// shared copy. A record that confirms the close would say what the note says
+// even with its payload withheld (it has one value), and a copy is one log's
+// chain, so no copy of a log holding the note is shared; the holder's own copy
+// is not affected. Sherlock2 (buzz d3a751ce).
+func TestNoSharedCopyIsMadeOfADealThatHoldsAnOutcomeNote(t *testing.T) {
 	id := closedUnderPack(t, packID, "")
-	sealVerdict(t, id)
 	dealRun(t, "outcome-note", "seal", "--deal", id, "--reason", "dispute_lost")
 
-	b, raw := sharedCopy(t, id, cli.DealAudienceCounterparty, "the other side")
-	assert.NotContains(t, raw, "dispute_lost")
-	assert.NotContains(t, raw, "did_not_hold")
-	assert.NotContains(t, raw, "outcome_note")
+	for _, audience := range []string{cli.DealAudienceCounterparty, cli.DealAudienceAdjudicator} {
+		out := filepath.Join(t.TempDir(), "shared.json")
+		_, err := invoke(t, "", "--profile", "deal", "disclose", "--deal", id, "--share", audience, "--to", "x", "--out", out)
+		require.Error(t, err, audience)
+		assert.Contains(t, err.Error(), "outcome note", audience)
+		assert.Contains(t, err.Error(), "u597", audience)
+		assert.NoFileExists(t, out, audience)
 
-	records, _ := b["records"].([]any)
-	require.GreaterOrEqual(t, len(records), 2)
-	verdict, note := records[len(records)-2].(map[string]any), records[len(records)-1].(map[string]any)
-	vs, ns := valueShape(verdict), valueShape(note)
-	t.Logf("verdict entry: %s", jsonText(t, verdict))
-	t.Logf("note entry:    %s", jsonText(t, note))
-	assert.Equal(t, vs, ns, "the two late records list the same members")
-
-	steps := sharedSteps(t, b)
-	require.GreaterOrEqual(t, len(steps), 2)
-	v, n := steps[len(steps)-2], steps[len(steps)-1]
-	assert.Equal(t, dealSharePrivateKind, v["kind"])
-	assert.Equal(t, dealSharePrivateKind, n["kind"])
-	assert.Equal(t, v["line"], n["line"])
-	assert.Equal(t, true, n["withheld"])
-}
-
-func jsonText(t *testing.T, v any) string {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	require.NoError(t, err)
-	return string(raw)
-}
-
-// valueShape is a JSON value with every string and number replaced by its
-// type: the members and nesting a record lists, not its digests and ids.
-func valueShape(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		out := map[string]any{}
-		for k, e := range x {
-			out[k] = valueShape(e)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = valueShape(e)
-		}
-		return out
-	case string:
-		return "string"
-	case float64:
-		return "number"
+		page := filepath.Join(t.TempDir(), "page.html")
+		_, err = invoke(t, "", "--profile", "deal", "deal", "report", "--deal", id, "--share", audience, "--to", "x", "--html", page)
+		require.Error(t, err, audience)
+		assert.Contains(t, err.Error(), "u597", audience)
+		assert.NoFileExists(t, page, audience)
 	}
-	return v
+
+	// The holder's own copy is not a shared copy.
+	page := filepath.Join(t.TempDir(), "own.html")
+	dealRun(t, "report", "--deal", id, "--html", page)
+	raw, err := os.ReadFile(page)
+	require.NoError(t, err)
+	assert.NotEmpty(t, raw)
+}
+
+// A deal with no note shares as before.
+func TestADealWithNoOutcomeNoteStillSharesItsCopy(t *testing.T) {
+	id := closedUnderPack(t, packID, "")
+	b, _ := sharedCopy(t, id, cli.DealAudienceCounterparty, "the other side")
+	assert.NotEmpty(t, b["records"])
+}
+
+// A node's answer to a History request (standard_history/1) does not go
+// through a shared copy of a deal: it is a computed count, so a noted deal
+// still answers, and the answer and the shared card carry no note.
+func TestANodeStillAnswersTheCardWithANotedDeal(t *testing.T) {
+	dealFixture(t)
+	now := clockAt(t, time.Date(2026, 10, 4, 18, 24, 0, 0, time.UTC))
+	id := retailDeal(t)
+	dealRun(t, "close", "--deal", id, "--input", writeJSON(t, `{"status":"not_received","reason":"not_delivered"}`))
+	dealRun(t, "outcome-note", "seal", "--deal", id, "--reason", "dispute_lost")
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	*now = now.Add(2 * time.Minute)
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+
+	reply := respondCard(t, cardRequest(t, fullHistory))
+	require.NotNil(t, reply.Envelope, "an envelope, not a refusal")
+	require.NoError(t, reply.Envelope.Verify())
+
+	shared := filepath.Join(t.TempDir(), "shared.json")
+	dealRun(t, "standard-history", "card", "--out", shared, "--shared")
+	raw, err := os.ReadFile(shared)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "dispute_lost")
+	assert.NotContains(t, string(raw), "outcome_note")
+	assert.NotContains(t, shBlock(t, readBundle(t, shared)), "deals", "no deal entry leaves in the shared card")
+}
+
+// A request that names a noted deal is declined with the reason word alone,
+// before the log is weighed, and the refusal's fields are those of any
+// refusal; the citation is the holder's side only (Sherlock2, buzz dd3c5ae7).
+// A deal with no note still answers.
+func TestARequestForANotedDealIsDeclinedWithTheReasonWordAlone(t *testing.T) {
+	id := closedUnderPack(t, packID, "")
+	ask := func(coverage map[string]any) map[string]any {
+		out := filepath.Join(t.TempDir(), "response.json")
+		runJSON(t, "deal", "respond", "--request", writeJSONFile(t, "req.json", map[string]any{
+			"subject": map[string]any{"kind": "correlation", "value": id}, "coverage": coverage,
+		}), "--requester", "x", "--output", out)
+		var m map[string]any
+		require.NoError(t, json.Unmarshal(mustRead(t, out), &m))
+		return m
+	}
+	fresh := map[string]any{"min_freshness": map[string]any{"size": 1}}
+	before := ask(fresh)
+	assert.Nil(t, before["refusal"], "a deal with no note answers")
+
+	dealRun(t, "outcome-note", "seal", "--deal", id, "--reason", "dispute_lost")
+	for name, coverage := range map[string]map[string]any{"fresh": fresh, "a floor past the log": {"min_freshness": map[string]any{"size": 999}}} {
+		got := ask(coverage)
+		refusal, ok := got["refusal"].(map[string]any)
+		require.True(t, ok, name+": a signed refusal, not an error: %v", got)
+		assert.Equal(t, "policy_declined", refusal["reason"], name)
+		assert.NotContains(t, string(mustJSON(t, got)), "u597", name+": the wire says the reason word only")
+		assert.NotContains(t, string(mustJSON(t, got)), "dispute_lost", name)
+	}
+	// The citation is kept on the holder's side: in the local record of the answer.
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	db, err := sql.Open("sqlite", "file:"+p.Connection.Database+"?mode=ro")
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	var rec string
+	require.NoError(t, db.QueryRow(`SELECT record FROM deal_requests WHERE kind=? AND record LIKE '%u597%' LIMIT 1`, dealExchangeAnswered).Scan(&rec))
+	assert.Contains(t, rec, "outcome note")
+	// The same members as a refusal for sharing switched off: a held request declined by the holder.
+	assert.ElementsMatch(t, mapKeys(refusalOf(t, ask(fresh))), []string{"request_digest", "reason", "issued_at", "key_id", "sig"})
+}
+
+func refusalOf(t *testing.T, response map[string]any) map[string]any {
+	t.Helper()
+	r, ok := response["refusal"].(map[string]any)
+	require.True(t, ok, "%v", response)
+	return r
+}
+
+func mapKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

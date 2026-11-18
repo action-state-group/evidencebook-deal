@@ -702,6 +702,15 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 	if e != nil {
 		return e
 	}
+	// u597 (evidencebook-deal#218): no copy is made of a deal that holds the
+	// holder's own outcome note, so the request is declined, before anything
+	// about the log is weighed: the reason word alone, the shape of a decline
+	// when sharing is switched off (Sherlock2, buzz dd3c5ae7). The citation is
+	// the holder's side only.
+	if holdsOutcomeNote(events) {
+		answered["declined_because"] = "this deal holds your outcome note, which is never in a shared copy (u597)"
+		return refuse(evidencebook.ReasonPolicyDeclined)
+	}
 	entries, e := s.logEntries(ctx)
 	if e != nil {
 		return e
