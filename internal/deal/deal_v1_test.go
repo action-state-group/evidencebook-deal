@@ -402,6 +402,16 @@ func TestALostCancellationFileIsRepeatedAsANewOperation(t *testing.T) {
 	var n int
 	require.NoError(t, v1DB(t).QueryRow(`SELECT COUNT(*) FROM deal_sent WHERE kind=?`, xdealv1.KindCancellation).Scan(&n))
 	assert.Equal(t, 2, n)
+
+	// Interrupted again, within the same second: repeated once more, never stuck.
+	_, err = openWritableDB(t).Exec(`UPDATE deal_sent SET state=?, pair=NULL, written=0 WHERE kind=? AND request_digest NOT LIKE '%:superseded:%'`, sentSealing, xdealv1.KindCancellation)
+	require.NoError(t, err)
+	third := filepath.Join(t.TempDir(), "c3.json")
+	dealRun(t, "offer", "cancel", digest, "--out", third)
+	_, err = xdealv1.VerifySent(readPair(t, third), nil)
+	require.NoError(t, err)
+	require.NoError(t, v1DB(t).QueryRow(`SELECT COUNT(*) FROM deal_sent WHERE kind=?`, xdealv1.KindCancellation).Scan(&n))
+	assert.Equal(t, 3, n)
 }
 
 func TestAnOfferWithNoOutGoesToStandardOutput(t *testing.T) {

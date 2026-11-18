@@ -367,6 +367,11 @@ func (s *dealSession) sendV1(ctx context.Context, requestDigest, dealID, kind st
 // journalHolds reports whether the journal holds a record whose payload
 // commitment is the record's digest.
 func (s *dealSession) journalHolds(ctx context.Context, digest string) (bool, error) {
+	// Opening the journal first recovers a record a crash left stored but not
+	// yet in its log; Records lists committed records only.
+	if _, err := s.shelf.Journal(ctx); err != nil {
+		return false, err
+	}
 	read, err := s.shelf.Records(ctx, evidencebook.JournalLogID)
 	if err != nil {
 		return false, err

@@ -161,7 +161,7 @@ to --out (standard output with none). An offer is cancelled once.`,
 						return err
 					}
 					if held {
-						if _, err = s.db.ExecContext(ctx, `UPDATE deal_sent SET request_digest=request_digest||':superseded' WHERE record_digest=? AND request_digest=?`, op.recordDigest, request); err != nil {
+						if _, err = s.db.ExecContext(ctx, `UPDATE deal_sent SET request_digest=request_digest||':superseded:'||id WHERE record_digest=? AND request_digest=?`, op.recordDigest, request); err != nil {
 							return err
 						}
 						op = nil
