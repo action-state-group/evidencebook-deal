@@ -99,16 +99,6 @@ func putDealVersionSetting(p cli.Profile, v string) error {
 	return putSetting(filepath.Join(dir, dealVersionFile), []byte(v+"\n"))
 }
 
-// ensureV1Tables creates the v1 tables on a write session.
-func (s *dealSession) ensureV1Tables(ctx context.Context) error {
-	for _, stmt := range dealV1Schema {
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // isV1Deal reports whether the local version table names the deal as an
 // x-deal-v1 deal. A store with no table, or a deal with no row, is v0: the
 // check is read before anything is loaded, and opens no book.
