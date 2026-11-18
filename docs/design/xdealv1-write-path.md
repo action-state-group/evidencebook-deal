@@ -117,15 +117,16 @@ after.
    user's explicit `--migrate`. The user-facing text says "your open deals keep working" only once
    that test passes.
 5. **The wording the user reads** (Sherlock2's texts, buzz ac973473, with two corrections made
-   against the library in round 4 and sent back to Sherlock2: the backup is not "written first"
+   against the library in round 4 and confirmed by Sherlock2 (buzz dd4aed3e): the backup is not "written first"
    (the library commits version 2, then writes the backup, `shelf_stamp.go:111-125`), and the
    History sentence waits for a card that shows a coverage start; the full path is always printed,
    never `<db>`). Without `--migrate`, on an unmigrated store, `deal set-version x-deal-v1` prints
    and exits non-zero without changing anything: "x-deal-v1 deals need this deal store in a new
    layout. The move is one-way: afterwards, older capsulectl builds, including one an app such as
    Muse or Goose bundles, will not open the store, and going back means restoring the backup,
-   written to <full path>.v1.bak during the move (if the move stops part-way, run the same command
-   again). Your open deals keep working. Run again with --migrate to move it." A v1 verb on an
+   written to <full path>.v1.bak during the move (if the move stops part-way, the error says why;
+   fix that and run the same command again, which picks up where it stopped; the error for a file
+   already at the backup name names that path, a library change in evidencebook). Your open deals keep working. Run again with --migrate to move it." A v1 verb on an
    unmigrated store prints: "This deal store is not yet in the layout x-deal-v1 deals need. See
    `deal set-version --help`; moving it is one-way." After the move: "Moved. Backup:
    <full path>.v1.bak."
@@ -136,6 +137,8 @@ after.
    (unchanged by the migration, and out of scope here): their `FirstCheckpointTime` is still the
    first tick (`cadence_standard_history.go:68-89`), so the sentence would be false today. It is
    printed once the plugin serves a `/3` card, whose build and test it depends on, not before.
+   Until then this work does not close #461 acceptance 8 (the coverage start shown to users); the
+   sentence has its own tracked item tied to the `/3` card, and v0 stays the default until `/3` (Q7).
    The library's two facts stay in help text: restoring the backup discards everything recorded
    after the move, and deleting or moving it ends the way back. "Your open deals keep working" is
    printed only once the migrated-store test of item 4 passes.
