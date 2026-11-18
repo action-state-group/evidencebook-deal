@@ -3,12 +3,12 @@ module github.com/action-state-group/evidencebook-deal
 go 1.27.0
 
 require (
-	github.com/action-state-group/agent-action-capsule/go v0.21.0
+	github.com/action-state-group/agent-action-capsule/go v0.22.0
 	github.com/action-state-group/capsule-cli v0.1.0-rc42
 	github.com/action-state-group/capsule-emit/go v0.3.1-0.20261027234055-9defe98af14b
 	github.com/action-state-group/capsule-viewer/go v0.19.1
 	github.com/action-state-group/checkpointed-local-log/go v0.4.0
-	github.com/action-state-group/evidencebook v0.15.1-0.20261118050024-25f8d3729609
+	github.com/action-state-group/evidencebook v0.16.0
 	github.com/emersion/go-msgauth v0.7.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
