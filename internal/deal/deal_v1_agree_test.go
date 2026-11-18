@@ -490,3 +490,34 @@ func TestAnOfferWhoseRowsDidNotCommitIsRecoveredByReceivingItAgain(t *testing.T)
 	assert.Equal(t, "acceptor", out["side"])
 	_ = buyer
 }
+
+// An agreement recorded while the deal's state still says `agreeing` (a stop
+// between the two updates) is repaired by running `deal agree` again.
+func TestADealLeftAgreeingIsRepairedByAgreeingAgain(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.seller.act(t)
+	_, err := openWritableDB(t).Exec(`UPDATE deal_versions SET state='agreeing' WHERE deal_id=?`, h.dealID)
+	require.NoError(t, err)
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", filepath.Join(t.TempDir(), "again.json"))
+	var state string
+	require.NoError(t, v1DB(t).QueryRow(`SELECT state FROM deal_versions WHERE deal_id=?`, h.dealID).Scan(&state))
+	assert.Equal(t, "agreed", state)
+}
+
+// A journal record that is not an x-deal-v1 record (a v0 record on a migrated
+// store) is said so, not described by an empty type.
+func TestAnAdmitThatIsNotAV1RecordIsSaidSo(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	var digest string
+	withSession(t, func(s *dealSession) {
+		payload := []byte(`{"not":"a record"}`)
+		_, _, err := s.shelf.SealSent(t.Context(), evidencebook.Entry{RecordType: "deal_step", EpistemicType: evidencebook.ProducerClaim, Payloads: [][]byte{payload}}, "x/sent")
+		require.NoError(t, err)
+		digest = hexSHA256(payload)
+	})
+	msg := v1Err(t, "agree", h.offer, "--admit", digest)
+	assert.Contains(t, msg, "is not an x-deal-v1 record")
+	assert.NotContains(t, msg, "type  in")
+}

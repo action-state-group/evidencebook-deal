@@ -172,6 +172,9 @@ act. Needs the deal store in the new layout (deal set-version x-deal-v1
 					if !held {
 						return cli.InputError(want.flag + " " + want.digest + " is not a record in your journal")
 					}
+					if typ == "" {
+						return cli.InputError(want.flag + " " + want.digest + " is a record in your journal that is not an x-deal-v1 record, so not " + want.what)
+					}
 					if typ != want.typ {
 						return cli.InputError(want.flag + " " + want.digest + " is a record of type " + typ + " in your journal, not " + want.what)
 					}
