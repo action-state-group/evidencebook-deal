@@ -149,3 +149,72 @@ func TestADisputeBeforeAnAgreementOpensNoBook(t *testing.T) {
 	assert.Contains(t, msg, "has no agreement of yours yet")
 	assert.Contains(t, v1Err(t, "dispute", "--deal", "deal-0000000000000000", "--row", "r"), "is not an x-deal-v1 deal this profile holds")
 }
+
+// An old command run again after a later dispute must not seal anything: a
+// withdrawal repeated with its old file, after the row was disputed again,
+// fails before it seals and leaves the new dispute open.
+func TestAnOldWithdrawalRerunSealsNothing(t *testing.T) {
+	h := agreedBoth(t, oneForum)
+	h.buyer.act(t)
+	dir := t.TempDir()
+	dealRun(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--out", filepath.Join(dir, "d1.json"))
+	dealRun(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--withdraw", "--out", filepath.Join(dir, "w1.json"))
+	d2 := dealRun(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--out", filepath.Join(dir, "d2.json"))
+	assert.Contains(t, v1Err(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--withdraw", "--out", filepath.Join(dir, "w1.json")), "exists")
+	withSession(t, func(s *dealSession) {
+		d, err := s.v1DealOf(t.Context(), h.dealID)
+		require.NoError(t, err)
+		book, err := s.ownBookV1(t.Context(), d)
+		require.NoError(t, err)
+		assert.Len(t, book, 4, "agreement, dispute, withdrawal, dispute: nothing sealed by the rerun")
+		_, open, _, _ := openDisputeOn(book, "paid_as_agreed")
+		assert.True(t, open, "the new dispute is still open")
+	})
+	assert.EqualValues(t, 4, d2["seq"])
+}
+
+// A run that sealed the record and stopped before the file was written finds
+// the record again: dispute and withdrawal each write the same record, and
+// the book does not grow.
+func TestARunStoppedBeforeTheFileIsFinishedByRunningAgain(t *testing.T) {
+	h := agreedBoth(t, oneForum)
+	h.buyer.act(t)
+	seal := func(body xdealv1.DisputeBody) {
+		withSession(t, func(s *dealSession) {
+			_, err := s.sealBookV1(t.Context(), h.dealID, bookRecordIn{Body: body})
+			require.NoError(t, err)
+		})
+	}
+	size := func() int {
+		n := 0
+		withSession(t, func(s *dealSession) {
+			d, err := s.v1DealOf(t.Context(), h.dealID)
+			require.NoError(t, err)
+			book, err := s.ownBookV1(t.Context(), d)
+			require.NoError(t, err)
+			n = len(book)
+		})
+		return n
+	}
+	// The dispute was sealed (as the verb would), no file written.
+	dir := t.TempDir()
+	seal(xdealv1.DisputeBody{Kind: xdealv1.KindDispute, Row: "paid_as_agreed", Statements: []xdealv1.Ref{}, Adjudicator: "adjudicator-key", Forum: "auto:twin"})
+	dFile := filepath.Join(dir, "d.json")
+	got := dealRun(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--out", dFile)
+	assert.EqualValues(t, 2, got["seq"])
+	assert.Equal(t, 2, size())
+	read, err := xdealv1.VerifyBook(readPush(t, dFile).Record)
+	require.NoError(t, err)
+	assert.Equal(t, got["dispute"], recDigest(t, read.Record))
+
+	// The withdrawal was sealed, no file written.
+	seal(xdealv1.DisputeBody{Kind: xdealv1.KindWithdrawal, Row: "paid_as_agreed"})
+	wFile := filepath.Join(dir, "w.json")
+	w := dealRun(t, "dispute", "--deal", h.dealID, "--row", "paid_as_agreed", "--withdraw", "--out", wFile)
+	assert.EqualValues(t, 3, w["seq"])
+	assert.Equal(t, 3, size())
+	h.seller.act(t)
+	for _, f := range []string{dFile, wFile} {
+		assert.Equal(t, "kept, and counted", dealRun(t, "receive", f)["record"])
+	}
+}

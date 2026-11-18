@@ -268,6 +268,13 @@ nothing twice. Needs your agreement (deal agree) and an x-deal-v1 deal.`,
 
 // sealDispute seals a dispute record in the holder's book and writes it.
 func (s *dealSession) sealDispute(ctx context.Context, c *cobra.Command, d *v1Deal, body xdealv1.DisputeBody, validate func(xdealv1.Record) error, out string, result map[string]any) error {
+	// A file already at --out is never this new record's: an old command run
+	// again must not seal a record only to fail on its file.
+	if out != "" {
+		if _, err := os.Stat(out); err == nil {
+			return cli.InputError(out + " exists: --out names a new file, and this seals a new record")
+		}
+	}
 	sealed, err := s.sealBookV1(ctx, d.DealID, bookRecordIn{Body: body, Validate: validate})
 	if err != nil {
 		return err
