@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
+	"strings"
 
 	"github.com/action-state-group/capsule-cli/cli"
 	"github.com/action-state-group/evidencebook/dealprofile/xdealv1"
@@ -41,8 +43,20 @@ Needs a profile on x-deal-v1 (deal set-version x-deal-v1 --migrate).`,
 			if err = cli.DecodeJSONAs("--input", raw, &body); err != nil {
 				return err
 			}
+			counterTo, _ := c.Flags().GetString("counter-to")
+			forums, _ := c.Flags().GetStringArray("forum")
+			for _, f := range forums {
+				if !slices.Contains(body.Forums, f) {
+					body.Forums = append(body.Forums, f)
+				}
+			}
+			if counterTo != "" {
+				ref := xdealv1.RefTo(counterTo)
+				body.CounterTo = &ref
+			}
 			out, _ := c.Flags().GetString("out")
-			request := v1Request([]byte("offer"), raw)
+			// The request is the input and the flags that change the record.
+			request := v1Request([]byte("offer"), raw, []byte(counterTo), []byte(strings.Join(forums, "\x00")))
 			return runDeal(c, false, func(ctx context.Context, s *dealSession, _ string, _ []sealedEvent) error {
 				if _, err := s.requireV1(ctx); err != nil {
 					return err
@@ -84,7 +98,7 @@ Needs a profile on x-deal-v1 (deal set-version x-deal-v1 --migrate).`,
 				if err != nil {
 					return err
 				}
-				if err = s.writePair(ctx, c, out, digest, pair); err != nil {
+				if err = s.writePair(ctx, c, out, digest, request, pair); err != nil {
 					return err
 				}
 				if out == "" {
@@ -95,6 +109,8 @@ Needs a profile on x-deal-v1 (deal set-version x-deal-v1 --migrate).`,
 		},
 	}
 	cmd.Flags().String("input", "", "The offer's members, as a JSON file")
+	cmd.Flags().String("counter-to", "", "Make this a counter-offer to the offer with this digest")
+	cmd.Flags().StringArray("forum", nil, "A forum both sides accept for a dispute (repeatable); added to the input's forums")
 	cmd.Flags().String("out", "", "Where to write the Capsule that carries the offer (default: standard output)")
 	cmd.AddCommand(dealOfferCancelCommand())
 	return cmd
@@ -113,7 +129,9 @@ to --out (standard output with none). An offer is cancelled once.`,
 			out, _ := c.Flags().GetString("out")
 			request := v1Request([]byte("cancellation"), []byte(offer))
 			return runDeal(c, false, func(ctx context.Context, s *dealSession, _ string, _ []sealedEvent) error {
-				if _, err := s.requireV1(ctx); err != nil {
+				// The setting governs the offers a profile writes, not a deal it
+				// already sent: only the store's layout matters here.
+				if _, err := s.requireMigrated(ctx); err != nil {
 					return err
 				}
 				if err := s.ensureV1Tables(ctx); err != nil {
@@ -133,6 +151,20 @@ to --out (standard output with none). An offer is cancelled once.`,
 				}
 				if op != nil && op.state == sentWritten {
 					return cli.InputError("this offer is already cancelled: `deal offer cancel` writes one cancellation per offer")
+				}
+				if op != nil && op.pair == nil {
+					// A cancellation the journal holds but whose file was never made
+					// cannot be rebuilt: it is repeated as a new operation (§4.2).
+					held, err := s.journalHolds(ctx, op.recordDigest)
+					if err != nil {
+						return err
+					}
+					if held {
+						if _, err = s.db.ExecContext(ctx, `UPDATE deal_sent SET request_digest=request_digest||':superseded' WHERE record_digest=? AND request_digest=?`, op.recordDigest, request); err != nil {
+							return err
+						}
+						op = nil
+					}
 				}
 				var (
 					payload []byte
@@ -156,10 +188,12 @@ to --out (standard output with none). An offer is cancelled once.`,
 				if err != nil {
 					return err
 				}
-				if err = s.writePair(ctx, c, out, digest, pair); err != nil {
+				// The deal's state first: a run that stops before the file is made
+				// leaves the operation unwritten, and its re-run writes the file.
+				if _, err = s.db.ExecContext(ctx, `UPDATE deal_versions SET state='cancelled' WHERE deal_id=?`, dealID); err != nil {
 					return err
 				}
-				if _, err = s.db.ExecContext(ctx, `UPDATE deal_versions SET state='cancelled' WHERE deal_id=?`, dealID); err != nil {
+				if err = s.writePair(ctx, c, out, digest, request, pair); err != nil {
 					return err
 				}
 				if out == "" {

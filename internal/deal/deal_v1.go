@@ -49,14 +49,16 @@ var dealV1Schema = []string{
 	state TEXT NOT NULL
 )`,
 	`CREATE TABLE IF NOT EXISTS deal_sent (
-	record_digest TEXT PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	record_digest TEXT NOT NULL,
 	request_digest TEXT NOT NULL,
 	deal_id TEXT NOT NULL,
 	kind TEXT NOT NULL,
 	payload BLOB NOT NULL,
 	state TEXT NOT NULL,
 	pair BLOB,
-	written INTEGER NOT NULL DEFAULT 0
+	written INTEGER NOT NULL DEFAULT 0,
+	UNIQUE (record_digest, request_digest)
 )`,
 }
 
@@ -158,6 +160,13 @@ func (s *dealSession) requireV1(ctx context.Context) (*evidencebook.Cadence, err
 	if v != dealVersionV1 {
 		return nil, cli.InputError("this profile writes x-deal-v0 deals: run `deal set-version x-deal-v1` first")
 	}
+	return s.requireMigrated(ctx)
+}
+
+// requireMigrated refuses on a deal store still in the old layout. A verb
+// that serves a deal already sent (a cancellation) needs only this: the
+// setting governs the offers a profile writes, never a deal it holds.
+func (s *dealSession) requireMigrated(ctx context.Context) (*evidencebook.Cadence, error) {
 	c, _, err := s.cadenceOf(ctx)
 	if err != nil {
 		return nil, err
@@ -295,6 +304,12 @@ func (s *dealSession) findSentOp(ctx context.Context, requestDigest string) (*se
 	return &op, nil
 }
 
+// sealSentLib is the library's SealSent; a test replaces it to make the call
+// fail the ways the library says it can.
+var sealSentLib = func(ctx context.Context, shelf *evidencebook.Shelf, e evidencebook.Entry, actionID string) (evidencebook.Record, evidencebook.SentCapsule, error) {
+	return shelf.SealSent(ctx, e, actionID)
+}
+
 // sendV1 seals a journal record that leaves the shelf whole and returns its
 // pair, the standalone Capsule with the record (§4.2). A re-run of the same
 // request finds the operation row and never seals a record twice: a pair
@@ -331,7 +346,7 @@ func (s *dealSession) sendV1(ctx context.Context, requestDigest, dealID, kind st
 			return nil, fmt.Errorf("%w: the record %s was sealed but its file was not made, and the library cannot rebuild it: for an offer, cancel it with `deal offer cancel`", cli.ErrConflict, digest)
 		}
 	}
-	rec, sent, err := s.shelf.SealSent(ctx, evidencebook.Entry{
+	rec, sent, err := sealSentLib(ctx, s.shelf, evidencebook.Entry{
 		RecordType: "deal_step", EpistemicType: evidencebook.ProducerClaim, Payloads: [][]byte{payload},
 	}, dealID+xdealv1.SentSuffix)
 	if err != nil && rec.RecordID == "" {
@@ -343,7 +358,7 @@ func (s *dealSession) sendV1(ctx context.Context, requestDigest, dealID, kind st
 	if perr != nil {
 		return nil, errors.Join(err, perr)
 	}
-	if _, serr := s.db.ExecContext(ctx, `UPDATE deal_sent SET pair=?, state=? WHERE record_digest=?`, pair, sentSealed, digest); serr != nil {
+	if _, serr := s.db.ExecContext(ctx, `UPDATE deal_sent SET pair=?, state=? WHERE record_digest=? AND request_digest=?`, pair, sentSealed, digest, requestDigest); serr != nil {
 		return nil, errors.Join(err, serr)
 	}
 	return pair, nil
@@ -369,7 +384,7 @@ func (s *dealSession) journalHolds(ctx context.Context, digest string) (bool, er
 // writePair writes a pair to path, or to the command's output with no path,
 // and marks the operation written. A file already at path holding the same
 // pair is the earlier run's: it counts as written.
-func (s *dealSession) writePair(ctx context.Context, c *cobra.Command, path, digest string, pair []byte) error {
+func (s *dealSession) writePair(ctx context.Context, c *cobra.Command, path, digest, requestDigest string, pair []byte) error {
 	data := append(bytes.Clone(pair), '\n')
 	if path == "" {
 		if _, err := c.OutOrStdout().Write(data); err != nil {
@@ -380,6 +395,6 @@ func (s *dealSession) writePair(ctx context.Context, c *cobra.Command, path, dig
 			return err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE deal_sent SET state=?, written=1 WHERE record_digest=?`, sentWritten, digest)
+	_, err := s.db.ExecContext(ctx, `UPDATE deal_sent SET state=?, written=1 WHERE record_digest=? AND request_digest=?`, sentWritten, digest, requestDigest)
 	return err
 }
