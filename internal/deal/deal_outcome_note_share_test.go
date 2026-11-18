@@ -115,8 +115,19 @@ func TestARequestForANotedDealIsDeclinedWithTheReasonWordAlone(t *testing.T) {
 	var rec string
 	require.NoError(t, db.QueryRow(`SELECT record FROM deal_requests WHERE kind=? AND record LIKE '%u597%' LIMIT 1`, dealExchangeAnswered).Scan(&rec))
 	assert.Contains(t, rec, "outcome note")
-	// The same members as a refusal for sharing switched off: a held request declined by the holder.
-	assert.ElementsMatch(t, mapKeys(refusalOf(t, ask(fresh))), []string{"request_digest", "reason", "issued_at", "key_id", "sig"})
+	// Uniform with the holder's other policy refusal of a deal copy (a held
+	// request it declines): the same token and the same members, so a noted
+	// deal's refusal differs from it only in ids, digests and times (the twin's
+	// condition, ER -02: no differentiation).
+	heldReq := writeJSONFile(t, "held.json", map[string]any{"subject": map[string]any{"kind": "correlation", "value": retailDeal(t)},
+		"coverage": map[string]any{"min_freshness": map[string]any{"size": 1}}, "derivation": "outcome/1"})
+	held := runJSON(t, "deal", "respond", "--request", heldReq, "--requester", "x", "--output", filepath.Join(t.TempDir(), "held-reply.json"))
+	declinedPath := filepath.Join(t.TempDir(), "declined.json")
+	runJSON(t, "deal", "decline", "--request-digest", held["request_digest"].(string), "--output", declinedPath)
+	var declined map[string]any
+	require.NoError(t, json.Unmarshal(mustRead(t, declinedPath), &declined))
+	noted := ask(fresh)
+	assert.Equal(t, valueShape(declined), valueShape(noted), "a noted deal's refusal has the shape of a holder's decline")
 }
 
 func refusalOf(t *testing.T, response map[string]any) map[string]any {
@@ -132,4 +143,28 @@ func mapKeys(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// valueShape is a JSON value with every string and number replaced by its
+// type: the members and nesting, not the ids, digests and times.
+func valueShape(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := map[string]any{}
+		for k, e := range x {
+			out[k] = valueShape(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = valueShape(e)
+		}
+		return out
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	}
+	return v
 }
