@@ -149,14 +149,6 @@ func refusalOf(t *testing.T, response map[string]any) map[string]any {
 	return r
 }
 
-func mapKeys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
 // valueShape is a JSON value with every string and number replaced by its
 // type: the members and nesting, not the ids, digests and times.
 func valueShape(v any) any {
