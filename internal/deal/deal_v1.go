@@ -393,3 +393,33 @@ func (s *dealSession) writePair(ctx context.Context, c *cobra.Command, path, dig
 	_, err := s.db.ExecContext(ctx, `UPDATE deal_sent SET state=?, written=1 WHERE record_digest=? AND request_digest=?`, sentWritten, digest, requestDigest)
 	return err
 }
+
+// journalRecordType is the x-deal-v1 record type of the journal record whose
+// payload digest is digest, and whether the journal holds one.
+func (s *dealSession) journalRecordType(ctx context.Context, digest string) (typ string, held bool, err error) {
+	j, err := s.shelf.Journal(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	read, err := s.shelf.Records(ctx, evidencebook.JournalLogID)
+	if err != nil {
+		return "", false, err
+	}
+	for _, r := range read.Records {
+		for _, c := range r.Header.PayloadCommitments {
+			if c != digest {
+				continue
+			}
+			payload, err := j.ResolvePayload(ctx, r.RecordID, digest)
+			if err != nil {
+				return "", false, err
+			}
+			rec, err := xdealv1.Decode(payload)
+			if err != nil {
+				return "", true, nil
+			}
+			return rec.Block.RecordType, true, nil
+		}
+	}
+	return "", false, nil
+}

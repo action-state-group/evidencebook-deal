@@ -136,6 +136,13 @@ type bookRecordIn struct {
 	Body  xdealv1.Body
 	Refs  []xdealv1.RelRef
 	Marks []string
+	// Seen, when set, is the record id `seen` names instead of the other
+	// side's last counted record: the offerer's agreement names the
+	// acceptor's agreement, whatever else it has held since.
+	Seen string
+	// Validate, when set, checks the finished record (its chain members
+	// included) before anything is stored: what is checked is what is sealed.
+	Validate func(xdealv1.Record) error
 }
 
 // sealBookV1 appends one record to the holder's deal book of dealID and
@@ -225,7 +232,15 @@ func (s *dealSession) sealBookV1(ctx context.Context, dealID string, in bookReco
 			block.Seen = xdealv1.Some(cp.Last)
 		}
 	}
+	if in.Seen != "" {
+		block.Seen = xdealv1.Some(in.Seen)
+	}
 	rec := xdealv1.Record{Block: block, Body: in.Body}
+	if in.Validate != nil {
+		if err := in.Validate(rec); err != nil {
+			return bookSealed{}, err
+		}
+	}
 	if err := xdealv1.Check(rec); err != nil {
 		return bookSealed{}, cli.InputError("the record does not pass the x-deal-v1 checks: " + err.Error())
 	}

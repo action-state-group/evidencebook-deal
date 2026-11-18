@@ -109,8 +109,8 @@ func TestTheAcceptorAgreesAndTheOffererReceivesItsProof(t *testing.T) {
 	assert.Equal(t, "kept, and counted", got["record"], "%v", got)
 	assert.Equal(t, "kept", got["stamp_proof"], "%v", got)
 	again := dealRun(t, "receive", h.sellerAgree)
-	assert.Equal(t, "already held", again["record"])
-	assert.Equal(t, "already held", again["stamp_proof"])
+	assert.Equal(t, "already kept", again["record"])
+	assert.Equal(t, "already kept", again["stamp_proof"])
 
 	// The offerer agrees, naming the acceptor's agreement in `seen`.
 	buyerAgree := filepath.Join(t.TempDir(), "buyer-agreement.json")
@@ -332,4 +332,50 @@ func TestAnAgreementAStoppedRunAppendedIsFoundAgain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, a.RecordID, b.RecordID, "the same record, not a second agreement")
 	assert.Equal(t, a.LogID, b.LogID, "the same book")
+}
+
+// A bare deal-book pair is received as it is (the form `sealBookV1` returns),
+// and the offerer's agreement names the acceptor's agreement in `seen` even
+// when a later record of the acceptor was received before it agreed.
+func TestTheOfferersAgreementNamesTheAcceptorsAgreementNotALaterRecord(t *testing.T) {
+	h := newHandshakeV1(t)
+	// The acceptor seals a statement after its agreement and sends it bare.
+	h.seller.act(t)
+	var later bookSealed
+	withSession(t, func(s *dealSession) {
+		var err error
+		later, err = s.sealBookV1(t.Context(), h.dealID, bookRecordIn{Body: xdealv1.StatementBody{Statements: []xdealv1.StatementItem{{Row: "paid_as_agreed", Value: "met"}}}})
+		require.NoError(t, err)
+	})
+	laterFile := filepath.Join(t.TempDir(), "later.json")
+	require.NoError(t, os.WriteFile(laterFile, later.Pair, 0o600))
+
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	got := dealRun(t, "receive", laterFile)
+	assert.Equal(t, "kept, and counted", got["record"], "a bare book pair is received: %v", got)
+
+	out := filepath.Join(t.TempDir(), "b.json")
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", out)
+	own, err := xdealv1.VerifyBook(readPush(t, out).Record)
+	require.NoError(t, err)
+	acceptor, err := xdealv1.VerifyBook(readPush(t, h.sellerAgree).Record)
+	require.NoError(t, err)
+	require.NotNil(t, own.Record.Block.Seen.V)
+	assert.Equal(t, acceptor.RecordID, *own.Record.Block.Seen.V, "the acceptor's agreement, not the statement after it")
+	assert.NotEqual(t, later.RecordID, *own.Record.Block.Seen.V)
+}
+
+// --admit and --intent must be records of those types: another journal record,
+// such as the holder's own offer, is refused.
+func TestAnAgreementCitesAnAdmissionDecisionAndAnIntentOnly(t *testing.T) {
+	h := newHandshakeV1(t)
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	admit := sealAdmit(t, "GO")
+	// The buyer's own offer is a journal record, not an admission decision.
+	msg := v1Err(t, "agree", h.offer, "--admit", h.offer)
+	assert.Contains(t, msg, "is a record of type propose in your journal, not an admission decision")
+	msg = v1Err(t, "agree", h.offer, "--admit", admit, "--intent", admit)
+	assert.Contains(t, msg, "is a record of type admit in your journal, not an intent")
 }

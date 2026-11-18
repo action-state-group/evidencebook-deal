@@ -155,16 +155,22 @@ act. Needs the deal store in the new layout (deal set-version x-deal-v1
 				if d.OwnAgreementID != "" {
 					return s.writeAgreement(ctx, c, cad, d, out)
 				}
-				for name, digest := range map[string]string{"--admit": admit, "--intent": intent} {
-					if digest == "" {
+				for _, want := range []struct{ flag, digest, typ, what string }{
+					{"--admit", admit, xdealv1.TypeAdmit, "an admission decision"},
+					{"--intent", intent, xdealv1.TypeIntent, "an intent"},
+				} {
+					if want.digest == "" {
 						continue
 					}
-					held, err := s.journalHolds(ctx, digest)
+					typ, held, err := s.journalRecordType(ctx, want.digest)
 					if err != nil {
 						return err
 					}
 					if !held {
-						return cli.InputError(name + " " + digest + " is not a record in your journal")
+						return cli.InputError(want.flag + " " + want.digest + " is not a record in your journal")
+					}
+					if typ != want.typ {
+						return cli.InputError(want.flag + " " + want.digest + " is a record of type " + typ + " in your journal, not " + want.what)
 					}
 				}
 				side, role := xdealv1.SideOfferer, prop.Role
@@ -204,17 +210,15 @@ act. Needs the deal store in the new layout (deal set-version x-deal-v1
 					return err
 				}
 				d.Side, d.Role, d.CounterpartyKey = side, role, cptyKey
-				// The writer fills the chain; the agreement is checked against the
-				// offer it cites before anything is stored.
-				probe := xdealv1.Record{Block: xdealv1.Block{Profile: xdealv1.Profile, Canonicalization: xdealv1.Canonicalization, DealID: dealID,
-					RecordType: xdealv1.TypeAgree, At: v1Now(), Seq: 1, Seen: xdealv1.NullOf[string]()}, Body: body}
-				if heldAcceptor != "" {
-					probe.Block.Seen = xdealv1.Some(heldAcceptor)
+				// The writer fills the chain; the finished agreement is what is
+				// checked against the offer it cites, before anything is stored.
+				validate := func(rec xdealv1.Record) error {
+					if err := xdealv1.CheckAgreement(rec, offer.Record, heldAcceptor); err != nil {
+						return cli.InputError("the agreement does not pass the x-deal-v1 checks: " + err.Error())
+					}
+					return nil
 				}
-				if err := xdealv1.CheckAgreement(probe, offer.Record, heldAcceptor); err != nil {
-					return cli.InputError("the agreement does not pass the x-deal-v1 checks: " + err.Error())
-				}
-				if _, err := s.sealBookV1(ctx, dealID, bookRecordIn{Body: body}); err != nil {
+				if _, err := s.sealBookV1(ctx, dealID, bookRecordIn{Body: body, Seen: heldAcceptor, Validate: validate}); err != nil {
 					return err
 				}
 				d, err = s.v1DealOf(ctx, dealID)

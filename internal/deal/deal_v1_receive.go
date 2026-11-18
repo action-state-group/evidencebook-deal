@@ -22,8 +22,9 @@ writes for the acceptor), or a stamp proof alone. Each record is checked on its
 own before it is kept, and a stamp proof against the records you hold.
 
 It says in plain words what it did: which records are kept, whether one is
-still missing before a counted one, and whether two different records came for
-one place (it does not say which is right). It seals nothing and appends
+still missing before a counted one ("counted" means every record before it is
+here, so it counts toward the deal), and whether two different records came
+for one place (it does not say which is right). It seals nothing and appends
 nothing to a book of yours.
 
 Needs the deal store in the new layout (deal set-version x-deal-v1 --migrate).`,
@@ -40,7 +41,8 @@ Needs the deal store in the new layout (deal set-version x-deal-v1 --migrate).`,
 			}
 			_, hasProof := members["stamp_proof"]
 			_, hasRecord := members["record"]
-			if hasProof || (hasRecord && members["agent_input"] == nil) {
+			bareBookPair := members["payload"] != nil && members["header"] != nil
+			if !bareBookPair && (hasProof || (hasRecord && members["agent_input"] == nil)) {
 				if err := cli.DecodeJSONAs("the file", raw, &push); err != nil {
 					return err
 				}
@@ -176,17 +178,17 @@ func recordWords(o *evidencebook.RecordOutcome) string {
 	case o.Refused != nil:
 		return "refused: " + o.Refused.Error()
 	case o.Duplicate:
-		return "already held"
+		return "already kept"
 	case o.Deleted:
-		return "held once and since deleted under your retention"
+		return "kept once, since deleted under your retention"
 	case o.Stored && o.Counted:
 		return "kept, and counted"
 	case o.Stored && o.AskForBook:
-		return "kept, but a record before it is missing: ask the sender for its book"
+		return "kept, but an earlier record from the other side is missing: ask them to send it again"
 	case o.Stored:
 		return "kept"
 	}
-	return "not kept"
+	return "not kept: the store gave no reason"
 }
 
 func proofWords(o *evidencebook.ProofOutcome) string {
@@ -194,11 +196,11 @@ func proofWords(o *evidencebook.ProofOutcome) string {
 	case o.Refused != nil:
 		return "refused: " + o.Refused.Error()
 	case o.Duplicate:
-		return "already held"
+		return "already kept"
 	case o.Accepted:
 		return "kept"
 	}
-	return "not kept"
+	return "not kept: the store gave no reason"
 }
 
 // noteReceived records what the plugin needs of a record the store took: the
@@ -215,15 +217,22 @@ func (s *dealSession) noteReceived(ctx context.Context, info *receivedInfo) erro
 		if err != nil {
 			return err
 		}
-		if _, err = s.db.ExecContext(ctx, `INSERT INTO deal_versions (deal_id, version, own_log_id, counterparty_log_id, state) VALUES (?, ?, '', '', 'offer_received') ON CONFLICT(deal_id) DO NOTHING`, info.dealID, dealVersionV1); err != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
 			return err
 		}
-		if _, err = s.db.ExecContext(ctx, `INSERT INTO deal_v1 (deal_id, side, role, offer_digest, counterparty_key, counterparty_agreement, own_agreement_id, own_agreement_digest) VALUES (?, ?, ?, ?, ?, '', '', '') ON CONFLICT(deal_id) DO NOTHING`,
+		defer func() { _ = tx.Rollback() }()
+		if _, err = tx.ExecContext(ctx, `INSERT INTO deal_versions (deal_id, version, own_log_id, counterparty_log_id, state) VALUES (?, ?, '', '', 'offer_received') ON CONFLICT(deal_id) DO NOTHING`, info.dealID, dealVersionV1); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO deal_v1 (deal_id, side, role, offer_digest, counterparty_key, counterparty_agreement, own_agreement_id, own_agreement_digest) VALUES (?, ?, ?, ?, ?, '', '', '') ON CONFLICT(deal_id) DO NOTHING`,
 			info.dealID, xdealv1.SideAcceptor, oppositeRole(prop.Role), digest, info.sent.KeyID); err != nil {
 			return err
 		}
-		_, err = s.db.ExecContext(ctx, `INSERT INTO deal_v1_offers (offer_digest, deal_id, signer_key, payload) VALUES (?, ?, ?, ?) ON CONFLICT(offer_digest) DO NOTHING`, digest, info.dealID, info.sent.KeyID, payload)
-		return err
+		if _, err = tx.ExecContext(ctx, `INSERT INTO deal_v1_offers (offer_digest, deal_id, signer_key, payload) VALUES (?, ?, ?, ?) ON CONFLICT(offer_digest) DO NOTHING`, digest, info.dealID, info.sent.KeyID, payload); err != nil {
+			return err
+		}
+		return tx.Commit()
 	case info.sent != nil:
 		state := "declined"
 		if ag, ok := agreeOf(info.sent.Record); ok && ag.Kind == xdealv1.KindCancellation {
