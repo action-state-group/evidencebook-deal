@@ -118,6 +118,15 @@ func TestARequestForANotedDealIsDeclinedWithTheReasonWordAlone(t *testing.T) {
 		assert.NotContains(t, string(mustJSON(t, got)), "u597", name+": the wire says the reason word only")
 		assert.NotContains(t, string(mustJSON(t, got)), "dispute_lost", name)
 	}
+	// A request above the standard card (a derivation) on a noted deal is declined,
+	// not held: no pending item is left for the holder.
+	derivation := writeJSONFile(t, "deriv.json", map[string]any{"subject": map[string]any{"kind": "correlation", "value": id},
+		"coverage": fresh, "derivation": "outcome/1"})
+	dout := filepath.Join(t.TempDir(), "deriv-response.json")
+	d := runJSON(t, "deal", "respond", "--request", derivation, "--requester", "x", "--output", dout)
+	assert.Equal(t, "refusal", d["outcome"])
+	assert.Equal(t, "policy_declined", d["reason"])
+	assert.Empty(t, heldList(t), "nothing is held for the holder")
 	// The citation is kept on the holder's side: in the local record of the answer.
 	p, err := cli.LoadProfile("deal")
 	require.NoError(t, err)

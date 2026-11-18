@@ -711,13 +711,7 @@ func dealRespond(c *cobra.Command, p cli.Profile, raw []byte, requester, path st
 	if !notBefore.IsZero() && notBefore.After(cli.DealClock()) {
 		return refuse(evidencebook.ReasonCoverageUnsatisfiable)
 	}
-	if e = s.useDeal(ctx, dealID, false); e != nil {
-		return e
-	}
-	events, e := s.load(ctx, dealID)
-	if e != nil {
-		return e
-	}
+	events := noted
 	entries, e := s.logEntries(ctx)
 	if e != nil {
 		return e
