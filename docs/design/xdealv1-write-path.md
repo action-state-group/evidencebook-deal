@@ -357,3 +357,7 @@ wiring), `deal agree` and the deal-book writer, and the first-act gate on eviden
   `deal statement`, `deal dispute`, a verb for the journal's `admit` and `intent`, the offerer's
   stamp at `agree_by` minus the margin (§7.1), and the no-layer agreement (`counterparty_layer:
   false`; `deal agree` writes `true`).
+- **Release condition** (Sherlock2, evidencebook-deal#221 wording check, buzz b61e90dd): `deal agree`
+  must not reach a release until a user can produce a v1 `admit` (its own verb or the admission
+  flow, question 2 of section 10), and its `--admit is required` refusal must then name the verb or
+  command that shows the digest. Nothing ships from this slice (no release).
