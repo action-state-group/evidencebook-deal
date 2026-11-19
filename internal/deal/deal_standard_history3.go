@@ -49,7 +49,7 @@ func (s *dealSession) standardHistory3(ctx context.Context, tick uint64) (standa
 	}
 	cadence, err := s.requireMigrated(ctx)
 	if err != nil {
-		if errors.Is(err, cli.ErrInput) {
+		if errors.Is(err, errNotMigratedSentinel) {
 			return standardHistoryCard{}, shRefusal("a standard_history/3 card needs a deal store in the new layout: see `deal set-version --help`", errors.Join(errNotMigratedForCard, err))
 		}
 		return standardHistoryCard{}, err
@@ -67,9 +67,9 @@ func (s *dealSession) standardHistory3(ctx context.Context, tick uint64) (standa
 	// Stamp times are read from every checkpoint at or after a stamp, so they
 	// agree with the handover (which holds none after its anchor) only for the
 	// newest tick: an older anchor could resolve a time from a later receipt.
-	if last, ok, err := cadence.Last(ctx); err != nil {
+	if newest, err := cadence.StandardHistoryAnchor(ctx, 0); err != nil {
 		return standardHistoryCard{}, err
-	} else if ok && last.N != anchor.Tick.N && tick != 0 {
+	} else if newest.Tick.N != anchor.Tick.N {
 		return standardHistoryCard{}, cli.InputError("a standard_history/3 card is as of the newest checkpoint only")
 	}
 	handover, err := cadence.Handover(ctx, anchor.Tick.N)

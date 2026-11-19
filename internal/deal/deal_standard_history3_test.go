@@ -214,3 +214,24 @@ func TestATickSaysHowManyBooksKeptAStaleStatus(t *testing.T) {
 	out := dealRun(t, "tick")
 	assert.NotContains(t, out, "books_with_stale_status", "a healthy tick says nothing")
 }
+
+// A /3 card is as of the newest checkpoint: an older tick's stamp times
+// could be read from a later receipt, so it is refused.
+func TestTheV3CardIsAsOfTheNewestTickOnly(t *testing.T) {
+	h := bothAgreed(t)
+	h.seller.act(t)
+	at := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	clockAt(t, at)
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	clockAt(t, at.Add(2*time.Hour))
+	first := dealRun(t, "tick")["tick"]
+	clockAt(t, at.Add(4*time.Hour))
+	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
+	withSession(t, func(s *dealSession) {
+		_, err := s.standardHistory3(t.Context(), uint64(first.(float64)))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "newest checkpoint")
+		_, err = s.standardHistory3(t.Context(), 0)
+		require.NoError(t, err)
+	})
+}

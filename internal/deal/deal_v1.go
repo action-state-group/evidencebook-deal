@@ -137,8 +137,11 @@ func v1Refusal(verb, dealID string) error {
 // errNotMigrated is what a v1 verb says on a deal store still in the old
 // layout, never the library's error (§3a, item 3).
 func errNotMigrated() error {
-	return cli.InputError("This deal store is not yet in the layout x-deal-v1 deals need. See `deal set-version --help`; moving it is one-way.")
+	return fmt.Errorf("%w: %w", errNotMigratedSentinel, cli.InputError("This deal store is not yet in the layout x-deal-v1 deals need. See `deal set-version --help`; moving it is one-way."))
 }
+
+// errNotMigratedSentinel marks errNotMigrated for errors.Is.
+var errNotMigratedSentinel = errors.New("deal store not migrated")
 
 // requireV1 refuses a v1 verb unless the profile declared x-deal-v1 and the
 // store is in the new layout.
