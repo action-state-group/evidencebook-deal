@@ -302,6 +302,7 @@ const DEAL_VIEW_WORDS = {
   "page.refuse.report_signature": "⚠️ This viewer cannot check the report's signature here. Run capsulectl verify on the file before relying on it.",
   "page.refuse.signatures": "⚠️ This viewer can't check the signatures in this file here. Run capsulectl verify on the file before relying on it.",
   "page.refuse.theirs_yours": "A record shown as theirs is yours under another label.",
+  "page.refuse.v1": "This page reads only version 0 receipts, and this file is version 1. Open it with a viewer that reads version 1, or run capsulectl verify on the file.",
   "page.release.changed": "{note} What changed: ",
   "page.release.notes": "the release notes",
   "page.rests.sealed": "The words below were written by capsulectl when this page was made and sealed in this file; this page checked they have not changed since. They are capsulectl's summary of the steps, not the steps themselves.",
@@ -499,6 +500,10 @@ const dealStandaloneReport = async (context, bundle, x, sealedId) => {
     }
   }
   if (!lastKey || lastKey !== reportKey) return refused;
+  // A report that names x-deal-v1 is read by a viewer that reads x-deal-v1 (its
+  // rows and settled state are not a lifecycle). This page only says that,
+  // after the report's signature and key checked: it shows nothing from it.
+  if (input.type === "deal_report" && input.profile === "x-deal-v1") return { refusal: WR("page.refuse.v1") };
   const capsule = {};
   for (const [k, v] of Object.entries(record)) if (k !== "signature" && k !== "key_id") capsule[k] = v;
   const disclosed = await EvidenceGraph.verifyDisclosureEnvelope({ capsule, disclosures: { agent_input: input } });
@@ -804,6 +809,7 @@ const dealViewModel = async (context) => {
   // points at, checked like every record (its disclosure matched). A bundle
   // written before reports were sealed carries the text in the extension
   // itself, which no record seals, and the page says so.
+  if ((bundle.extensions || {})["x-deal-v1"] !== undefined) return { refusal: WR("page.refuse.v1") };
   const dealExt = (bundle.extensions || {})["x-deal-v0"] || {};
   const sealedId = typeof dealExt.sealed_report === "string" ? dealExt.sealed_report : undefined;
   const otherReports = matched.filter((id) => {

@@ -76,6 +76,10 @@ if (edit === "downgraded-in-log") {
   bundle.extensions["x-deal-v0"] = Object.assign({}, bundle.disclosures[id].agent_input.report, { did_line: "A line nobody sealed." });
   delete bundle.disclosures[id];
 }
+if (edit === "v1-report") {
+  x.agent_input.profile = "x-deal-v1";
+}
+if (edit === "v1-extension") bundle.extensions["x-deal-v1"] = { sealed_report: x.record.capsule_id };
 if (edit === "stripped") {
   bundle.extensions["x-deal-v0"] = x.agent_input.report;
   delete bundle.extensions["x-deal-report/v0"];
@@ -151,4 +155,19 @@ func dealPageUnderNode(t *testing.T) func(edit string) map[string]string {
 		require.NoError(t, json.Unmarshal(out, &got), string(out))
 		return got
 	}
+}
+
+// An x-deal-v1 deal has no lifecycle (evidencebook#461): the page reads
+// x-deal-v0 only, and says so for a v1 report or a bundle carrying the
+// x-deal-v1 extension, rather than the generic "could not be checked"
+// (evidencebook-deal#214). A v1 deal's rows and settled state are shown by a
+// viewer that reads x-deal-v1 (capsule-viewer#322).
+func TestTheDealPageNamesAnXDealV1ReportItDoesNotRead(t *testing.T) {
+	run := dealPageUnderNode(t)
+	want := cli.BuiltinWording().Entries["page.refuse.v1"]
+	require.NotEmpty(t, want)
+	for _, edit := range []string{"v1-report", "v1-extension"} {
+		assert.Equal(t, want, run(edit)["refusal"], edit)
+	}
+	assert.NotEqual(t, want, run("report-text")["refusal"], "a plain edit keeps the generic refusal")
 }
