@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-- The deal page (`deal-view.js`) names an x-deal-v1 report or bundle it does not read: a report whose payload says `profile` `x-deal-v1`, or a bundle carrying the `x-deal-v1` extension, shows `page.refuse.v1` ("This receipt is in a newer format than this page shows. Open it in a receipt viewer that reads the newer format.") instead of the generic "could not be checked" line. A v1 deal has no lifecycle; its rows and settled state are shown by a viewer that reads x-deal-v1 (capsule-viewer#322), not by this page. The x-deal-v0 page is unchanged (evidencebook-deal#214).
 - `deal dispute --deal ID --row ROW [--forum F] [--withdraw] [--out FILE]` (x-deal-v1 deals): seals a `dispute` record of kind dispute, or of kind withdrawal with `--withdraw`, in the holder's deal book and writes the file to send; the other side counts it with `deal receive`. The record is the one place a dispute lives, and a row's status reads it. The dispute names the agreement's adjudicator and one of its forums (`--forum` may be left out when there is one), cites the holder's own statements on the row, and is checked against the holder's agreement before it is stored; an agreement with no adjudicator allows none. Run again with the same `--out`, it rewrites the same file and seals nothing new; an `--out` file that already exists is refused for a new dispute or withdrawal, before anything is sealed. A challenge of a ruling is not here (evidencebook-deal#95).
 
 ## v0.1.0-rc42

@@ -422,7 +422,6 @@
     "page.refuse.report_signature": "⚠️ This viewer cannot check the report's signature here. Run capsulectl verify on the file before relying on it.",
     "page.refuse.signatures": "⚠️ This viewer can't check the signatures in this file here. Run capsulectl verify on the file before relying on it.",
     "page.refuse.theirs_yours": "A record shown as theirs is yours under another label.",
-    "page.refuse.v1": "This receipt is in a newer format than this page shows. Open it in a receipt viewer that reads the newer format.",
     "page.release.changed": "{note} What changed: ",
     "page.release.notes": "the release notes",
     "page.rests.sealed": "The words below were written by capsulectl when this page was made and sealed in this file; this page checked they have not changed since. They are capsulectl's summary of the steps, not the steps themselves.",
