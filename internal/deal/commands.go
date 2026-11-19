@@ -105,7 +105,7 @@ func dealBundleFlags(f *pflag.FlagSet, use string) {
 func dealBundleExtension(c *cobra.Command, use string) (bool, error) {
 	if deal, _ := c.Flags().GetString("deal"); deal == "" {
 		if c.Flags().Changed("share") || c.Flags().Changed("to") || c.Flags().Changed(includeUnauthorizedFlag) {
-			return true, cli.InputError("--share, --to and --include-unauthorized-claims go with --deal: they choose what a deal's shared copy withholds")
+			return true, cli.InputError("--share and --to go with --deal: they choose what a deal's shared copy withholds (so does --include-unauthorized-claims)")
 		}
 		// On a deal profile the core refuses the store (it is the plugin's);
 		// the plugin says what to pass instead.

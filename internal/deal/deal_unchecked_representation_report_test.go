@@ -139,7 +139,7 @@ func TestTheSellerMayShowAnAdjudicatorTheClaimsMadeWithoutAuthority(t *testing.T
 	assert.Contains(t, string(mustRead(t, page)), "Shared by the seller's choice")
 	own := filepath.Join(t.TempDir(), "adj-default.html")
 	dealRun(t, "report", "--deal", id, "--share", "adjudicator", "--to", "the referee", "--html", own)
-	assert.Contains(t, string(mustRead(t, own)), "Not shared: the seller chose not to show")
+	assert.Contains(t, string(mustRead(t, own)), "Not shared: the seller did not choose to list")
 	assert.NotContains(t, string(mustRead(t, own)), "without your authority")
 
 	// Never for a counterparty, and never silently dropped: it is refused.

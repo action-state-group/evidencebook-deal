@@ -1197,7 +1197,7 @@ func dealShareAct(a dealAct, currency string) string {
 // The adjudicator copy's line on the claims the seller's agent made without
 // the seller's authority: the seller's own choice either way.
 const (
-	unauthorizedClaimsNotShared = "Not shared: the seller chose not to show whether their agent said anything without their authority"
+	unauthorizedClaimsNotShared = "Not shared: the seller did not choose to list, on this page, claims their agent made without their authority"
 	unauthorizedClaimsShared    = "Shared by the seller's choice: every claim their agent made without their authority (%d)"
 )
 
