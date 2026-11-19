@@ -2674,6 +2674,9 @@ func dealReportCommand() *cobra.Command {
 			if directory == "" {
 				directory = profileCountersignDirectory(s.p)
 			}
+			if err := refuseUncheckedOnABuyersDeal(includeUnchecked, events); err != nil {
+				return err
+			}
 			s.shareUnchecked = includeUnchecked
 			report, reportErr := s.dealReportFor(ctx, events)
 			if reportErr != nil {

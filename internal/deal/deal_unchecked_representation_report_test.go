@@ -131,6 +131,16 @@ func TestTheSellerMayShowAnAdjudicatorTheClaimsMadeWithoutAuthority(t *testing.T
 		"Your agent said this without your authority: “The frame has no scratches at all” (you weren't asked about it)",
 		"Your agent said this without your authority: “I will cover the gears for 90 days” (you weren't asked about it)",
 	}, said, "all of them, none hand-picked")
+	for _, a := range anomalies(opted) {
+		if a["kind"] == "unapproved_representation_shared" {
+			assert.Equal(t, "agent", a["side"], "the page draws an anomaly only under its side")
+		}
+	}
+	for _, a := range anomalies(b) {
+		if a["kind"] == "unapproved_representation_not_shared" {
+			assert.Equal(t, "agent", a["side"], "the page draws an anomaly only under its side")
+		}
+	}
 	assert.Equal(t, []string{"Shared by the seller's choice: every claim their agent made without their authority (2)"}, marks)
 
 	// The page of an opted-in copy draws them; the default page does not.
@@ -147,4 +157,13 @@ func TestTheSellerMayShowAnAdjudicatorTheClaimsMadeWithoutAuthority(t *testing.T
 	require.Error(t, err)
 	_, err = invoke(t, "", "--profile", "deal", "report", "--deal", id, "--include-unauthorized-claims")
 	require.Error(t, err)
+}
+
+// The choice is the seller's: on a deal where the user buys, it is refused.
+func TestTheClaimsChoiceIsRefusedOnABuyersDeal(t *testing.T) {
+	dealFixture(t)
+	id := retailDeal(t)
+	_, err := invoke(t, "", "--profile", "deal", "disclose", "--deal", id, "--share", "adjudicator", "--to", "the referee", "--include-unauthorized-claims", "--out", filepath.Join(t.TempDir(), "x.json"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "seller's choice")
 }

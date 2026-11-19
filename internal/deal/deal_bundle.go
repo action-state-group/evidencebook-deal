@@ -61,6 +61,9 @@ func dealBundleRun(c *cobra.Command, use string) error {
 		return cli.InputError("disclose --deal needs --out FILE: the shared bundle is written there after the share is on record")
 	}
 	return runDeal(c, true, func(ctx context.Context, s *dealSession, dealID string, events []sealedEvent) error {
+		if err := refuseUncheckedOnABuyersDeal(includeUnchecked, events); err != nil {
+			return err
+		}
 		s.shareUnchecked = includeUnchecked
 		verify := dealVerifyCommand("bundle.json")
 		if out != "" {

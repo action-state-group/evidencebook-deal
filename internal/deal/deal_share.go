@@ -1379,7 +1379,7 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 	// claims their agent made without authority: absence is "not shared",
 	// never "none", so silence is not read as "the agent never overstepped".
 	if audience == cli.DealAudienceAdjudicator && dealRole(events) == dealRoleSeller {
-		marker := map[string]interface{}{"kind": "unapproved_representation_not_shared", "text": unauthorizedClaimsNotShared, "steps": []interface{}{}}
+		marker := map[string]interface{}{"kind": "unapproved_representation_not_shared", "side": "agent", "text": unauthorizedClaimsNotShared, "steps": []interface{}{}}
 		if includeUnchecked {
 			count := 0
 			for _, item := range report.Anomalies {
@@ -1387,7 +1387,7 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 					count++
 				}
 			}
-			marker = map[string]interface{}{"kind": "unapproved_representation_shared", "text": fmt.Sprintf(unauthorizedClaimsShared, count), "steps": []interface{}{}}
+			marker = map[string]interface{}{"kind": "unapproved_representation_shared", "side": "agent", "text": fmt.Sprintf(unauthorizedClaimsShared, count), "steps": []interface{}{}}
 		}
 		anomalyList = append([]interface{}{marker}, anomalyList...)
 	}

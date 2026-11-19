@@ -84,6 +84,15 @@ func shareUncheckedFlag(c *cobra.Command, audience string) (bool, error) {
 	return on, nil
 }
 
+// refuseUncheckedOnABuyersDeal: only where the user sells can an agent make
+// a claim to a buyer, so the choice means nothing on a buyer's deal.
+func refuseUncheckedOnABuyersDeal(on bool, events []sealedEvent) error {
+	if on && dealRole(events) != dealRoleSeller {
+		return cli.InputError("--" + includeUnauthorizedFlag + " is the seller's choice: this deal is not one where you sell, so your agent made no claims to a buyer")
+	}
+	return nil
+}
+
 // dealBundleFlags defines the flags the plugin adds to bundle, disclose and
 // permalink. A flag the core still defines is left to it.
 func dealBundleFlags(f *pflag.FlagSet, use string) {
