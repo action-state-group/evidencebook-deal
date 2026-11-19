@@ -149,7 +149,7 @@ func TestTheSellerMayShowAnAdjudicatorTheClaimsMadeWithoutAuthority(t *testing.T
 	assert.Contains(t, string(mustRead(t, page)), "Shared by the seller's choice")
 	own := filepath.Join(t.TempDir(), "adj-default.html")
 	dealRun(t, "report", "--deal", id, "--share", "adjudicator", "--to", "the referee", "--html", own)
-	assert.Contains(t, string(mustRead(t, own)), "Not shared: the seller did not choose to list")
+	assert.Contains(t, string(mustRead(t, own)), "Not shared: whether the seller's agent made any claim")
 	assert.NotContains(t, string(mustRead(t, own)), "without your authority")
 
 	// Never for a counterparty, and never silently dropped: it is refused.
@@ -166,4 +166,24 @@ func TestTheClaimsChoiceIsRefusedOnABuyersDeal(t *testing.T) {
 	_, err := invoke(t, "", "--profile", "deal", "disclose", "--deal", id, "--share", "adjudicator", "--to", "the referee", "--include-unauthorized-claims", "--out", filepath.Join(t.TempDir(), "x.json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "seller's choice")
+}
+
+// Opted in with nothing to show, the copy says so in words ("none" is honest
+// there, since the seller did share).
+func TestAnOptedInCopyWithNoClaimsSaysTheAgentMadeNone(t *testing.T) {
+	dealFixture(t)
+	id := sellerRepOpen(t, `["condition"]`)
+	path := filepath.Join(t.TempDir(), "opted.json")
+	out, err := invoke(t, "", "--profile", "deal", "disclose", "--deal", id, "--share", "adjudicator", "--to", "the referee", "--include-unauthorized-claims", "--out", path)
+	require.NoError(t, err, out)
+	var b map[string]any
+	require.NoError(t, json.Unmarshal(mustRead(t, path), &b))
+	var texts []string
+	for _, a := range dealReportOf(b)["anomalies"].([]any) {
+		item := a.(map[string]any)
+		if item["kind"] == "unapproved_representation_shared" {
+			texts = append(texts, item["text"].(string))
+		}
+	}
+	assert.Equal(t, []string{unauthorizedClaimsSharedNone}, texts)
 }

@@ -1197,8 +1197,9 @@ func dealShareAct(a dealAct, currency string) string {
 // The adjudicator copy's line on the claims the seller's agent made without
 // the seller's authority: the seller's own choice either way.
 const (
-	unauthorizedClaimsNotShared = "Not shared: the seller did not choose to list, on this page, claims their agent made without their authority"
-	unauthorizedClaimsShared    = "Shared by the seller's choice: every claim their agent made without their authority (%d)"
+	unauthorizedClaimsNotShared  = "Not shared: whether the seller's agent made any claim without the seller's authority. The seller did not choose to show this on this page."
+	unauthorizedClaimsSharedNone = "Shared by the seller's choice: their agent made no claim without their authority"
+	unauthorizedClaimsShared     = "Shared by the seller's choice: every claim their agent made without their authority (%d)"
 )
 
 // dealShareExtension is the x-deal-v0 extension of a shared copy: the steps,
@@ -1387,7 +1388,11 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 					count++
 				}
 			}
-			marker = map[string]interface{}{"kind": "unapproved_representation_shared", "side": "agent", "text": fmt.Sprintf(unauthorizedClaimsShared, count), "steps": []interface{}{}}
+			text := fmt.Sprintf(unauthorizedClaimsShared, count)
+			if count == 0 {
+				text = unauthorizedClaimsSharedNone
+			}
+			marker = map[string]interface{}{"kind": "unapproved_representation_shared", "side": "agent", "text": text, "steps": []interface{}{}}
 		}
 		anomalyList = append([]interface{}{marker}, anomalyList...)
 	}
