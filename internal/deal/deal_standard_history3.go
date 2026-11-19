@@ -49,7 +49,10 @@ func (s *dealSession) standardHistory3(ctx context.Context, tick uint64) (standa
 	}
 	cadence, err := s.requireMigrated(ctx)
 	if err != nil {
-		return standardHistoryCard{}, shRefusal("a standard_history/3 card needs a deal store in the new layout: see `deal set-version --help`", errors.Join(errNotMigratedForCard, err))
+		if errors.Is(err, cli.ErrInput) {
+			return standardHistoryCard{}, shRefusal("a standard_history/3 card needs a deal store in the new layout: see `deal set-version --help`", errors.Join(errNotMigratedForCard, err))
+		}
+		return standardHistoryCard{}, err
 	}
 	anchor, err := cadence.StandardHistoryAnchor(ctx, tick)
 	if errors.Is(err, evidencebook.ErrNotFound) {
@@ -60,6 +63,14 @@ func (s *dealSession) standardHistory3(ctx context.Context, tick uint64) (standa
 	}
 	if settings.changedAfter(cutOf(s.p, anchor.Tick.N, anchor.Tick.At)) {
 		return standardHistoryCard{}, fmt.Errorf("%w: %w", cli.Hint(errCardNotYet{}, "the declaration or policy changed after the last checkpoint: run `deal tick`, then ask again"), errStaleAnchor)
+	}
+	// Stamp times are read from every checkpoint at or after a stamp, so they
+	// agree with the handover (which holds none after its anchor) only for the
+	// newest tick: an older anchor could resolve a time from a later receipt.
+	if last, ok, err := cadence.Last(ctx); err != nil {
+		return standardHistoryCard{}, err
+	} else if ok && last.N != anchor.Tick.N && tick != 0 {
+		return standardHistoryCard{}, cli.InputError("a standard_history/3 card is as of the newest checkpoint only")
 	}
 	handover, err := cadence.Handover(ctx, anchor.Tick.N)
 	if err != nil {
@@ -248,6 +259,14 @@ func (s *dealSession) dealEntry3(ctx context.Context, bookID string, v xdealv1.S
 		deal.Unpriced = true
 	}
 	if len(v.Witnesses) > 0 && !holdsWitnessTime(v, stamps) {
+		// The status times miss the holder's own agreement, the book's first
+		// record, which has a time whenever any later record has one (a stamp
+		// that covers a record covers those before it).
+		if _, ok, err := s.shelf.RecordTimeByKey(ctx, bookID, 1, keys); err != nil {
+			return standardhistory.Deal{}, false, err
+		} else if ok {
+			return deal, true, nil
+		}
 		none := "no_witness_time"
 		deal.LeftOut = &none
 	}
@@ -311,7 +330,7 @@ func rowResult3(role string, r xdealv1.StatusRow, res rowstatus.Result) standard
 		// An unmet row that is not ruled: its remedy is the host profile's,
 		// made when the owing side's book holds a remedy of the row (SH-16).
 		out.Remedy = rowstatus.RemedyNone
-		if !r.RemedyMade.IsNone() {
+		if out.OwedBy == "holder" && !r.RemedyMade.IsNone() {
 			out.Remedy = rowstatus.RemedyMade
 		}
 	}
@@ -345,7 +364,7 @@ func disputes3(v xdealv1.StatusValue) []standardhistory.Dispute {
 		case xdealv1.OutcomeAgainstClaimant:
 			outcome = map[bool]string{true: "against", false: "for"}[raised]
 		}
-		out = append(out, standardhistory.Dispute{Side: side, Outcome: outcome, Forum: d.Forum})
+		out = append(out, standardhistory.Dispute{Side: side, Outcome: outcome, Forum: forumClass(d.Forum)})
 	}
 	return out
 }
@@ -369,4 +388,12 @@ func bandAmount(b *xdealv1.ValueBand) (standardhistory.Amount, bool) {
 		return standardhistory.Amount{Value: "1" + strings.Repeat("0", b.Decade), AssetCode: b.Currency, AssetScale: 0}, true
 	}
 	return standardhistory.Amount{Value: "1", AssetCode: b.Currency, AssetScale: -b.Decade}, true
+}
+
+// forumClass is the class SH §5.4 counts a forum by: x-deal-v1 forums are
+// auto:<x>, network:<id>, rail:<program> or external:<class>, and the card
+// counts the prefix.
+func forumClass(forum string) string {
+	class, _, _ := strings.Cut(forum, ":")
+	return class
 }

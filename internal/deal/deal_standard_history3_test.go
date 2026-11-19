@@ -3,6 +3,7 @@ package deal
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,7 +122,7 @@ func TestTheV3MappingUsesTheHoldersWords(t *testing.T) {
 // a remedy of it (SH-16); a ruled row takes the rule's remedy.
 func TestTheV3RemedyOfAnUnmetRow(t *testing.T) {
 	unmet := rowstatus.Result{Status: "agreed", Value: "not_met"}
-	row := xdealv1.StatusRow{}
+	row := xdealv1.StatusRow{Input: xdealv1.StatusRowInput{Row: rowstatus.Row{OwedBy: "buyer"}}}
 	assert.Equal(t, "none", rowResult3("buyer", row, unmet).Remedy)
 	row.RemedyMade = xdealv1.KnownTime("2026-11-02T00:00:00Z")
 	assert.Equal(t, "made", rowResult3("buyer", row, unmet).Remedy)
@@ -174,4 +175,42 @@ func TestAV1BooksStampedFactCarriesItsStatus(t *testing.T) {
 		}
 		assert.NotZero(t, seen)
 	})
+}
+
+// A dispute's forum reaches the card as its class: x-deal-v1 forums carry a
+// prefix, and the card only accepts the class (SH §5.4).
+func TestTheV3ForumIsItsClassAndTheCardDerives(t *testing.T) {
+	assert.Equal(t, "auto", forumClass("auto:twin"))
+	assert.Equal(t, "rail", forumClass("rail:program"))
+	assert.Equal(t, "external", forumClass("external"))
+	deals := []standardhistory.Deal{{
+		Deal: "b", AgreedAt: "2026-10-30T00:00:00Z", Role: "provided", Happened: "receipt_only",
+		Amount: standardhistory.Amount{Value: "1", AssetCode: "USD"},
+		Rows:   []standardhistory.Row{{OwedBy: "holder", Status: "not_due"}},
+		Disputes: disputes3(xdealv1.StatusValue{Role: "seller", Disputes: []xdealv1.StatusDispute{
+			{Row: "r", Claimant: "buyer", Outcome: xdealv1.OutcomeOpen, Forum: "auto:twin"}}}),
+	}}
+	asOf := standardhistory.AsOf{Anchor: strings.Repeat("a", 64), AnchorTime: "2026-11-01T00:00:00Z", FirstCheckpointTime: "2026-10-01T00:00:00Z", CoverageStartTime: "2026-10-01T00:00:00Z"}
+	policy := standardhistory.Policy{Digest: strings.Repeat("b", 64), Window: standardhistory.Window{Months: 3}}
+	_, err := standardhistory.DeriveAs(standardhistory.Derivation3, "node", "node_declared", asOf, policy, deals)
+	require.NoError(t, err)
+}
+
+// A remedy of a row the counterparty owed is the counterparty's, not the
+// holder's own, so the row result says none (SH §11.2).
+func TestTheV3RemedyIsTheHoldersOwnOnly(t *testing.T) {
+	row := xdealv1.StatusRow{Input: xdealv1.StatusRowInput{Row: rowstatus.Row{OwedBy: "buyer"}}, RemedyMade: xdealv1.KnownTime("2026-11-02T00:00:00Z")}
+	unmet := rowstatus.Result{Status: "agreed_so_far", Value: "not_met"}
+	assert.Equal(t, "none", rowResult3("seller", row, unmet).Remedy)
+	assert.Equal(t, "made", rowResult3("buyer", row, unmet).Remedy)
+	assert.Equal(t, "made", rowResult3("buyer", row, rowstatus.Result{Status: "uncontested", Value: "not_met"}).Remedy)
+}
+
+// A tick that stales a book's status is said, as a count and never a reason.
+func TestATickSaysHowManyBooksKeptAStaleStatus(t *testing.T) {
+	h := bothAgreed(t)
+	h.seller.act(t)
+	clockAt(t, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC))
+	out := dealRun(t, "tick")
+	assert.NotContains(t, out, "books_with_stale_status", "a healthy tick says nothing")
 }
