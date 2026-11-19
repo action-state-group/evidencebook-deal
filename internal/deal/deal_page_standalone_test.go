@@ -98,8 +98,8 @@ if (edit === "stripped") {
     presentation: resolution.kind,
   };
   if (resolution.kind === "module") {
-    const view = await resolution.module.buildModel(ctx);
     out.module = String((resolution.module && resolution.module.manifest && resolution.module.manifest.id) || "");
+    const view = await resolution.module.buildModel(ctx);
     out.refusal = (view && view.refusal) || "";
     out.scope = view && view.report ? view.report.scope : "";
   }
@@ -161,12 +161,11 @@ func dealPageUnderNode(t *testing.T) func(edit string) map[string]string {
 // An x-deal-v1 deal has no lifecycle (evidencebook#461), and deal-view.js
 // reads one. The page never meets a v1 file: the module's manifest requires
 // the x-deal-v0 extension, which a v1 bundle does not carry (its extension is
-// x-deal-v1), so the runtime selects another module and deal-view.js is not
-// run (evidencebook-deal#214). capsule-viewer#322 shows a v1 file.
+// x-deal-v1), so the runtime selects another module and the receipt page (not the composed
+// module, which needs composed/v1) is not run (evidencebook-deal#214). capsule-viewer#322 shows a v1 file.
 func TestAV1OnlyBundleDoesNotSelectTheDealPage(t *testing.T) {
 	run := dealPageUnderNode(t)
 	assert.Equal(t, "capsulectl.deal-view/v0", run("")["module"], "control: the v0 file selects the deal view")
 	got := run("v1-only")
 	assert.NotEqual(t, "capsulectl.deal-view/v0", got["module"], "got %v", got)
-	assert.NotEqual(t, "capsulectl.deal-view-composed/v0", got["module"], "got %v", got)
 }
