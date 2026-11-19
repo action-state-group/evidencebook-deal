@@ -350,10 +350,17 @@ func disputes3(v xdealv1.StatusValue) []standardhistory.Dispute {
 	return out
 }
 
-// bandAmount is an amount in the status value's band, since a status value
+// bandAmount is the band's floor as an amount, since a status value
 // carries the band and no amount (DP §12 Q15): 10^decade of the currency's
 // unit, whose decade is the band's (SH §5.3). The card shows the band only, so
-// no other digit of the price is claimed or kept.
+// no other digit of the price is claimed or kept. The entry is NOT a price:
+// the holder's own copy carries these entries beside the card, and a reader
+// of them must not take the floor for what was paid. The deal entry has no
+// member to say so, and none is invented here: until evidencebook design Q15
+// rules (DP section 12), a /3 entry's amount is a band floor (Sherlock,
+// evidencebook-deal#213), and this function is what Q15's ruling replaces.
+// A status value has one null band for a zero or an unknown price, so a zero
+// price is not told apart and is counted unpriced.
 func bandAmount(b *xdealv1.ValueBand) (standardhistory.Amount, bool) {
 	if b == nil {
 		return standardhistory.Amount{}, false
