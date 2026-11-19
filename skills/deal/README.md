@@ -518,6 +518,14 @@ every record holding a string it may not carry. That record still verifies:
 it shows as WITHHELD, and its place in the log is still proven. The deal
 section is rewritten for the reader from fixed words, amounts and rails.
 
+Where the user sells, the claims their agent made without their authority are
+the user's own matter: no shared copy lists them as the user's receipt does. An
+adjudicator's copy says "Not shared" about them. The user may choose, for one
+adjudicator copy, to show all of them with `--include-unauthorized-claims` on
+`deal report --share adjudicator` or `disclose --deal ID --share adjudicator`;
+the copy then says it was shown by the seller's choice. The flag is refused for
+a counterparty's copy, and there is no way to show some and not others.
+
 Both the scrubber and the gate read text in the same plain form:
 
 - Escapes are decoded, nested ones too: percent-escapes, HTML character
