@@ -70,13 +70,16 @@ func TestTheV3CardCountsAStartedV1Deal(t *testing.T) {
 	}
 }
 
-// With no witness to time the offerer's agreement, a deal still waiting for
-// it after agree_by has not started, so it is in no tally (SH §11.1).
-func TestTheV3CardLeavesOutADealThatNeverStarted(t *testing.T) {
+// An agreement then silence is counted (evidencebook v0.19.0, Steven u608):
+// after agree_by, with both agreements joined and the offerer's untimed and
+// never named, the deal has started locally. Its row is past due with no
+// statement, so the deal is undecided.
+func TestTheV3CardCountsADealWhoseOffererWentSilent(t *testing.T) {
 	h := bothAgreed(t)
 	card, deals := card3(t, h, h.seller, time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC))
-	assert.Empty(t, deals)
-	assert.EqualValues(t, 0, card["in_window"].(map[string]any)["counted"])
+	require.Len(t, deals, 1)
+	assert.Equal(t, "no_statement", deals[0].Rows[0].Status)
+	assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
 }
 
 // A store in the old layout has no shelf log of facts to count: the card is
