@@ -30,17 +30,23 @@ func bothAgreed(t *testing.T) *handshakeV1 {
 
 func card3(t *testing.T, h *handshakeV1, side v1Side, at time.Time) (card map[string]any, deals []standardhistory.Deal) {
 	t.Helper()
+	return cardUnder(t, h, side, at, standardhistory.Derivation3)
+}
+
+// cardUnder is the card of x-deal-v1 deals under derivation (/3 or /4).
+func cardUnder(t *testing.T, h *handshakeV1, side v1Side, at time.Time, derivation string) (card map[string]any, deals []standardhistory.Deal) {
+	t.Helper()
 	side.act(t)
 	clockAt(t, at)
 	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
 	clockAt(t, at.Add(time.Hour))
 	require.Equal(t, "ticked", dealRun(t, "tick")["state"])
 	withSession(t, func(s *dealSession) {
-		got, err := s.standardHistory3(t.Context(), 0)
+		got, err := s.standardHistoryV1(t.Context(), 0, derivation)
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(got.Card, &card))
 		deals = got.Deals
-		assert.Equal(t, standardhistory.Derivation3, got.Derivation)
+		assert.Equal(t, derivation, got.Derivation)
 		assert.NotEmpty(t, got.AsOf.CoverageStartTime)
 	})
 	return card, deals
@@ -82,9 +88,10 @@ func TestTheV3CardCountsADealWhoseOffererWentSilent(t *testing.T) {
 	assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
 }
 
-// A deal whose agreement names a witness but holds no time from it is counted,
-// its rows local, and never left out (Steven u616, 2026-11-19).
-func TestTheV3CardCountsADealNamingAWitnessWithNoWitnessedTime(t *testing.T) {
+// namingAWitness is a handshake whose agreement names a witness that holds no
+// time from any of the deal's records.
+func namingAWitness(t *testing.T) *handshakeV1 {
+	t.Helper()
 	named := func(key string) string {
 		return strings.Replace(offerTo(key), `"witnesses": []`, `"witnesses": [{"key_id": "`+strings.Repeat("ab", 32)+`"}]`, 1)
 	}
@@ -95,13 +102,36 @@ func TestTheV3CardCountsADealNamingAWitnessWithNoWitnessedTime(t *testing.T) {
 	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", buyerAgree)
 	h.seller.act(t)
 	dealRun(t, "receive", buyerAgree)
+	return h
+}
+
+// /3 leaves out a deal whose agreement names a witness that timed none of its
+// records, as SH-12 says; it stays as it is (SH §11.6).
+func TestTheV3CardStillLeavesOutADealNamingAWitnessWithNoWitnessedTime(t *testing.T) {
+	h := namingAWitness(t)
 	card, deals := card3(t, h, h.seller, time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC))
 	require.Len(t, deals, 1)
-	assert.Nil(t, deals[0].LeftOut)
-	assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
-	// The tally key is the AAC library's until agent-action-capsule#634 retires it.
-	assert.Equal(t, map[string]any{"counted": float64(1), "not_counted": float64(0), "of": float64(1)}, card["in_window"])
-	assert.EqualValues(t, 0, card["not_counted"].(map[string]any)["no_witness_time"])
+	require.NotNil(t, deals[0].LeftOut)
+	assert.Equal(t, "no_witness_time", *deals[0].LeftOut)
+	assert.EqualValues(t, 1, card["not_counted"].(map[string]any)["no_witness_time"])
+}
+
+// /4 counts that deal, and one whose agreement names no witness, and
+// discloses each with no_witness_time in local_times (SH §12; Steven u616).
+func TestTheV4CardCountsADealWithNoWitnessedTime(t *testing.T) {
+	silent := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
+	for name, h := range map[string]*handshakeV1{"names no witness": bothAgreed(t), "names a witness no one timed": namingAWitness(t)} {
+		t.Run(name, func(t *testing.T) {
+			card, deals := cardUnder(t, h, h.seller, silent, standardhistory.Derivation4)
+			require.Len(t, deals, 1)
+			assert.True(t, deals[0].NoWitnessTime)
+			assert.Nil(t, deals[0].LeftOut)
+			assert.Equal(t, map[string]any{"counted": float64(1), "not_counted": float64(0), "of": float64(1)}, card["in_window"])
+			assert.Equal(t, map[string]any{"count": float64(1), "of": float64(1)}, card["local_times"])
+			assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
+			assert.NotContains(t, card, "not_counted")
+		})
+	}
 }
 
 // A store in the old layout has no shelf log of facts to count: the card is
@@ -116,7 +146,7 @@ func TestTheV3CardNeedsTheNewLayout(t *testing.T) {
 	assert.Contains(t, err.Error(), "new layout")
 }
 
-func TestTheCardDerivationIsOneOfTheTwo(t *testing.T) {
+func TestTheCardDerivationIsOneOfTheThree(t *testing.T) {
 	dealFixture(t)
 	err := dealRunErr(t, "standard-history", "card", "--derivation", "standard_history/2", "--out", filepath.Join(t.TempDir(), "c.json"))
 	require.Error(t, err)
