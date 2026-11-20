@@ -80,19 +80,37 @@ func TestAReceivedOffersPairIsKeptAsReceived(t *testing.T) {
 
 // An offer received before the pair was kept has a NULL pair, and so has an
 // offer this profile holds neither sent nor received: the check is not run.
+// Receiving the offer again keeps its pair; a pair already kept is not replaced.
 func TestAnOfferWithNoPairRunsNoCheck(t *testing.T) {
 	h := newHandshakeV1(t)
-	h.seller.act(t)
-	_, err := openWritableDB(t).Exec(`UPDATE deal_v1_offers SET pair=NULL`)
+	raw, err := os.ReadFile(h.offerFile)
 	require.NoError(t, err)
+	h.seller.act(t)
+	_, err = openWritableDB(t).Exec(`UPDATE deal_v1_offers SET pair=NULL`)
+	require.NoError(t, err)
+	pairOf := func() []byte {
+		var pair []byte
+		withSession(t, func(s *dealSession) {
+			var err error
+			pair, err = s.sentOfferPair(t.Context(), h.offer)
+			require.NoError(t, err)
+		})
+		return pair
+	}
+	assert.Nil(t, pairOf(), "received before the pair was kept")
 	withSession(t, func(s *dealSession) {
-		pair, err := s.sentOfferPair(t.Context(), h.offer)
-		require.NoError(t, err)
-		assert.Nil(t, pair, "received before the pair was kept")
-		pair, err = s.sentOfferPair(t.Context(), h.offer+"x")
+		pair, err := s.sentOfferPair(t.Context(), h.offer+"x")
 		require.NoError(t, err)
 		assert.Nil(t, pair, "not held")
 	})
+
+	dealRun(t, "receive", h.offerFile)
+	assert.Equal(t, string(raw), string(pairOf()), "received again, the pair is kept")
+
+	_, err = openWritableDB(t).Exec(`UPDATE deal_v1_offers SET pair=?`, []byte("kept"))
+	require.NoError(t, err)
+	dealRun(t, "receive", h.offerFile)
+	assert.Equal(t, "kept", string(pairOf()), "a pair already kept is not replaced")
 }
 
 // settleLeg seals a settle record with its settlement member in the holder's
