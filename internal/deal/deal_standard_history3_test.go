@@ -82,6 +82,28 @@ func TestTheV3CardCountsADealWhoseOffererWentSilent(t *testing.T) {
 	assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
 }
 
+// A deal whose agreement names a witness but holds no time from it is counted,
+// its rows local, and never left out (Steven u616, 2026-11-19).
+func TestTheV3CardCountsADealNamingAWitnessWithNoWitnessedTime(t *testing.T) {
+	named := func(key string) string {
+		return strings.Replace(offerTo(key), `"witnesses": []`, `"witnesses": [{"key_id": "`+strings.Repeat("ab", 32)+`"}]`, 1)
+	}
+	h := newHandshakeV1With(t, named)
+	h.buyer.act(t)
+	dealRun(t, "receive", h.sellerAgree)
+	buyerAgree := filepath.Join(t.TempDir(), "buyer-agreement.json")
+	dealRun(t, "agree", h.offer, "--admit", sealAdmit(t, "GO"), "--out", buyerAgree)
+	h.seller.act(t)
+	dealRun(t, "receive", buyerAgree)
+	card, deals := card3(t, h, h.seller, time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC))
+	require.Len(t, deals, 1)
+	assert.Nil(t, deals[0].LeftOut)
+	assert.EqualValues(t, 1, card["outcomes"].(map[string]any)["undecided"])
+	// The tally key is the AAC library's until agent-action-capsule#634 retires it.
+	assert.Equal(t, map[string]any{"counted": float64(1), "not_counted": float64(0), "of": float64(1)}, card["in_window"])
+	assert.EqualValues(t, 0, card["not_counted"].(map[string]any)["no_witness_time"])
+}
+
 // A store in the old layout has no shelf log of facts to count: the card is
 // refused with the way forward, never built from nothing.
 func TestTheV3CardNeedsTheNewLayout(t *testing.T) {

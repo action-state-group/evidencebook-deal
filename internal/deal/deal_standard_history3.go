@@ -258,18 +258,6 @@ func (s *dealSession) dealEntry3(ctx context.Context, bookID string, v xdealv1.S
 	} else {
 		deal.Unpriced = true
 	}
-	if len(v.Witnesses) > 0 && !holdsWitnessTime(v, stamps) {
-		// The status times miss the holder's own agreement, the book's first
-		// record, which has a time whenever any later record has one (a stamp
-		// that covers a record covers those before it).
-		if _, ok, err := s.shelf.RecordTimeByKey(ctx, bookID, 1, keys); err != nil {
-			return standardhistory.Deal{}, false, err
-		} else if ok {
-			return deal, true, nil
-		}
-		none := "no_witness_time"
-		deal.LeftOut = &none
-	}
 	return deal, true, nil
 }
 
@@ -299,21 +287,6 @@ func statusTimes(v xdealv1.StatusValue) []xdealv1.StatusTime {
 		}
 	}
 	return out
-}
-
-// holdsWitnessTime is whether any record time of the deal is known from a
-// witness the agreement names: a known time, or a stamp that resolved
-// (SH §11.2 left_out).
-func holdsWitnessTime(v xdealv1.StatusValue, stamps map[uint64]string) bool {
-	for _, t := range statusTimes(v) {
-		if t.Known != "" {
-			return true
-		}
-		if _, ok := stamps[t.Stamp]; ok && t.Stamp != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // rowResult3 is a row's result (SH §11.2): who owed it, as holder or
