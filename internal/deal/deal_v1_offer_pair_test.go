@@ -1,13 +1,16 @@
 package deal
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/action-state-group/evidencebook"
 	"github.com/action-state-group/evidencebook/dealprofile/xdealv1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +48,48 @@ func TestTheOfferVerbSealsTheTermsLegOfAPaymentRow(t *testing.T) {
 	_, err = xdealv1.VerifySent(praw, nil)
 	require.NoError(t, err)
 	assert.NotContains(t, string(praw), `"leg":"terms"`, "an offer with no payment row carries none")
+}
+
+// Terms with several payment rows carry no terms leg: the library refuses one
+// on such an offer (a leg answers exactly one payment).
+func TestAnOfferWithSeveralPaymentRowsCarriesNoTermsLeg(t *testing.T) {
+	v1Fixture(t)
+	dealRun(t, "set-version", "x-deal-v1", "--migrate")
+	two := strings.Replace(paymentOffer("k"), `"rows": [`, `"rows": [
+      {"id": "second", "owed_by": "buyer", "recomputed": true, "owed": {"amount_minor": 100, "currency": "USD"},
+       "due": {"at": "2026-11-01T23:59:59Z"}, "window_end": {"at": "2026-11-04T23:59:59Z"}},`, 1)
+	out := filepath.Join(t.TempDir(), "o.json")
+	dealRun(t, "offer", "--input", writeJSON(t, two), "--out", out)
+	raw, err := os.ReadFile(out)
+	require.NoError(t, err)
+	sent, err := xdealv1.VerifySent(raw, nil)
+	require.NoError(t, err)
+	prop, ok := proposeOf(sent.Record)
+	require.True(t, ok)
+	require.Len(t, xdealv1.PaymentRows(prop.TermsRows), 2)
+	assert.NotContains(t, string(raw), `"leg":"terms"`)
+}
+
+// A stopped offer with a payment row is sealed once more from its stored
+// payload, and the leg is recomputed from it.
+func TestAStoppedPaymentOfferIsSealedAgainWithItsTermsLeg(t *testing.T) {
+	real := sealSentLib
+	t.Cleanup(func() { sealSentLib = real })
+	v1Fixture(t)
+	dealRun(t, "set-version", "x-deal-v1", "--migrate")
+	in := writeJSON(t, paymentOffer("k"))
+	out := filepath.Join(t.TempDir(), "o.json")
+	sealSentLib = func(context.Context, *evidencebook.Shelf, evidencebook.Entry, string) (evidencebook.Record, evidencebook.SentCapsule, error) {
+		return evidencebook.Record{}, evidencebook.SentCapsule{}, errors.New("the journal is busy")
+	}
+	v1Err(t, "offer", "--input", in, "--out", out)
+	sealSentLib = real
+	dealRun(t, "offer", "--input", in, "--out", out)
+	raw, err := os.ReadFile(out)
+	require.NoError(t, err)
+	_, err = xdealv1.VerifySent(raw, nil)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"leg":"terms"`)
 }
 
 // The status provider runs a payment row's check only when it is given the
