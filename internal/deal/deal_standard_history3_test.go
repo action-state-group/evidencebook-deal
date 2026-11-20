@@ -2,6 +2,7 @@ package deal
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,6 +133,35 @@ func TestTheV4CardCountsADealWithNoWitnessedTime(t *testing.T) {
 			assert.NotContains(t, card, "not_counted")
 		})
 	}
+}
+
+// A deal that holds a time from a witness its agreement names is not marked
+// no_witness_time, and a deal that names none always is (SH §12).
+func TestAWitnessedTimeKeepsADealFromNoWitnessTime(t *testing.T) {
+	s := &dealSession{}
+	timed := xdealv1.StatusValue{Start: xdealv1.StatusStart{OffererAgreementTime: xdealv1.KnownTime("2026-11-01T09:00:00Z")}}
+	got, err := s.witnessedTime(t.Context(), "book", timed, nil, []string{"ab"})
+	require.NoError(t, err)
+	assert.True(t, got)
+	got, err = s.witnessedTime(t.Context(), "book", timed, nil, nil)
+	require.NoError(t, err)
+	assert.False(t, got, "an agreement that names no witness has no witnessed time")
+}
+
+// The /4 card is asked for on the command line, and the bundle carries it.
+func TestTheV4CardIsAskedForOnTheCommandLine(t *testing.T) {
+	h := bothAgreed(t)
+	h.seller.act(t)
+	clockAt(t, time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC))
+	dealRun(t, "standard-history", "declare", "--holder-kind", "node")
+	clockAt(t, time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC))
+	dealRun(t, "tick")
+	out := filepath.Join(t.TempDir(), "card.json")
+	dealRun(t, "standard-history", "card", "--derivation", "standard_history/4", "--out", out)
+	raw, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"derivation":"standard_history/4"`)
+	assert.NotContains(t, string(raw), "not_counted\":{")
 }
 
 // A store in the old layout has no shelf log of facts to count: the card is

@@ -31,7 +31,7 @@ import (
 
 // errNotMigratedForCard is a /3 card asked of a store still in the old
 // layout, which has no shelf log of book facts to count.
-var errNotMigratedForCard = errors.New("a standard_history/3 card needs a deal store in the new layout")
+var errNotMigratedForCard = errors.New("a standard_history/3 or /4 card needs a deal store in the new layout")
 
 // standardHistory3 derives the /3 card as of tick n, or the newest finished
 // tick when n is 0. The tick must be a stamp's: Handover refuses another.
@@ -58,7 +58,7 @@ func (s *dealSession) standardHistoryV1(ctx context.Context, tick uint64, deriva
 	cadence, err := s.requireMigrated(ctx)
 	if err != nil {
 		if errors.Is(err, errNotMigratedSentinel) {
-			return standardHistoryCard{}, shRefusal("a standard_history/3 card needs a deal store in the new layout: see `deal set-version --help`", errors.Join(errNotMigratedForCard, err))
+			return standardHistoryCard{}, shRefusal("a standard_history/3 or /4 card needs a deal store in the new layout: see `deal set-version --help`", errors.Join(errNotMigratedForCard, err))
 		}
 		return standardHistoryCard{}, err
 	}
@@ -78,7 +78,7 @@ func (s *dealSession) standardHistoryV1(ctx context.Context, tick uint64, deriva
 	if newest, err := cadence.StandardHistoryAnchor(ctx, 0); err != nil {
 		return standardHistoryCard{}, err
 	} else if newest.Tick.N != anchor.Tick.N {
-		return standardHistoryCard{}, cli.InputError("a standard_history/3 card is as of the newest checkpoint only")
+		return standardHistoryCard{}, cli.InputError("a standard_history/3 or /4 card is as of the newest checkpoint only")
 	}
 	handover, err := cadence.Handover(ctx, anchor.Tick.N)
 	if err != nil {
