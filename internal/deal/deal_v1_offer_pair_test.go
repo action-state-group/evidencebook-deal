@@ -1,7 +1,6 @@
 package deal
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/action-state-group/evidencebook"
 	"github.com/action-state-group/evidencebook/dealprofile/xdealv1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,27 +19,38 @@ func paymentOffer(key string) string {
 	return strings.Replace(offerTo(key), `"owed_by": "buyer",`, `"owed_by": "buyer", "recomputed": true,`, 1)
 }
 
-// sealTermsLegs makes the offer verb's Capsule carry the offer's terms leg, as
-// an offer with a payment row must (§6.3): the verb does not yet do it.
-func sealTermsLegs(t *testing.T) {
-	t.Helper()
-	was := sealSentLib
-	sealSentLib = func(ctx context.Context, shelf *evidencebook.Shelf, e evidencebook.Entry, actionID string) (evidencebook.Record, evidencebook.SentCapsule, error) {
-		rec, err := xdealv1.Decode(e.Payloads[0])
+// The offer verb's Capsule carries the offer's terms leg when its terms have
+// exactly one payment row (§6.3), so the other side receives it, and carries
+// none for an offer with no payment row.
+func TestTheOfferVerbSealsTheTermsLegOfAPaymentRow(t *testing.T) {
+	h := &handshakeV1{seller: newV1Side(t), buyer: newV1Side(t)}
+	file := filepath.Join(t.TempDir(), "offer.json")
+	dealRun(t, "offer", "--input", writeJSON(t, paymentOffer(h.seller.party.signer)), "--out", file)
+	raw, err := os.ReadFile(file)
+	require.NoError(t, err)
+	sent, err := xdealv1.VerifySent(raw, nil)
+	require.NoError(t, err, "an offer with a payment row carries its terms leg")
+	assert.Contains(t, string(raw), `"leg":"terms"`)
+	h.seller.act(t)
+	assert.Equal(t, "kept, and counted", dealRun(t, "receive", file)["record"])
+	withSession(t, func(s *dealSession) {
+		pair, err := s.sentOfferPair(t.Context(), sent.Digest)
 		require.NoError(t, err)
-		leg, err := xdealv1.TermsLeg(rec)
-		require.NoError(t, err)
-		e.Members = map[string]json.RawMessage{xdealv1.SettlementMember: leg}
-		return was(ctx, shelf, e, actionID)
-	}
-	t.Cleanup(func() { sealSentLib = was })
+		assert.Equal(t, string(raw), string(pair))
+	})
+
+	plain := newHandshakeV1(t)
+	praw, err := os.ReadFile(plain.offerFile)
+	require.NoError(t, err)
+	_, err = xdealv1.VerifySent(praw, nil)
+	require.NoError(t, err)
+	assert.NotContains(t, string(praw), `"leg":"terms"`, "an offer with no payment row carries none")
 }
 
 // The status provider runs a payment row's check only when it is given the
 // offer's pair. The acceptor never sent the offer, so the pair it holds is the
 // one it received, kept byte for byte: with none, its payment check is skipped.
 func TestAReceivedOffersPairIsKeptAsReceived(t *testing.T) {
-	sealTermsLegs(t)
 	h := &handshakeV1{seller: newV1Side(t), buyer: newV1Side(t)}
 	h.offerFile = filepath.Join(t.TempDir(), "offer.json")
 	res := dealRun(t, "offer", "--input", writeJSON(t, paymentOffer(h.seller.party.signer)), "--out", h.offerFile)
@@ -133,7 +142,6 @@ func settleLeg(t *testing.T, s *dealSession, dealID string, body *xdealv1.Settle
 // which needs the offer's pair it received: without it the row read agreed and
 // met, and the /3 card showed a held deal whose settlement legs disagree.
 func TestTheAcceptorsPaymentCheckSeesDisagreeingLegs(t *testing.T) {
-	sealTermsLegs(t)
 	h := agreedBoth(t, paymentOffer)
 	raw, err := os.ReadFile(h.offerFile)
 	require.NoError(t, err)
