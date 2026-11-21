@@ -4,7 +4,7 @@
 
 ## v0.1.0-rc45
 
-This release pairs with capsulectl `v0.1.0-rc45` (go.mod requires it), and is the first release with the x-deal-v1 write path: `deal offer`, `receive`, `agree` and `dispute` on the new store layout (`deal set-version x-deal-v1 --migrate`). `deal agree` cites the holder's admission decision, the x-deal-v1 `admit` that capsule-engine `admission evaluate --admit` (go/v0.5.0) emits for the host to seal.
+This release pairs with capsulectl `v0.1.0-rc45` (go.mod requires it), and is the first release with the x-deal-v1 write path: `deal offer` (and `offer cancel`), `receive`, `agree` and `dispute` on the new store layout (`deal set-version x-deal-v1 --migrate`). `deal agree` cites the holder's admission decision, the x-deal-v1 `admit` that capsule-engine `admission evaluate --admit` (go/v0.5.0) emits for the host to seal, and refuses one that is ASK or NO.
 
 Every pull request merged since `v0.1.0-rc42`:
 
