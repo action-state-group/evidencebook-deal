@@ -340,8 +340,8 @@ func (s *dealSession) writeAgreement(ctx context.Context, c *cobra.Command, cad 
 // holds this deal is the evaluator's, which has the pack's tiers (capsule-engine
 // admission evaluate --admit prints admits_deal); the plugin holds no pack, so
 // it does not decide it. An over-tier LIMIT cited here is still detectable
-// offline: the admit's pack_digest pins the pack, whose tiers bound the value
-// the agreement's offer states. A record of any other type passes.
+// offline by a reader holding the pack whose definition_digest is the admit's
+// pack_digest: its tiers bound the value the agreement's offer states. A record of any other type passes.
 func citableAdmit(digest string, rec *xdealv1.Record) error {
 	b, ok := rec.Body.(*xdealv1.AdmitBody)
 	if !ok {
