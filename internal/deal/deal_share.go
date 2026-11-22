@@ -1497,6 +1497,11 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 			// What was approved was only the user's spending limit: private.
 			approved, basis = "", ""
 		}
+		if audience == cli.DealAudienceCounterparty && ruleTwelveSeller(events) {
+			// Whether an amount was approved at a check, and how, is read from
+			// the checks and approvals this copy withholds (#244).
+			approved, basis = "", ""
+		}
 		for k, v := range map[string]string{"approved": approved, "approved_basis": basis, "charged": row.Charged, "charged_on": row.ChargedOn, "cancel_by": row.CancelBy, "key_size": row.KeySize} {
 			if v != "" {
 				m[k] = v

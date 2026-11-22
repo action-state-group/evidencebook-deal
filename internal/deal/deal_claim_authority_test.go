@@ -280,3 +280,24 @@ func TestATickFinishesAPendingClaimBeforeSealingADeferredEmail(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0)
 	assert.Equal(t, "claim_authority", kinds[i+1], "the verdict follows its claim, before the email")
 }
+
+// A merchant email's row says what was approved at a check and on what basis;
+// on a rule 12 counterparty copy that is read from withheld records, so the
+// row carries neither.
+func TestARule12CounterpartyCopyMerchantRowSaysNothingApproved(t *testing.T) {
+	dealFixture(t)
+	setDealClock(t, "2026-10-03T21:00:00Z")
+	stubDNS(t, map[string]string{merchantSelector + "._domainkey.shop.example": merchantKeyTXT(t), dmarcName: merchantDMARC(t)})
+	id := sellerRepOpen(t, `["condition"]`)
+	dealRun(t, "note", "--deal", id, "--kind", "evidence", "--email", filepath.Join(merchantFixture, "confirmation.eml"))
+
+	require.Contains(t, receiptText(t, id, false), "approved_basis", "the owner's own copy says it, so the check below is not vacuous")
+
+	b, _ := sharedCopy(t, id, cli.DealAudienceCounterparty, "the buyer")
+	rows, _ := dealReportOf(b)["merchant"].([]any)
+	require.NotEmpty(t, rows)
+	for _, r := range rows {
+		assert.NotContains(t, r, "approved")
+		assert.NotContains(t, r, "approved_basis")
+	}
+}
