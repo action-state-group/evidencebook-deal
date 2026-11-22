@@ -1051,8 +1051,9 @@ func ruleTwelveSeller(events []sealedEvent) bool {
 //     every agent claim, every claim_authority and the represent trail;
 //   - a counterparty's copy of a rule 12 sale: every claim_authority, the
 //     represent trail, the seller's check of any step and the answers to
-//     checks, every act sealed unchecked, every disclosure sealed without
-//     approval, and every agent claim sealed with its verdict on it (a claim
+//     checks, every act sealed unchecked, every disclosure (the approved
+//     ones too, so the copy does not show which telling was not approved),
+//     and every agent claim sealed with its verdict on it (a claim
 //     sealed before the verdict had its own step), whose words are then not
 //     opened either. An agent claim sealed in the new shape stays, with its
 //     words, for the buyer to check what it was told.
@@ -1085,7 +1086,10 @@ func hiddenSteps(events []sealedEvent, audience string, includeUnchecked bool) m
 			hidden[se.CapsuleID] = true
 		case e.Kind == "act" && e.Act != nil && e.Act.Unchecked:
 			hidden[se.CapsuleID] = true
-		case e.Kind == "disclosure" && e.Disclosure != nil && e.Disclosure.AuthorizedBy == "":
+		case e.Kind == "disclosure":
+			// Every telling, by kind: the buyer knows from its own side what
+			// it was told, so a copy that kept the approved ones would show
+			// which was not (PROFILE rule 12, evidencebook#607).
 			hidden[se.CapsuleID] = true
 		}
 	}

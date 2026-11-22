@@ -187,10 +187,10 @@ func TestAClaimWithoutItsVerdictStepIsFinishedBeforeAnythingElseIsSealed(t *test
 	checkerPasses(t, id)
 }
 
-// A disclosure with no covering approval is withheld from a rule 12
-// counterparty copy, and so is its row in "told": the row would carry the
-// step's id and "without your approval".
-func TestTheCounterpartyCopyHasNoToldRowForAnUnapprovedDisclosure(t *testing.T) {
+// Every disclosure is withheld from a rule 12 counterparty copy, by kind, and
+// so is its row in "told": the row of an unapproved one would carry the step's
+// id and "without your approval".
+func TestTheCounterpartyCopyWithholdsEveryTellingAndItsToldRow(t *testing.T) {
 	dealFixture(t)
 	id := sellerRepOpen(t, `["condition"]`)
 	ck := represent(t, id, repFile("represent-condition.json"))
@@ -199,7 +199,7 @@ func TestTheCounterpartyCopyHasNoToldRowForAnUnapprovedDisclosure(t *testing.T) 
 	require.Equal(t, "pause", check["verdict"])
 	dealRun(t, "note", "--deal", id, "--kind", "approval", "--check", check["check_id"].(string), "--choice", "proceed", "--said", "yes", "--shown-card", shownCardFile(t, check["card"].(string)))
 	body := writeJSON(t, `{"channel":"marketplace","fields":[{"class":"phone","value":"555-0100"}]}`)
-	dealRun(t, "note", "--deal", id, "--kind", "disclosure", "--input", body)
+	approved := dealRun(t, "note", "--deal", id, "--kind", "disclosure", "--input", body)
 	unapproved := dealRun(t, "note", "--deal", id, "--kind", "disclosure", "--input", body)
 	require.Empty(t, unapproved["authorized_by"])
 
@@ -208,6 +208,15 @@ func TestTheCounterpartyCopyHasNoToldRowForAnUnapprovedDisclosure(t *testing.T) 
 	// The approval that covered the other telling answers a check, which
 	// the copy withholds, so no telling shows whether it was approved.
 	assert.Empty(t, dealReportOf(b)["told"])
+	// Every telling is withheld, the approved one as well, so the buyer, who
+	// knows from its own side that it was told twice, cannot tell which was
+	// not approved.
+	withheld := map[string]bool{}
+	for _, st := range sharedSteps(t, b) {
+		withheld[st["capsule_id"].(string)] = st["withheld"] == true
+	}
+	assert.True(t, withheld[approved["capsule_id"].(string)], "the approved telling")
+	assert.True(t, withheld[unapproved["capsule_id"].(string)], "the unapproved telling")
 }
 
 // The baseline's own agent claims are no step of their own, and no producer
