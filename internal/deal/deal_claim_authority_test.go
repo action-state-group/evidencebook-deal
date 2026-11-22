@@ -210,16 +210,25 @@ func TestTheCounterpartyCopyHasNoToldRowForAnUnapprovedDisclosure(t *testing.T) 
 	assert.Empty(t, dealReportOf(b)["told"])
 }
 
-// The baseline's own agent claims are no step of their own: the default
-// adjudicator copy opens none of them, and --include-agent-claims opens them.
+// The baseline's own agent claims are no step of their own, and no producer
+// seals one now (an old book may hold them): the default adjudicator copy
+// opens none of them, and --include-agent-claims opens them. This runs the
+// predicate the share extension uses, on a historical baseline.
 func TestTheDefaultAdjudicatorCopyOpensNoBaselineAgentClaim(t *testing.T) {
 	agent := dealClaim{Text: "Barely used", SourceKind: "agent"}
-	own := dealClaim{Text: "From the listing", SourceKind: "user"}
-	events := []sealedEvent{{CapsuleID: "open", Event: dealEvent{Kind: "open", ClaimCommit: "c", Open: &dealOpen{Claims: []dealClaim{agent, own}}, Nonces: map[string]string{"claim_text_0": "n0", "claim_text_1": "n1"}}}}
-	hide := func(c dealClaim) bool { return c.SourceKind != "agent" }
-	opened := claimOpenings(events, map[string]bool{}, hide)
-	require.Len(t, opened, 1)
-	assert.Equal(t, "From the listing", opened[0].(map[string]interface{})["text"].(map[string]interface{})["text"])
+	own := dealClaim{Text: "From the listing", SourceKind: "platform"}
+	events := []sealedEvent{{CapsuleID: "open", Event: dealEvent{Kind: "open", ClaimCommit: "c", Open: &dealOpen{Claims: []dealClaim{agent, own}},
+		Nonces: map[string]string{"claim_text_0": "n0", "claim_text_1": "n1"}}}}
+	clean := func(dealClaim) bool { return true }
+	textsOf := func(opened []interface{}) []string {
+		var out []string
+		for _, o := range opened {
+			out = append(out, o.(map[string]interface{})["text"].(map[string]interface{})["text"].(string))
+		}
+		return out
+	}
+	assert.Equal(t, []string{"From the listing"}, textsOf(claimOpenings(events, map[string]bool{}, adjudicatorOpens(true, clean))))
+	assert.Equal(t, []string{"Barely used", "From the listing"}, textsOf(claimOpenings(events, map[string]bool{}, adjudicatorOpens(false, clean))))
 }
 
 // A claim left without its verdict is also finished by `deal tick`, before it

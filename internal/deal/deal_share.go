@@ -50,6 +50,12 @@ var dealWithheldFields = map[string][]string{
 	},
 }
 
+// adjudicatorOpens is the claims an adjudicator's copy opens: a clean one,
+// and not the agent's when the copy hides the agent's claims.
+func adjudicatorOpens(hideAgent bool, clean func(dealClaim) bool) func(dealClaim) bool {
+	return func(c dealClaim) bool { return !(hideAgent && c.SourceKind == "agent") && clean(c) }
+}
+
 // toldShown leaves out what the agent told through a step a copy withholds:
 // its row would carry the step's id and whether the user approved it.
 func toldShown(told []dealToldItem, hidden map[string]bool) []dealToldItem {
@@ -1560,7 +1566,7 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 	if audience == cli.DealAudienceAdjudicator {
 		// The baseline's own agent claims are no step of their own, so the
 		// hidden steps do not cover them.
-		ext["claim_openings"] = claimOpenings(events, hidden, func(c dealClaim) bool { return !(hideAgent && c.SourceKind == "agent") && clean(c) })
+		ext["claim_openings"] = claimOpenings(events, hidden, adjudicatorOpens(hideAgent, clean))
 		// The adjudicator can tie a sale's thread to its sale; the buyer
 		// cannot.
 		if opening := saleAuthorityOpening(events); opening != nil {
