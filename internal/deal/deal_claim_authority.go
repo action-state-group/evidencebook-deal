@@ -95,17 +95,25 @@ func claimAuthorityBody(ev dealEvent, events []sealedEvent, block map[string]int
 }
 
 // finishPendingClaim runs finishClaimPair for the commands that seal a step
-// or compute a rule input from the deal (note, check, close): a command that
-// only reads leaves the pending claim as it is, pending.
+// or compute a rule input from the deal (note, check, close and the
+// `outcome-note seal` and `rules-verdict seal` steps; `deal tick` finishes it before it
+// seals a deferred email): a command that only reads leaves the pending
+// claim as it is, pending.
 func (s *dealSession) finishPendingClaim(ctx context.Context, c *cobra.Command, dealID string, events []sealedEvent) ([]sealedEvent, error) {
 	if _, pending := claimNeedsAuthority(events); !pending {
 		return events, nil
 	}
 	switch c.Name() {
-	case "note", "check", "close":
+	case "note", "check", "close", "seal":
 	default:
 		return events, nil
 	}
+	return s.finishWritable(ctx, dealID, events)
+}
+
+// finishWritable is finishClaimPair for a session that can seal: a deal opened
+// read-only keeps the claim pending.
+func (s *dealSession) finishWritable(ctx context.Context, dealID string, events []sealedEvent) ([]sealedEvent, error) {
 	if s.onBook && s.book == nil {
 		return events, nil
 	}

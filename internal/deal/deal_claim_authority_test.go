@@ -3,6 +3,7 @@ package deal
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -184,4 +185,80 @@ func TestAClaimWithoutItsVerdictStepIsFinishedBeforeAnythingElseIsSealed(t *test
 	assert.Equal(t, true, verdict["unchecked"])
 	assert.Equal(t, "no_check", verdict["rule"], "the verdict the claim was noted with")
 	checkerPasses(t, id)
+}
+
+// A disclosure with no covering approval is withheld from a rule 12
+// counterparty copy, and so is its row in "told": the row would carry the
+// step's id and "without your approval".
+func TestTheCounterpartyCopyHasNoToldRowForAnUnapprovedDisclosure(t *testing.T) {
+	dealFixture(t)
+	id := sellerRepOpen(t, `["condition"]`)
+	ck := represent(t, id, repFile("represent-condition.json"))
+	claimWith(t, id, ck["check_id"].(string), repFile("claim-condition.json"))
+	check := dealRun(t, "check", "--deal", id, "--input", writeJSON(t, `{"action":"share_contact","disclosing_to":"counterparty","description":"give the buyer my number","disclosing":["phone"]}`))
+	require.Equal(t, "pause", check["verdict"])
+	dealRun(t, "note", "--deal", id, "--kind", "approval", "--check", check["check_id"].(string), "--choice", "proceed", "--said", "yes", "--shown-card", shownCardFile(t, check["card"].(string)))
+	body := writeJSON(t, `{"channel":"marketplace","fields":[{"class":"phone","value":"555-0100"}]}`)
+	dealRun(t, "note", "--deal", id, "--kind", "disclosure", "--input", body)
+	unapproved := dealRun(t, "note", "--deal", id, "--kind", "disclosure", "--input", body)
+	require.Empty(t, unapproved["authorized_by"])
+
+	b, raw := sharedCopy(t, id, cli.DealAudienceCounterparty, "the buyer")
+	assert.NotContains(t, raw, "without your approval")
+	// The approval that covered the other telling answers a check, which
+	// the copy withholds, so no telling shows whether it was approved.
+	assert.Empty(t, dealReportOf(b)["told"])
+}
+
+// The baseline's own agent claims are no step of their own: the default
+// adjudicator copy opens none of them, and --include-agent-claims opens them.
+func TestTheDefaultAdjudicatorCopyOpensNoBaselineAgentClaim(t *testing.T) {
+	agent := dealClaim{Text: "Barely used", SourceKind: "agent"}
+	own := dealClaim{Text: "From the listing", SourceKind: "user"}
+	events := []sealedEvent{{CapsuleID: "open", Event: dealEvent{Kind: "open", ClaimCommit: "c", Open: &dealOpen{Claims: []dealClaim{agent, own}}, Nonces: map[string]string{"claim_text_0": "n0", "claim_text_1": "n1"}}}}
+	hide := func(c dealClaim) bool { return c.SourceKind != "agent" }
+	opened := claimOpenings(events, map[string]bool{}, hide)
+	require.Len(t, opened, 1)
+	assert.Equal(t, "From the listing", opened[0].(map[string]interface{})["text"].(map[string]interface{})["text"])
+}
+
+// A claim left without its verdict is also finished by `deal tick`, before it
+// seals a deferred email after it.
+func TestATickFinishesAPendingClaimBeforeSealingADeferredEmail(t *testing.T) {
+	dealFixture(t)
+	setDealClock(t, "2026-10-03T21:00:00Z")
+	records := map[string]string{merchantSelector + "._domainkey.shop.example": merchantKeyTXT(t), dmarcName: merchantDMARC(t)}
+	stubDNS(t, records)
+	id := sellerRepOpen(t, `["condition"]`)
+	blockDNS(t)
+	dealRun(t, "note", "--deal", id, "--kind", "evidence", "--email", filepath.Join(merchantFixture, "confirmation.eml"))
+
+	p, err := cli.LoadProfile("deal")
+	require.NoError(t, err)
+	s, err := openDealSession(t.Context(), p)
+	require.NoError(t, err)
+	require.NoError(t, s.useDeal(t.Context(), id, false))
+	events, err := s.load(t.Context(), id)
+	require.NoError(t, err)
+	_, err = s.seal(t.Context(), id, events, dealEvent{Kind: "claim", ClaimShape: dealClaimShapeVersion, Claim: &dealClaim{
+		Text: "The frame has no scratches at all", SourceKind: "agent", Class: "condition", Unchecked: true, Rule: "no_check",
+	}})
+	require.NoError(t, err)
+	require.NoError(t, s.close())
+	require.Empty(t, recordsOfType(t, id, "claim_authority"))
+
+	stubDNS(t, records)
+	setDealClock(t, "2026-10-03T21:10:00Z")
+	out := dealRun(t, "tick")["merchant_emails"].(map[string]any)
+	require.Len(t, out["sealed"], 1)
+	records2, _ := exportRecords(t, id)
+	var kinds []string
+	for _, r := range records2 {
+		if b, ok := r["x-deal-v0"].(map[string]any); ok {
+			kinds = append(kinds, b["record_type"].(string))
+		}
+	}
+	i := slices.Index(kinds, "claim")
+	require.GreaterOrEqual(t, i, 0)
+	assert.Equal(t, "claim_authority", kinds[i+1], "the verdict follows its claim, before the email")
 }

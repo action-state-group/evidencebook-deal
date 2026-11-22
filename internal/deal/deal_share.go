@@ -50,12 +50,25 @@ var dealWithheldFields = map[string][]string{
 	},
 }
 
+// toldShown leaves out what the agent told through a step a copy withholds:
+// its row would carry the step's id and whether the user approved it.
+func toldShown(told []dealToldItem, hidden map[string]bool) []dealToldItem {
+	out := make([]dealToldItem, 0, len(told))
+	for _, t := range told {
+		if !slices.ContainsFunc(t.Steps, func(id string) bool { return hidden[id] }) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // dealWithheldFieldsFor is dealWithheldFields for one deal: a seller's copy
 // names what it leaves out as the user's bounds (both of them are withheld
-// whatever the role; the role changes only the words). agentClaims says the
-// copy also leaves out the claims the seller's agent made (hidesAgentClaims),
-// so the sealed list says so wherever the "Not shared" marker does
-// (evidencebook-deal#231).
+// whatever the role; the role changes only the words). hidden is the one more
+// entry the copy leaves out (hiddenAuthorityEntry: the seller's agent's
+// claims on a default adjudicator copy, how it was authorized on a rule 12
+// counterparty copy), or "" for none, so the sealed list says so wherever
+// the "Not shared" marker does (evidencebook-deal#231, #244).
 func dealWithheldFieldsFor(audience, role, hidden string) []string {
 	fields := dealWithheldFields[audience]
 	out := make([]string, 0, len(fields)+1)
@@ -1537,7 +1550,7 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 		"deal_id": events[0].Event.DealID, "scope": dealScopeLine, "audience": audience, "withheld": withheld, "steps": steps,
 		"asked_step": report.AskedStep, "did": items(report.Did, false), "anomalies": anomalyList,
 		"merchant": merchant, "email_scope": emailScopeLine,
-		"told":      scrubTold(toldItems(report.Told, false), p),
+		"told":      scrubTold(toldItems(toldShown(report.Told, hidden), false), p),
 		"lifecycle": shareLifecycle(buildDealLifecycle(events, cli.DealClock())),
 	}
 	// An adjudicator's copy opens the claims whose words and source note
@@ -1545,7 +1558,9 @@ func dealShareExtension(events []sealedEvent, report dealReport, audience string
 	// scrubbed and still check); a counterparty's opens none.
 	clean := func(c dealClaim) bool { return p.clean(c.Text) && p.clean(c.Source) }
 	if audience == cli.DealAudienceAdjudicator {
-		ext["claim_openings"] = claimOpenings(events, hidden, func(c dealClaim) bool { return clean(c) })
+		// The baseline's own agent claims are no step of their own, so the
+		// hidden steps do not cover them.
+		ext["claim_openings"] = claimOpenings(events, hidden, func(c dealClaim) bool { return !(hideAgent && c.SourceKind == "agent") && clean(c) })
 		// The adjudicator can tie a sale's thread to its sale; the buyer
 		// cannot.
 		if opening := saleAuthorityOpening(events); opening != nil {
