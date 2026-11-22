@@ -1,7 +1,0 @@
-{
-  "emitted_by": "capsulectl disclose --root NOTE --out bundle.json --html page.html",
-  "kind": "generic-fallback",
-  "page": "written",
-  "rerender": "page",
-  "verify": "VALID"
-}
