@@ -528,7 +528,9 @@ func TestTheRepresentationRulesFollowTheOpening(t *testing.T) {
 }
 
 // checkProfileRejects runs the profile checker on records and wants it to
-// fail with want in its output.
+// fail with want in its output. want may list alternatives separated by " | ":
+// where the checker runs its schema stage (jsonschema installed) a malformed
+// record is refused there, with the schema's words, before the rule runs.
 func checkProfileRejects(t *testing.T, records []map[string]any, want string) {
 	t.Helper()
 	python := profilePython(t)
@@ -541,7 +543,11 @@ func checkProfileRejects(t *testing.T, records []map[string]any, want string) {
 	require.NoError(t, os.WriteFile(path, raw, 0o600))
 	out, err := exec.Command(python, dealProfileDir+"/check_profile.py", path).CombinedOutput()
 	require.Error(t, err, string(out))
-	assert.Contains(t, string(out), want)
+	found := false
+	for _, alt := range strings.Split(want, " | ") {
+		found = found || strings.Contains(string(out), alt)
+	}
+	assert.True(t, found, "want one of %q in %s", want, out)
 }
 
 // The profile checker holds a representation's basis to the chain: each
@@ -580,7 +586,7 @@ func TestTheProfileCheckerHoldsTheRepresentationRules(t *testing.T) {
 	checkProfileRejects(t, last(func(body, _ map[string]any) {
 		delete(body, "authority_basis")
 		delete(body, "evaluation_ref")
-	}), "exactly one of authority_basis or unchecked")
+	}), "exactly one of authority_basis or unchecked | is not valid under any of the given schemas")
 	checkProfileRejects(t, last(func(body, _ map[string]any) {
 		body["unchecked"], body["rule"] = true, "no_check"
 	}), "authority")
@@ -592,7 +598,7 @@ func TestTheProfileCheckerHoldsTheRepresentationRules(t *testing.T) {
 	}), "class differs from the one checked")
 	checkProfileRejects(t, last(func(body, block map[string]any) {
 		delete(block, "refs")
-	}), "exactly one")
+	}), "exactly one | 'refs' is a required property")
 	checkProfileRejects(t, at(2, func(body, _ map[string]any) {
 		body["text_commitment"] = strings.Repeat("ab", 32)
 	}), "the representation's words differ from the ones checked")
